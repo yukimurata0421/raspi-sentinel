@@ -1,0 +1,13 @@
+[Unit]
+Description=Run raspi-sentinel checks every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+RandomizedDelaySec=10s
+Persistent=true
+AccuracySec=15s
+Unit=raspi-sentinel.service
+
+[Install]
+WantedBy=timers.target

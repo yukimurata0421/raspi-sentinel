@@ -1,0 +1,23 @@
+[Unit]
+Description=raspi-sentinel + systemd watchdog integration example (optional)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=notify
+User=root
+Group=root
+# Optional integration layer: keep core raspi-sentinel independent from watchdog protocol.
+ExecStart=/usr/bin/env bash -lc 'while true; do /usr/bin/env python3 -m raspi_sentinel -c /etc/raspi-sentinel/config.toml run-once; /usr/bin/systemd-notify WATCHDOG=1; sleep 60; done'
+Restart=always
+RestartSec=5s
+WatchdogSec=90s
+NotifyAccess=all
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/raspi-sentinel
+
+[Install]
+WantedBy=multi-user.target

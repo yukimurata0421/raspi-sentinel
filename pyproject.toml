@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=67"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "raspi-sentinel"
+version = "0.1.0"
+description = "Standalone staged self-healing layer for Raspberry Pi systemd services"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "raspi-sentinel maintainers" }
+]
+dependencies = []
+
+[project.scripts]
+raspi-sentinel = "raspi_sentinel.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,22 @@
+[Unit]
+Description=raspi-sentinel one-shot health and recovery check
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/bin/env python3 -m raspi_sentinel -c /etc/raspi-sentinel/config.toml run-once
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/raspi-sentinel
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

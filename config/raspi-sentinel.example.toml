@@ -1,0 +1,78 @@
+[global]
+# Persistent state (failure counters, reboot history)
+state_file = "/var/lib/raspi-sentinel/state.json"
+
+# Staged recovery thresholds
+restart_threshold = 2
+reboot_threshold = 5
+
+# Guards against recovery storms / reboot loops
+restart_cooldown_sec = 120
+reboot_cooldown_sec = 1800
+reboot_window_sec = 21600
+max_reboots_in_window = 2
+min_uptime_for_reboot_sec = 600
+
+# Misc
+default_command_timeout_sec = 10
+loop_interval_sec = 60
+
+[notify.discord]
+enabled = true
+webhook_url = "https://discord.com/api/webhooks/..."
+username = "raspi-sentinel"
+timeout_sec = 5
+followup_delay_sec = 300
+heartbeat_interval_sec = 300
+# Set to 0 to disable periodic healthy heartbeat notifications.
+# heartbeat_interval_sec = 0
+
+# readsb target
+[[targets]]
+name = "readsb"
+services = ["readsb"]
+service_active = true
+output_file = "/run/readsb/stats.json"
+output_max_age_sec = 180
+command = "test -s /run/readsb/stats.json"
+command_timeout_sec = 5
+restart_threshold = 2
+reboot_threshold = 5
+
+# fr24feed target
+[[targets]]
+name = "fr24feed"
+services = ["fr24feed"]
+service_active = true
+command = "systemctl is-active --quiet fr24feed"
+command_timeout_sec = 5
+restart_threshold = 2
+reboot_threshold = 6
+
+# airspy_adsb target
+[[targets]]
+name = "airspy_adsb"
+services = ["airspy_adsb"]
+service_active = true
+output_file = "/run/airspy_adsb/stats.json"
+output_max_age_sec = 180
+command = "test -s /run/airspy_adsb/stats.json"
+command_timeout_sec = 5
+# Skip checks while gain guard is actively restarting the decoder,
+# and keep a short grace period for stats.json to be recreated.
+maintenance_mode_command = "systemctl is-active --quiet airspy_gain_guard.service"
+maintenance_mode_timeout_sec = 3
+maintenance_grace_sec = 90
+restart_threshold = 2
+reboot_threshold = 5
+
+# network_uplink target (detect DNS / outbound connectivity degradation)
+[[targets]]
+name = "network_uplink"
+services = []
+service_active = false
+command = "getent ahostsv4 blender.prod.fr24.io >/dev/null && nc -zw3 1.1.1.1 443 >/dev/null 2>&1"
+command_timeout_sec = 8
+# Reboot host when network outage persists for about 5 minutes (5 consecutive checks).
+restart_threshold = 5
+reboot_threshold = 5
