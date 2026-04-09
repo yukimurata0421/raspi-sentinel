@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import subprocess
 import time
+from dataclasses import dataclass
 from typing import Any
 
 from .checks import CheckResult
@@ -93,7 +93,9 @@ def _clock_reboot_confirmed(result: CheckResult) -> bool:
     return result.observations.get("clock_frozen_confirmed") is True
 
 
-def _can_reboot(global_config: GlobalConfig, state: dict[str, Any], now_ts: float) -> tuple[bool, str]:
+def _can_reboot(
+    global_config: GlobalConfig, state: dict[str, Any], now_ts: float
+) -> tuple[bool, str]:
     uptime = _get_uptime_sec()
     if uptime < global_config.min_uptime_for_reboot_sec:
         return (
@@ -123,10 +125,7 @@ def _can_reboot(global_config: GlobalConfig, state: dict[str, Any], now_ts: floa
         if _within_cooldown(last_ts, global_config.reboot_cooldown_sec, now_ts):
             return (
                 False,
-                (
-                    "reboot blocked by cooldown: "
-                    f"cooldown={global_config.reboot_cooldown_sec}s"
-                ),
+                (f"reboot blocked by cooldown: cooldown={global_config.reboot_cooldown_sec}s"),
             )
 
     if len(filtered) >= global_config.max_reboots_in_window:
@@ -222,7 +221,11 @@ def apply_recovery(
         target_state["consecutive_failures"] = 0
         target_state["last_healthy_ts"] = now_ts
         if previous > 0:
-            LOG.info("target '%s' recovered naturally, failure counter reset (%d -> 0)", target.name, previous)
+            LOG.info(
+                "target '%s' recovered naturally, failure counter reset (%d -> 0)",
+                target.name,
+                previous,
+            )
         _record_action(target_state, "none")
         return RecoveryOutcome(action="none", requested_reboot=False)
 
@@ -310,7 +313,9 @@ def apply_recovery(
                     reboots.append({"ts": now_ts, "target": target.name, "reason": failures_text})
                     _record_action(target_state, "reboot")
                     return RecoveryOutcome(action="reboot", requested_reboot=True)
-                LOG.error("target '%s': reboot request failed, falling back to restart path", target.name)
+                LOG.error(
+                    "target '%s': reboot request failed, falling back to restart path", target.name
+                )
             else:
                 LOG.error("target '%s': reboot blocked by safeguard: %s", target.name, guard_reason)
 

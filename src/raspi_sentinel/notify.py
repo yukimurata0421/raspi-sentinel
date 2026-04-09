@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import logging
 import os
 import platform
 import shutil
-from typing import Any
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
+from typing import Any
 
 from .checks import CheckResult
 from .config import DiscordNotifyConfig

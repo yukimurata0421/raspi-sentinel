@@ -4,9 +4,9 @@ import subprocess
 from typing import Any
 from urllib import error
 
+from raspi_sentinel import time_health
 from raspi_sentinel.checks import CheckFailure, CheckResult
 from raspi_sentinel.config import TargetConfig
-from raspi_sentinel import time_health
 from raspi_sentinel.time_health import apply_time_health_checks
 
 
@@ -77,7 +77,9 @@ def test_time_health_detects_http_clock_skew(monkeypatch: Any) -> None:
         "raspi_sentinel.time_health._fetch_http_date_epoch",
         lambda url, timeout_sec: (2600.0, None),
     )
-    monkeypatch.setattr("raspi_sentinel.time_health._query_ntp_sync_ok", lambda timeout_sec=3: False)
+    monkeypatch.setattr(
+        "raspi_sentinel.time_health._query_ntp_sync_ok", lambda timeout_sec=3: False
+    )
 
     state = {
         "clock_prev_wall_time_epoch": 1990.0,
@@ -184,7 +186,11 @@ def test_fetch_http_date_epoch_http_error_branches(monkeypatch: Any) -> None:
     epoch, err = time_health._fetch_http_date_epoch("https://example.com", 2)
     assert epoch is not None and err is None
 
-    monkeypatch.setattr(time_health.request, "urlopen", lambda req, timeout: (_ for _ in ()).throw(Exception("boom")))
+    monkeypatch.setattr(
+        time_health.request,
+        "urlopen",
+        lambda req, timeout: (_ for _ in ()).throw(Exception("boom")),
+    )
     epoch, err = time_health._fetch_http_date_epoch("https://example.com", 2)
     assert epoch is None and err == "boom"
 
@@ -193,28 +199,36 @@ def test_query_ntp_sync_branches(monkeypatch: Any) -> None:
     monkeypatch.setattr(
         time_health.subprocess,
         "run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(args=["timedatectl"], returncode=0, stdout="true\n", stderr=""),
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args=["timedatectl"], returncode=0, stdout="true\n", stderr=""
+        ),
     )
     assert time_health._query_ntp_sync_ok() is True
 
     monkeypatch.setattr(
         time_health.subprocess,
         "run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(args=["timedatectl"], returncode=0, stdout="false\n", stderr=""),
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args=["timedatectl"], returncode=0, stdout="false\n", stderr=""
+        ),
     )
     assert time_health._query_ntp_sync_ok() is False
 
     monkeypatch.setattr(
         time_health.subprocess,
         "run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(args=["timedatectl"], returncode=1, stdout="", stderr=""),
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args=["timedatectl"], returncode=1, stdout="", stderr=""
+        ),
     )
     assert time_health._query_ntp_sync_ok() is None
 
     monkeypatch.setattr(
         time_health.subprocess,
         "run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(args=["timedatectl"], returncode=0, stdout="unknown\n", stderr=""),
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args=["timedatectl"], returncode=0, stdout="unknown\n", stderr=""
+        ),
     )
     assert time_health._query_ntp_sync_ok() is None
 
@@ -231,7 +245,9 @@ def test_time_health_sets_confirmed_reboot_signal(monkeypatch: Any) -> None:
         "raspi_sentinel.time_health._fetch_http_date_epoch",
         lambda url, timeout_sec: (1600.0, None),
     )
-    monkeypatch.setattr("raspi_sentinel.time_health._query_ntp_sync_ok", lambda timeout_sec=3: False)
+    monkeypatch.setattr(
+        "raspi_sentinel.time_health._query_ntp_sync_ok", lambda timeout_sec=3: False
+    )
 
     state = {
         "clock_prev_wall_time_epoch": 1000.0,

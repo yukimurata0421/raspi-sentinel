@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from pathlib import Path
 import subprocess
+from pathlib import Path
 from typing import Any
 
+from raspi_sentinel import recovery
 from raspi_sentinel.checks import CheckFailure, CheckResult
 from raspi_sentinel.config import GlobalConfig, TargetConfig
-from raspi_sentinel import recovery
 
 
 def _global(**overrides: Any) -> GlobalConfig:
@@ -78,7 +78,9 @@ def test_can_reboot_guard_paths(monkeypatch: Any) -> None:
     assert not ok and "cooldown" in reason
 
     state = {"reboots": [{"ts": 80.0}, {"ts": 90.0}]}
-    ok, reason = recovery._can_reboot(_global(reboot_cooldown_sec=0, max_reboots_in_window=2), state, 100.0)
+    ok, reason = recovery._can_reboot(
+        _global(reboot_cooldown_sec=0, max_reboots_in_window=2), state, 100.0
+    )
     assert not ok and "window cap" in reason
 
     state = {"reboots": [{"ts": 0.0}]}
@@ -104,7 +106,9 @@ def test_restart_services_branches(monkeypatch: Any) -> None:
     assert not recovery._restart_services(["svc"], dry_run=False)
 
     def fail_run(*_: Any, **__: Any) -> Any:
-        return subprocess.CompletedProcess(args=["systemctl"], returncode=1, stdout="", stderr="failed")
+        return subprocess.CompletedProcess(
+            args=["systemctl"], returncode=1, stdout="", stderr="failed"
+        )
 
     monkeypatch.setattr(recovery.subprocess, "run", fail_run)
     assert not recovery._restart_services(["svc"], dry_run=False)
@@ -132,7 +136,9 @@ def test_trigger_reboot_branches(monkeypatch: Any) -> None:
     assert not recovery._trigger_reboot(dry_run=False, reason="x")
 
     def fail_run(*_: Any, **__: Any) -> Any:
-        return subprocess.CompletedProcess(args=["systemctl"], returncode=1, stdout="", stderr="failed")
+        return subprocess.CompletedProcess(
+            args=["systemctl"], returncode=1, stdout="", stderr="failed"
+        )
 
     monkeypatch.setattr(recovery.subprocess, "run", fail_run)
     assert not recovery._trigger_reboot(dry_run=False, reason="x")
@@ -170,7 +176,9 @@ def test_apply_recovery_restart_cooldown_suppresses_repeat(monkeypatch: Any) -> 
     }
     outcome = recovery.apply_recovery(
         target=_target(restart_threshold=2, reboot_threshold=9),
-        check_result=CheckResult(target="demo", healthy=False, failures=[CheckFailure("service_active", "down")]),
+        check_result=CheckResult(
+            target="demo", healthy=False, failures=[CheckFailure("service_active", "down")]
+        ),
         global_config=_global(restart_cooldown_sec=10),
         state=state,
         dry_run=True,
@@ -186,8 +194,12 @@ def test_apply_recovery_reboot_failure_falls_back_to_restart(monkeypatch: Any) -
     state: dict[str, Any] = {}
     outcome = recovery.apply_recovery(
         target=_target(restart_threshold=1, reboot_threshold=1),
-        check_result=CheckResult(target="demo", healthy=False, failures=[CheckFailure("dependency_gateway", "gw")]),
-        global_config=_global(min_uptime_for_reboot_sec=0, restart_cooldown_sec=0, reboot_cooldown_sec=0),
+        check_result=CheckResult(
+            target="demo", healthy=False, failures=[CheckFailure("dependency_gateway", "gw")]
+        ),
+        global_config=_global(
+            min_uptime_for_reboot_sec=0, restart_cooldown_sec=0, reboot_cooldown_sec=0
+        ),
         state=state,
         dry_run=True,
     )
@@ -205,7 +217,9 @@ def test_apply_recovery_clock_only_blocks_reboot_without_ready() -> None:
             failures=[CheckFailure("semantic_clock_skew", "clock skew")],
             observations={"clock_reboot_ready": False},
         ),
-        global_config=_global(min_uptime_for_reboot_sec=0, reboot_cooldown_sec=0, restart_cooldown_sec=0),
+        global_config=_global(
+            min_uptime_for_reboot_sec=0, reboot_cooldown_sec=0, restart_cooldown_sec=0
+        ),
         state=state,
         dry_run=True,
     )
@@ -224,7 +238,9 @@ def test_apply_recovery_clock_only_allows_reboot_when_ready(monkeypatch: Any) ->
             failures=[CheckFailure("semantic_clock_frozen", "clock frozen")],
             observations={"clock_reboot_ready": True},
         ),
-        global_config=_global(min_uptime_for_reboot_sec=0, reboot_cooldown_sec=0, restart_cooldown_sec=0),
+        global_config=_global(
+            min_uptime_for_reboot_sec=0, reboot_cooldown_sec=0, restart_cooldown_sec=0
+        ),
         state=state,
         dry_run=True,
     )
@@ -246,7 +262,9 @@ def test_apply_recovery_reboots_on_confirmed_clock_without_failures(monkeypatch:
                 "policy_reason": "clock_frozen_confirmed",
             },
         ),
-        global_config=_global(min_uptime_for_reboot_sec=0, reboot_cooldown_sec=0, restart_cooldown_sec=0),
+        global_config=_global(
+            min_uptime_for_reboot_sec=0, reboot_cooldown_sec=0, restart_cooldown_sec=0
+        ),
         state=state,
         dry_run=True,
     )

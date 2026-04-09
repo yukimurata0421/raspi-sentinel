@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
-from pathlib import Path
 import subprocess
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from raspi_sentinel import checks
@@ -116,7 +116,9 @@ def test_service_active_check_all_branches(monkeypatch: Any) -> None:
     assert checks._service_active_check("svc") is not None
 
     def inactive_run(*_: Any, **__: Any) -> Any:
-        return subprocess.CompletedProcess(args=["systemctl"], returncode=3, stdout="inactive", stderr="")
+        return subprocess.CompletedProcess(
+            args=["systemctl"], returncode=3, stdout="inactive", stderr=""
+        )
 
     monkeypatch.setattr(checks.subprocess, "run", inactive_run)
     assert checks._service_active_check("svc") is not None

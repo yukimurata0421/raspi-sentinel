@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -92,8 +92,12 @@ def build_monitor_stats_snapshot(
             status = str(target_state.get("last_status", "unknown"))
             reason = str(target_state.get("last_reason", "unknown"))
         else:
-            status = classify_target_status(result=result, target_state=state_targets.get(target.name, {}))
-            reason = classify_target_reason(result=result, target_state=state_targets.get(target.name, {}))
+            status = classify_target_status(
+                result=result, target_state=state_targets.get(target.name, {})
+            )
+            reason = classify_target_reason(
+                result=result, target_state=state_targets.get(target.name, {})
+            )
 
         counts[status] = counts.get(status, 0) + 1
         target_state = state_targets.get(target.name, {})

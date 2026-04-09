@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 import logging
-from pathlib import Path
 import time
+from pathlib import Path
 
 from .checks import CheckResult, run_checks
 from .config import AppConfig, load_config
@@ -21,7 +21,12 @@ from .notify import DiscordNotifier, format_failures
 from .recovery import apply_recovery
 from .runtime_state import safe_int, target_state
 from .state import StateStore
-from .status_events import classify_target_reason, classify_target_status, classify_target_state, record_status_events
+from .status_events import (
+    classify_target_reason,
+    classify_target_state,
+    classify_target_status,
+    record_status_events,
+)
 from .time_health import apply_time_health_checks
 
 LOG = logging.getLogger(__name__)
@@ -180,7 +185,9 @@ def _build_parser() -> argparse.ArgumentParser:
         default=Path("/etc/raspi-sentinel/config.toml"),
         help="Path to TOML config file",
     )
-    parser.add_argument("--dry-run", action="store_true", help="Evaluate and log actions but do not restart/reboot")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Evaluate and log actions but do not restart/reboot"
+    )
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
 
     sub = parser.add_subparsers(dest="command", required=True)

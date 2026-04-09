@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import subprocess
-from typing import Any
 from pathlib import Path
+from typing import Any
 
 from raspi_sentinel.checks import CheckFailure, CheckResult
 from raspi_sentinel.config import GlobalConfig, TargetConfig
@@ -81,7 +81,9 @@ def test_systemd_failure_triggers_restart(monkeypatch: Any) -> None:
     )
     state: dict[str, Any] = {}
     outcome = apply_recovery(
-        target=_target(services=["demo.service"], service_active=True, restart_threshold=1, reboot_threshold=5),
+        target=_target(
+            services=["demo.service"], service_active=True, restart_threshold=1, reboot_threshold=5
+        ),
         check_result=result,
         global_config=_global(),
         state=state,

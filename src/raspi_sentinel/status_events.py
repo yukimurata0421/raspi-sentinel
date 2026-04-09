@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -97,7 +97,12 @@ def classify_target_state(
         return "ok", "recovered_from_clock_skew"
 
     if checks:
-        if "service_active" in checks or "command" in checks or "heartbeat_file" in checks or "output_file" in checks:
+        if (
+            "service_active" in checks
+            or "command" in checks
+            or "heartbeat_file" in checks
+            or "output_file" in checks
+        ):
             return "failed", "process_error"
         return "degraded", "unhealthy"
 
