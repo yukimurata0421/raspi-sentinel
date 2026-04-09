@@ -11,6 +11,14 @@ from .config import GlobalConfig, TargetConfig
 
 LOG = logging.getLogger(__name__)
 
+CLOCK_FAILURE_CHECKS = frozenset(
+    {
+        "semantic_clock_frozen",
+        "semantic_clock_jump",
+        "semantic_clock_skew",
+    }
+)
+
 
 @dataclass(slots=True)
 class RecoveryOutcome:
@@ -61,6 +69,28 @@ def _within_cooldown(last_ts: float | int | None, cooldown_sec: int, now_ts: flo
     except (TypeError, ValueError):
         return False
     return delta < cooldown_sec
+
+
+def _has_failure(result: CheckResult, check_name: str) -> bool:
+    return any(f.check == check_name for f in result.failures)
+
+
+def _has_non_dependency_failure(result: CheckResult) -> bool:
+    return any(not f.check.startswith("dependency_") for f in result.failures)
+
+
+def _is_clock_only_failure(result: CheckResult) -> bool:
+    if not result.failures:
+        return False
+    return all(f.check in CLOCK_FAILURE_CHECKS for f in result.failures)
+
+
+def _clock_reboot_ready(result: CheckResult) -> bool:
+    return result.observations.get("clock_reboot_ready") is True
+
+
+def _clock_reboot_confirmed(result: CheckResult) -> bool:
+    return result.observations.get("clock_frozen_confirmed") is True
 
 
 def _can_reboot(global_config: GlobalConfig, state: dict[str, Any], now_ts: float) -> tuple[bool, str]:
@@ -185,8 +215,9 @@ def apply_recovery(
 ) -> RecoveryOutcome:
     target_state = _target_state(state, target.name)
     now_ts = _now()
+    clock_reboot_confirmed = _clock_reboot_confirmed(check_result)
 
-    if check_result.healthy:
+    if check_result.healthy and not clock_reboot_confirmed:
         previous = int(target_state.get("consecutive_failures", 0) or 0)
         target_state["consecutive_failures"] = 0
         target_state["last_healthy_ts"] = now_ts
@@ -195,11 +226,37 @@ def apply_recovery(
         _record_action(target_state, "none")
         return RecoveryOutcome(action="none", requested_reboot=False)
 
-    failures_text = "; ".join(f"{f.check}: {f.message}" for f in check_result.failures)
+    failures_text = "; ".join(f"{f.check}: {f.message}" for f in check_result.failures).strip()
+    if not failures_text:
+        failures_text = str(check_result.observations.get("policy_reason", "unhealthy"))
     consecutive = int(target_state.get("consecutive_failures", 0) or 0) + 1
     target_state["consecutive_failures"] = consecutive
     target_state["last_failure_ts"] = now_ts
     target_state["last_failure_reason"] = failures_text
+
+    if clock_reboot_confirmed:
+        can_reboot, guard_reason = _can_reboot(global_config, state, now_ts)
+        if can_reboot:
+            LOG.error(
+                "target '%s': confirmed clock freeze anomaly; requesting reboot. reason=%s",
+                target.name,
+                failures_text,
+            )
+            reboot_ok = _trigger_reboot(dry_run=dry_run, reason=failures_text)
+            if reboot_ok:
+                reboots = state.setdefault("reboots", [])
+                reboots.append({"ts": now_ts, "target": target.name, "reason": failures_text})
+                _record_action(target_state, "reboot")
+                return RecoveryOutcome(action="reboot", requested_reboot=True)
+            LOG.error("target '%s': confirmed clock reboot request failed", target.name)
+        else:
+            LOG.error(
+                "target '%s': confirmed clock reboot blocked by safeguard: %s",
+                target.name,
+                guard_reason,
+            )
+        _record_action(target_state, "warn")
+        return RecoveryOutcome(action="warn", requested_reboot=False)
 
     restart_threshold, reboot_threshold = _thresholds(target, global_config)
     LOG.warning(
@@ -213,24 +270,49 @@ def apply_recovery(
 
     last_action = target_state.get("last_action")
     last_action_ts = target_state.get("last_action_ts")
+    has_dns_failure = _has_failure(check_result, "dependency_dns")
+    has_gateway_failure = _has_failure(check_result, "dependency_gateway")
+    has_non_dependency_failure = _has_non_dependency_failure(check_result)
+
+    if has_dns_failure and not has_gateway_failure and not has_non_dependency_failure:
+        LOG.warning(
+            "target '%s': DNS-only dependency failure detected; skip restart/reboot and keep warning state",
+            target.name,
+        )
+        _record_action(target_state, "warn")
+        return RecoveryOutcome(action="warn", requested_reboot=False)
 
     if consecutive >= reboot_threshold:
-        can_reboot, guard_reason = _can_reboot(global_config, state, now_ts)
-        if can_reboot:
+        if has_dns_failure and not has_gateway_failure:
             LOG.error(
-                "target '%s': reboot threshold reached. requesting reboot. reason=%s",
+                "target '%s': reboot blocked because failure is classified as DNS-only dependency issue",
                 target.name,
-                failures_text,
             )
-            reboot_ok = _trigger_reboot(dry_run=dry_run, reason=failures_text)
-            if reboot_ok:
-                reboots = state.setdefault("reboots", [])
-                reboots.append({"ts": now_ts, "target": target.name, "reason": failures_text})
-                _record_action(target_state, "reboot")
-                return RecoveryOutcome(action="reboot", requested_reboot=True)
-            LOG.error("target '%s': reboot request failed, falling back to restart path", target.name)
+        elif _is_clock_only_failure(check_result) and not _clock_reboot_ready(check_result):
+            LOG.error(
+                (
+                    "target '%s': reboot blocked because clock anomaly is not persistent "
+                    "or dependency confirmation is incomplete"
+                ),
+                target.name,
+            )
         else:
-            LOG.error("target '%s': reboot blocked by safeguard: %s", target.name, guard_reason)
+            can_reboot, guard_reason = _can_reboot(global_config, state, now_ts)
+            if can_reboot:
+                LOG.error(
+                    "target '%s': reboot threshold reached. requesting reboot. reason=%s",
+                    target.name,
+                    failures_text,
+                )
+                reboot_ok = _trigger_reboot(dry_run=dry_run, reason=failures_text)
+                if reboot_ok:
+                    reboots = state.setdefault("reboots", [])
+                    reboots.append({"ts": now_ts, "target": target.name, "reason": failures_text})
+                    _record_action(target_state, "reboot")
+                    return RecoveryOutcome(action="reboot", requested_reboot=True)
+                LOG.error("target '%s': reboot request failed, falling back to restart path", target.name)
+            else:
+                LOG.error("target '%s': reboot blocked by safeguard: %s", target.name, guard_reason)
 
     if consecutive >= restart_threshold:
         if last_action == "restart" and _within_cooldown(

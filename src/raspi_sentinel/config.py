@@ -8,6 +8,9 @@ import tomllib
 @dataclass(slots=True)
 class GlobalConfig:
     state_file: Path
+    events_file: Path
+    monitor_stats_file: Path
+    monitor_stats_interval_sec: int
     restart_threshold: int
     reboot_threshold: int
     restart_cooldown_sec: int
@@ -30,6 +33,23 @@ class TargetConfig:
     output_max_age_sec: int | None
     command: str | None
     command_timeout_sec: int | None
+    dns_check_command: str | None
+    gateway_check_command: str | None
+    dependency_check_timeout_sec: int | None
+    stats_file: Path | None
+    stats_updated_max_age_sec: int | None
+    stats_last_input_max_age_sec: int | None
+    stats_last_success_max_age_sec: int | None
+    stats_records_stall_cycles: int | None
+    time_health_enabled: bool
+    check_interval_threshold_sec: int
+    wall_clock_freeze_min_monotonic_sec: int
+    wall_clock_freeze_max_wall_advance_sec: int
+    wall_clock_drift_threshold_sec: int
+    http_time_probe_url: str | None
+    http_time_probe_timeout_sec: int
+    clock_skew_threshold_sec: int
+    clock_anomaly_reboot_consecutive: int
     maintenance_mode_command: str | None
     maintenance_mode_timeout_sec: int | None
     maintenance_grace_sec: int | None
@@ -89,6 +109,13 @@ def _optional_path(data: dict, key: str) -> Path | None:
     return Path(value) if value else None
 
 
+def _optional_bool(data: dict, key: str, default: bool) -> bool:
+    value = data.get(key, default)
+    if not isinstance(value, bool):
+        raise ValueError(f"'{key}' must be boolean")
+    return value
+
+
 def _validate_target_rules(target: TargetConfig) -> None:
     has_heartbeat = target.heartbeat_file is not None or target.heartbeat_max_age_sec is not None
     if has_heartbeat and (target.heartbeat_file is None or target.heartbeat_max_age_sec is None):
@@ -111,6 +138,9 @@ def _validate_target_rules(target: TargetConfig) -> None:
     if target.command_timeout_sec is not None and target.command_timeout_sec <= 0:
         raise ValueError(f"target '{target.name}': command_timeout_sec must be > 0")
 
+    if target.dependency_check_timeout_sec is not None and target.dependency_check_timeout_sec <= 0:
+        raise ValueError(f"target '{target.name}': dependency_check_timeout_sec must be > 0")
+
     if target.maintenance_mode_timeout_sec is not None and target.maintenance_mode_timeout_sec <= 0:
         raise ValueError(f"target '{target.name}': maintenance_mode_timeout_sec must be > 0")
 
@@ -129,18 +159,73 @@ def _validate_target_rules(target: TargetConfig) -> None:
                 f"target '{target.name}': reboot_threshold must be >= restart_threshold"
             )
 
+    if target.stats_updated_max_age_sec is not None and target.stats_updated_max_age_sec <= 0:
+        raise ValueError(f"target '{target.name}': stats_updated_max_age_sec must be > 0")
+
+    if target.stats_last_input_max_age_sec is not None and target.stats_last_input_max_age_sec <= 0:
+        raise ValueError(f"target '{target.name}': stats_last_input_max_age_sec must be > 0")
+
+    if target.stats_last_success_max_age_sec is not None and target.stats_last_success_max_age_sec <= 0:
+        raise ValueError(f"target '{target.name}': stats_last_success_max_age_sec must be > 0")
+
+    if target.stats_records_stall_cycles is not None and target.stats_records_stall_cycles <= 0:
+        raise ValueError(f"target '{target.name}': stats_records_stall_cycles must be > 0")
+
+    if target.wall_clock_freeze_min_monotonic_sec <= 0:
+        raise ValueError(
+            f"target '{target.name}': wall_clock_freeze_min_monotonic_sec must be > 0"
+        )
+
+    if target.check_interval_threshold_sec <= 0:
+        raise ValueError(f"target '{target.name}': check_interval_threshold_sec must be > 0")
+
+    if target.wall_clock_freeze_max_wall_advance_sec < 0:
+        raise ValueError(
+            f"target '{target.name}': wall_clock_freeze_max_wall_advance_sec must be >= 0"
+        )
+
+    if target.wall_clock_drift_threshold_sec <= 0:
+        raise ValueError(f"target '{target.name}': wall_clock_drift_threshold_sec must be > 0")
+
+    if target.http_time_probe_timeout_sec <= 0:
+        raise ValueError(f"target '{target.name}': http_time_probe_timeout_sec must be > 0")
+
+    if target.clock_skew_threshold_sec <= 0:
+        raise ValueError(f"target '{target.name}': clock_skew_threshold_sec must be > 0")
+
+    if target.clock_anomaly_reboot_consecutive <= 0:
+        raise ValueError(f"target '{target.name}': clock_anomaly_reboot_consecutive must be > 0")
+
+    has_stats_rule = any(
+        [
+            target.stats_updated_max_age_sec is not None,
+            target.stats_last_input_max_age_sec is not None,
+            target.stats_last_success_max_age_sec is not None,
+            target.stats_records_stall_cycles is not None,
+        ]
+    )
+    if has_stats_rule and target.stats_file is None:
+        raise ValueError(
+            f"target '{target.name}': stats_file is required when stats_* checks are configured"
+        )
+
     has_rule = any(
         [
             target.service_active,
             target.heartbeat_file is not None,
             target.output_file is not None,
             target.command is not None,
+            target.stats_file is not None,
+            target.dns_check_command is not None,
+            target.gateway_check_command is not None,
+            target.time_health_enabled,
         ]
     )
     if not has_rule:
         raise ValueError(
             f"target '{target.name}': at least one rule is required "
-            "(service_active, heartbeat, output, or command)"
+            "(service_active, heartbeat, output, command, stats_file, "
+            "dns_check_command, gateway_check_command, time_health_enabled)"
         )
 
 
@@ -154,6 +239,9 @@ def load_config(path: Path) -> AppConfig:
 
     global_config = GlobalConfig(
         state_file=Path(global_raw.get("state_file", "/var/lib/raspi-sentinel/state.json")),
+        events_file=Path(global_raw.get("events_file", "/var/lib/raspi-sentinel/events.jsonl")),
+        monitor_stats_file=Path(global_raw.get("monitor_stats_file", "/var/lib/raspi-sentinel/stats.json")),
+        monitor_stats_interval_sec=_require_int(global_raw, "monitor_stats_interval_sec", 30),
         restart_threshold=_require_int(global_raw, "restart_threshold", 3),
         reboot_threshold=_require_int(global_raw, "reboot_threshold", 6),
         restart_cooldown_sec=_require_int(global_raw, "restart_cooldown_sec", 120),
@@ -179,6 +267,8 @@ def load_config(path: Path) -> AppConfig:
         raise ValueError("global default_command_timeout_sec must be > 0")
     if global_config.loop_interval_sec <= 0:
         raise ValueError("global loop_interval_sec must be > 0")
+    if global_config.monitor_stats_interval_sec <= 0:
+        raise ValueError("global monitor_stats_interval_sec must be > 0")
 
     notify_raw = raw.get("notify", {})
     if not isinstance(notify_raw, dict):
@@ -250,6 +340,39 @@ def load_config(path: Path) -> AppConfig:
             output_max_age_sec=_optional_int(item, "output_max_age_sec"),
             command=_optional_str(item, "command"),
             command_timeout_sec=_optional_int(item, "command_timeout_sec"),
+            dns_check_command=_optional_str(item, "dns_check_command"),
+            gateway_check_command=_optional_str(item, "gateway_check_command"),
+            dependency_check_timeout_sec=_optional_int(item, "dependency_check_timeout_sec"),
+            stats_file=_optional_path(item, "stats_file"),
+            stats_updated_max_age_sec=_optional_int(item, "stats_updated_max_age_sec"),
+            stats_last_input_max_age_sec=_optional_int(item, "stats_last_input_max_age_sec"),
+            stats_last_success_max_age_sec=_optional_int(item, "stats_last_success_max_age_sec"),
+            stats_records_stall_cycles=_optional_int(item, "stats_records_stall_cycles"),
+            time_health_enabled=_optional_bool(item, "time_health_enabled", False),
+            check_interval_threshold_sec=_require_int(item, "check_interval_threshold_sec", 30),
+            wall_clock_freeze_min_monotonic_sec=_require_int(
+                item,
+                "wall_clock_freeze_min_monotonic_sec",
+                25,
+            ),
+            wall_clock_freeze_max_wall_advance_sec=_require_int(
+                item,
+                "wall_clock_freeze_max_wall_advance_sec",
+                1,
+            ),
+            wall_clock_drift_threshold_sec=_require_int(
+                item,
+                "wall_clock_drift_threshold_sec",
+                30,
+            ),
+            http_time_probe_url=_optional_str(item, "http_time_probe_url"),
+            http_time_probe_timeout_sec=_require_int(item, "http_time_probe_timeout_sec", 5),
+            clock_skew_threshold_sec=_require_int(item, "clock_skew_threshold_sec", 300),
+            clock_anomaly_reboot_consecutive=_require_int(
+                item,
+                "clock_anomaly_reboot_consecutive",
+                3,
+            ),
             maintenance_mode_command=_optional_str(item, "maintenance_mode_command"),
             maintenance_mode_timeout_sec=_optional_int(item, "maintenance_mode_timeout_sec"),
             maintenance_grace_sec=_optional_int(item, "maintenance_grace_sec"),
@@ -259,6 +382,11 @@ def load_config(path: Path) -> AppConfig:
 
         if target.command_timeout_sec is None and target.command is not None:
             target.command_timeout_sec = global_config.default_command_timeout_sec
+        if (
+            target.dependency_check_timeout_sec is None
+            and (target.dns_check_command is not None or target.gateway_check_command is not None)
+        ):
+            target.dependency_check_timeout_sec = global_config.default_command_timeout_sec
         if target.maintenance_mode_timeout_sec is None and target.maintenance_mode_command is not None:
             target.maintenance_mode_timeout_sec = global_config.default_command_timeout_sec
 

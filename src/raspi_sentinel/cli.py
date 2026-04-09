@@ -3,243 +3,36 @@ from __future__ import annotations
 import argparse
 import logging
 from pathlib import Path
-import subprocess
 import time
-from typing import Any
 
 from .checks import CheckResult, run_checks
 from .config import AppConfig, load_config
-from .logging_utils import configure_logging
-from .notify import (
-    DiscordNotifier,
-    collect_system_snapshot,
-    format_failures,
-    mark_heartbeat_sent,
-    should_send_periodic_heartbeat,
+from .cycle_notifications import (
+    schedule_followup,
+    send_due_followups,
+    send_issue_notification,
+    send_periodic_heartbeat,
+    send_recovery_notification,
 )
+from .logging_utils import configure_logging
+from .maintenance import is_target_suppressed_by_maintenance
+from .monitor_stats import apply_records_progress_check, maybe_write_monitor_stats
+from .notify import DiscordNotifier, format_failures
 from .recovery import apply_recovery
+from .runtime_state import safe_int, target_state
 from .state import StateStore
+from .status_events import classify_target_reason, classify_target_status, classify_target_state, record_status_events
+from .time_health import apply_time_health_checks
 
 LOG = logging.getLogger(__name__)
 
 
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
+def _classify_target_status(result: CheckResult) -> str:
+    return classify_target_status(result)
 
 
-def _target_state(state: dict[str, Any], target_name: str) -> dict[str, Any]:
-    targets = state.setdefault("targets", {})
-    target_state = targets.get(target_name)
-    if not isinstance(target_state, dict):
-        target_state = {}
-        targets[target_name] = target_state
-    return target_state
-
-
-def _run_shell_success(command: str, timeout_sec: int) -> bool:
-    try:
-        result = subprocess.run(
-            command,
-            shell=True,
-            check=False,
-            timeout=timeout_sec,
-            capture_output=True,
-            text=True,
-        )
-    except (subprocess.TimeoutExpired, OSError):
-        return False
-    return result.returncode == 0
-
-
-def _is_target_suppressed_by_maintenance(
-    target: Any,
-    target_state: dict[str, Any],
-    now_ts: float,
-) -> tuple[bool, str]:
-    suppress_until_raw = target_state.get("maintenance_suppress_until_ts", 0)
-    try:
-        suppress_until = float(suppress_until_raw)
-    except (TypeError, ValueError):
-        suppress_until = 0.0
-
-    if now_ts < suppress_until:
-        remain = int(suppress_until - now_ts)
-        return True, f"grace active ({remain}s remaining)"
-
-    command = target.maintenance_mode_command
-    if not command:
-        return False, ""
-
-    timeout = target.maintenance_mode_timeout_sec or 10
-    matched = _run_shell_success(command=command, timeout_sec=timeout)
-    if not matched:
-        return False, ""
-
-    grace_sec = target.maintenance_grace_sec or 0
-    if grace_sec > 0:
-        target_state["maintenance_suppress_until_ts"] = now_ts + grace_sec
-    return True, "maintenance mode command matched"
-
-
-def _schedule_followup(
-    state: dict[str, Any],
-    target_name: str,
-    now_ts: float,
-    delay_sec: int,
-    action: str,
-    reason: str,
-    consecutive_failures: int,
-) -> None:
-    followups = state.setdefault("followups", {})
-    existing = followups.get(target_name)
-    event = {
-        "due_ts": now_ts + delay_sec,
-        "created_ts": now_ts,
-        "initial_action": action,
-        "initial_reason": reason,
-        "initial_consecutive_failures": consecutive_failures,
-    }
-
-    if not isinstance(existing, dict):
-        followups[target_name] = event
-        return
-
-    # Re-schedule when action escalates to stronger recovery.
-    if action in ("restart", "reboot"):
-        followups[target_name] = event
-
-
-def _send_issue_notification(
-    notifier: DiscordNotifier,
-    target_name: str,
-    result: CheckResult,
-    action: str,
-    consecutive_failures: int,
-    services: list[str],
-    dry_run: bool,
-) -> None:
-    severity = "ERROR" if action == "reboot" else "WARN"
-    notifier.send_lines(
-        title=f"Issue detected: {target_name}",
-        severity=severity,
-        lines=[
-            f"problem={format_failures(result)}",
-            f"action_taken={action}",
-            f"consecutive_failures={consecutive_failures}",
-            f"services={', '.join(services) if services else '(none)'}",
-            f"dry_run={dry_run}",
-            "follow_up=scheduled",
-        ],
-    )
-
-
-def _send_recovery_notification(
-    notifier: DiscordNotifier,
-    target_name: str,
-    previous_failures: int,
-) -> None:
-    notifier.send_lines(
-        title=f"Recovered: {target_name}",
-        severity="INFO",
-        lines=[
-            f"status=healthy",
-            f"previous_consecutive_failures={previous_failures}",
-            "action_taken=none",
-        ],
-    )
-
-
-def _send_due_followups(
-    notifier: DiscordNotifier,
-    state: dict[str, Any],
-    target_results: dict[str, CheckResult],
-    now_ts: float,
-) -> None:
-    followups = state.setdefault("followups", {})
-    if not isinstance(followups, dict):
-        state["followups"] = {}
-        return
-
-    to_delete: list[str] = []
-    for target_name, event in followups.items():
-        if not isinstance(event, dict):
-            to_delete.append(target_name)
-            continue
-
-        due_ts = event.get("due_ts")
-        try:
-            due_ts_f = float(due_ts)
-        except (TypeError, ValueError):
-            due_ts_f = 0.0
-
-        if now_ts < due_ts_f:
-            continue
-
-        result = target_results.get(target_name)
-        target_state = _target_state(state, target_name)
-        consecutive = _safe_int(target_state.get("consecutive_failures"), 0)
-
-        if result is None:
-            healthy = consecutive == 0
-            current_problem = str(target_state.get("last_failure_reason", "unknown"))
-        else:
-            healthy = result.healthy
-            current_problem = format_failures(result)
-
-        severity = "INFO" if healthy else "WARN"
-        sent = notifier.send_lines(
-            title=f"Follow-up after 5min: {target_name}",
-            severity=severity,
-            lines=[
-                f"initial_action={event.get('initial_action', 'unknown')}",
-                f"initial_problem={event.get('initial_reason', 'unknown')}",
-                f"current_status={'healthy' if healthy else 'unhealthy'}",
-                f"current_problem={current_problem}",
-                f"current_consecutive_failures={consecutive}",
-            ],
-        )
-        if sent:
-            to_delete.append(target_name)
-
-    for target_name in to_delete:
-        followups.pop(target_name, None)
-
-
-def _send_periodic_heartbeat(
-    notifier: DiscordNotifier,
-    state: dict[str, Any],
-    target_results: dict[str, CheckResult],
-    now_ts: float,
-) -> None:
-    interval_sec = notifier.config.heartbeat_interval_sec
-    if interval_sec <= 0:
-        return
-    if not should_send_periodic_heartbeat(state=state, interval_sec=interval_sec, now_ts=now_ts):
-        return
-
-    healthy_count = sum(1 for result in target_results.values() if result.healthy)
-    unhealthy_count = sum(1 for result in target_results.values() if not result.healthy)
-    snapshot = collect_system_snapshot()
-    pending_followups = state.get("followups", {})
-    pending_count = len(pending_followups) if isinstance(pending_followups, dict) else 0
-
-    sent = notifier.send_lines(
-        title="Heartbeat: monitor running",
-        severity="INFO",
-        lines=[
-            f"targets_healthy={healthy_count}",
-            f"targets_unhealthy={unhealthy_count}",
-            f"uptime_sec={snapshot.uptime_sec:.0f}",
-            f"loadavg={snapshot.load1:.2f}/{snapshot.load5:.2f}/{snapshot.load15:.2f}",
-            f"root_disk_used_pct={snapshot.disk_used_pct:.1f}",
-            f"pending_followups={pending_count}",
-        ],
-    )
-    if sent:
-        mark_heartbeat_sent(state=state, now_ts=now_ts)
+def _classify_target_reason(result: CheckResult) -> str:
+    return classify_target_reason(result)
 
 
 def _run_cycle(config: AppConfig, dry_run: bool) -> int:
@@ -253,12 +46,12 @@ def _run_cycle(config: AppConfig, dry_run: bool) -> int:
     target_results: dict[str, CheckResult] = {}
 
     for target in config.targets:
-        before_state = _target_state(state, target.name)
-        previous_failures = _safe_int(before_state.get("consecutive_failures"), 0)
+        before = target_state(state, target.name)
+        previous_failures = safe_int(before.get("consecutive_failures"), 0)
 
-        suppressed, suppress_reason = _is_target_suppressed_by_maintenance(
+        suppressed, suppress_reason = is_target_suppressed_by_maintenance(
             target=target,
-            target_state=before_state,
+            target_state=before,
             now_ts=now_ts,
         )
         if suppressed:
@@ -270,9 +63,23 @@ def _run_cycle(config: AppConfig, dry_run: bool) -> int:
             continue
 
         result = run_checks(target)
+        apply_records_progress_check(
+            target=target,
+            target_state=before,
+            result=result,
+        )
+        apply_time_health_checks(
+            target=target,
+            target_state=before,
+            result=result,
+            now_wall_ts=now_ts,
+        )
+        current_status, current_reason = classify_target_state(result=result, target_state=before)
+        result.observations["policy_status"] = current_status
+        result.observations["policy_reason"] = current_reason
         target_results[target.name] = result
 
-        if not result.healthy:
+        if current_status != "ok":
             unhealthy_count += 1
 
         outcome = apply_recovery(
@@ -283,12 +90,22 @@ def _run_cycle(config: AppConfig, dry_run: bool) -> int:
             dry_run=dry_run,
         )
 
-        after_state = _target_state(state, target.name)
-        current_failures = _safe_int(after_state.get("consecutive_failures"), 0)
+        after = target_state(state, target.name)
+        current_failures = safe_int(after.get("consecutive_failures"), 0)
+        record_status_events(
+            events_file=config.global_config.events_file,
+            target_state=after,
+            target_name=target.name,
+            current_status=current_status,
+            current_reason=current_reason,
+            result=result,
+            action=outcome.action,
+            now_ts=now_ts,
+        )
 
         if notifier.enabled:
             if result.healthy and previous_failures > 0:
-                _send_recovery_notification(
+                send_recovery_notification(
                     notifier=notifier,
                     target_name=target.name,
                     previous_failures=previous_failures,
@@ -297,7 +114,7 @@ def _run_cycle(config: AppConfig, dry_run: bool) -> int:
             if not result.healthy:
                 should_notify_now = current_failures == 1 or outcome.action in ("restart", "reboot")
                 if should_notify_now:
-                    _send_issue_notification(
+                    send_issue_notification(
                         notifier=notifier,
                         target_name=target.name,
                         result=result,
@@ -307,7 +124,7 @@ def _run_cycle(config: AppConfig, dry_run: bool) -> int:
                         dry_run=dry_run,
                     )
 
-                _schedule_followup(
+                schedule_followup(
                     state=state,
                     target_name=target.name,
                     now_ts=now_ts,
@@ -323,18 +140,25 @@ def _run_cycle(config: AppConfig, dry_run: bool) -> int:
             break
 
     if notifier.enabled:
-        _send_due_followups(
+        send_due_followups(
             notifier=notifier,
             state=state,
             target_results=target_results,
             now_ts=now_ts,
         )
-        _send_periodic_heartbeat(
+        send_periodic_heartbeat(
             notifier=notifier,
             state=state,
             target_results=target_results,
             now_ts=now_ts,
         )
+
+    maybe_write_monitor_stats(
+        config=config,
+        state=state,
+        target_results=target_results,
+        now_ts=now_ts,
+    )
 
     store.save(state)
 

@@ -1,6 +1,11 @@
 [global]
 # Persistent state (failure counters, reboot history)
 state_file = "/var/lib/raspi-sentinel/state.json"
+# Lightweight transition event log
+events_file = "/var/lib/raspi-sentinel/events.jsonl"
+# raspi-sentinel's own health snapshot
+monitor_stats_file = "/var/lib/raspi-sentinel/stats.json"
+monitor_stats_interval_sec = 30
 
 # Staged recovery thresholds
 restart_threshold = 2
@@ -15,7 +20,7 @@ min_uptime_for_reboot_sec = 600
 
 # Misc
 default_command_timeout_sec = 10
-loop_interval_sec = 60
+loop_interval_sec = 30
 
 [notify.discord]
 enabled = true
@@ -36,6 +41,11 @@ output_file = "/run/readsb/stats.json"
 output_max_age_sec = 180
 command = "test -s /run/readsb/stats.json"
 command_timeout_sec = 5
+# Semantic health snapshot (produced by the monitored service itself)
+stats_file = "/run/readsb/stats.json"
+stats_updated_max_age_sec = 180
+stats_last_success_max_age_sec = 180
+stats_records_stall_cycles = 3
 restart_threshold = 2
 reboot_threshold = 5
 
@@ -58,6 +68,11 @@ output_file = "/run/airspy_adsb/stats.json"
 output_max_age_sec = 180
 command = "test -s /run/airspy_adsb/stats.json"
 command_timeout_sec = 5
+stats_file = "/run/airspy_adsb/stats.json"
+stats_updated_max_age_sec = 180
+stats_last_input_max_age_sec = 180
+stats_last_success_max_age_sec = 180
+stats_records_stall_cycles = 3
 # Skip checks while gain guard is actively restarting the decoder,
 # and keep a short grace period for stats.json to be recreated.
 maintenance_mode_command = "systemctl is-active --quiet airspy_gain_guard.service"
@@ -71,8 +86,22 @@ reboot_threshold = 5
 name = "network_uplink"
 services = []
 service_active = false
-command = "getent ahostsv4 blender.prod.fr24.io >/dev/null && nc -zw3 1.1.1.1 443 >/dev/null 2>&1"
-command_timeout_sec = 8
-# Reboot host when network outage persists for about 5 minutes (5 consecutive checks).
+dns_check_command = "getent ahostsv4 blender.prod.fr24.io >/dev/null"
+gateway_check_command = "ip route get 1.1.1.1 >/dev/null 2>&1 && nc -zw3 1.1.1.1 443 >/dev/null 2>&1"
+dependency_check_timeout_sec = 8
+# Optional: detect clock anomaly (no automatic clock correction).
+# This compares wall clock progression vs monotonic progression,
+# and optionally compares against HTTP Date header as external reference.
+time_health_enabled = true
+check_interval_threshold_sec = 30
+wall_clock_freeze_min_monotonic_sec = 25
+wall_clock_freeze_max_wall_advance_sec = 1
+wall_clock_drift_threshold_sec = 30
+http_time_probe_url = "https://www.google.com"
+http_time_probe_timeout_sec = 5
+clock_skew_threshold_sec = 300
+clock_anomaly_reboot_consecutive = 3
+# DNS-only failures are classified and reboot is suppressed.
+# Gateway failures can still escalate by threshold/cooldown guards.
 restart_threshold = 5
-reboot_threshold = 5
+reboot_threshold = 10

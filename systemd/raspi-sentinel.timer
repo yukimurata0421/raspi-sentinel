@@ -1,10 +1,10 @@
 [Unit]
-Description=Run raspi-sentinel checks every minute
+Description=Run raspi-sentinel checks every 30 seconds
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=1min
-RandomizedDelaySec=10s
+OnUnitActiveSec=30s
+RandomizedDelaySec=5s
 Persistent=true
 AccuracySec=15s
 Unit=raspi-sentinel.service
