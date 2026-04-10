@@ -45,6 +45,7 @@ def classify_target_reason(
 def record_notify_failure_event(
     events_file: Path,
     max_file_bytes: int,
+    backup_generations: int,
     context: str,
     now_ts: float,
 ) -> None:
@@ -57,6 +58,7 @@ def record_notify_failure_event(
             "context": context,
         },
         max_file_bytes=max_file_bytes,
+        backup_generations=backup_generations,
     )
 
 
@@ -64,9 +66,10 @@ def append_event(
     events_file: Path,
     event: dict[str, Any],
     max_file_bytes: int = 0,
+    backup_generations: int = 1,
 ) -> None:
     try:
-        maybe_rotate_file(events_file, max_file_bytes)
+        maybe_rotate_file(events_file, max_file_bytes, backup_generations=backup_generations)
         events_file.parent.mkdir(parents=True, exist_ok=True)
         with events_file.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(event, sort_keys=True) + "\n")
@@ -110,6 +113,7 @@ def record_status_events(
     action: str,
     now_ts: float,
     max_file_bytes: int = 0,
+    backup_generations: int = 1,
 ) -> None:
     previous_status_raw = target_state.get("last_status")
     previous_status = previous_status_raw if isinstance(previous_status_raw, str) else "unknown"
@@ -130,6 +134,7 @@ def record_status_events(
                 **evidence,
             },
             max_file_bytes=max_file_bytes,
+            backup_generations=backup_generations,
         )
 
     if action in ("restart", "reboot"):
@@ -145,6 +150,7 @@ def record_status_events(
                 **evidence,
             },
             max_file_bytes=max_file_bytes,
+            backup_generations=backup_generations,
         )
 
     target_state["last_status"] = current_status

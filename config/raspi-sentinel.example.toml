@@ -1,10 +1,18 @@
 [global]
 # Persistent state (failure counters, reboot history)
 state_file = "/var/lib/raspi-sentinel/state.json"
+# Guard state.json growth (bytes). 0 = disable guard.
+state_max_file_bytes = 2000000
+# Keep only the latest N reboot entries when persisting state.
+state_reboots_max_entries = 256
+# Exclusive state lock wait timeout (seconds) to avoid concurrent lost updates.
+state_lock_timeout_sec = 5
 # Lightweight transition event log
 events_file = "/var/lib/raspi-sentinel/events.jsonl"
 # Rotate events.jsonl when file size exceeds this (bytes). 0 = disable rotation.
 events_max_file_bytes = 5000000
+# Number of rotated generations to retain: events.jsonl.1 .. .N
+events_backup_generations = 3
 # raspi-sentinel's own health snapshot
 monitor_stats_file = "/var/lib/raspi-sentinel/stats.json"
 monitor_stats_interval_sec = 30

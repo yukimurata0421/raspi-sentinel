@@ -72,12 +72,13 @@ def apply_time_health_checks(
     target_state: dict[str, Any],
     result: CheckResult,
     now_wall_ts: float | None = None,
+    now_mono_ts: float | None = None,
 ) -> None:
     if not target.time_health_enabled:
         return
 
     wall_now = now_wall_ts if now_wall_ts is not None else time.time()
-    mono_now = time.monotonic()
+    mono_now = now_mono_ts if now_mono_ts is not None else time.monotonic()
     result.observations["wall_time_epoch"] = wall_now
     result.observations["monotonic_sec"] = mono_now
     result.observations["clock_skew_threshold_sec"] = target.clock_skew_threshold_sec

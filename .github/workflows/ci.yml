@@ -37,7 +37,9 @@ jobs:
         run: |
           pytest \
             --cov=raspi_sentinel.checks \
+            --cov=raspi_sentinel.cli \
             --cov=raspi_sentinel.config \
+            --cov=raspi_sentinel.config_summary \
             --cov=raspi_sentinel.recovery \
             --cov=raspi_sentinel.policy \
             --cov=raspi_sentinel.status_events \

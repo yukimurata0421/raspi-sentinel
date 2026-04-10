@@ -16,17 +16,25 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config
 raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --json
 ```
 
-3. Dry-run one cycle:
+3. Enforce warning-free config in automation:
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
+```
+
+4. Dry-run one cycle:
 
 ```bash
 raspi-sentinel -c /etc/raspi-sentinel/config.toml --dry-run --verbose run-once
 ```
 
-4. Optional one-cycle JSON output for scripts:
+5. Optional one-cycle JSON output for scripts:
 
 ```bash
 raspi-sentinel -c /etc/raspi-sentinel/config.toml --dry-run run-once --json
 ```
+
+`run-once --json` executes normal cycle side effects (recovery/event/state writes) in addition to JSON output.
 
 ## 2. Enable Timed Execution
 

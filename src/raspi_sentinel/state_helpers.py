@@ -61,8 +61,12 @@ def write_json_atomic(path: Path, payload: dict[str, Any], indent: int | None = 
     return True
 
 
-def maybe_rotate_file(path: Path, max_bytes: int, backup_suffix: str = ".1") -> None:
-    """If path exists and exceeds max_bytes, move to path+backup_suffix and remove path."""
+def maybe_rotate_file(path: Path, max_bytes: int, backup_generations: int = 1) -> None:
+    """Rotate ``path`` when size exceeds ``max_bytes``.
+
+    Example with ``backup_generations=3``:
+    ``events.jsonl`` -> ``events.jsonl.1`` and existing ``.1``/``.2`` shift to ``.2``/``.3``.
+    """
     if max_bytes <= 0:
         return
     try:
@@ -71,10 +75,20 @@ def maybe_rotate_file(path: Path, max_bytes: int, backup_suffix: str = ".1") -> 
         return
     if size < max_bytes:
         return
-    backup = path.with_name(path.name + backup_suffix)
+
+    generations = max(1, backup_generations)
     try:
-        if backup.exists():
-            backup.unlink()
-        path.replace(backup)
+        oldest = path.with_name(f"{path.name}.{generations}")
+        if oldest.exists():
+            oldest.unlink()
+
+        for idx in range(generations - 1, 0, -1):
+            src = path.with_name(f"{path.name}.{idx}")
+            dst = path.with_name(f"{path.name}.{idx + 1}")
+            if src.exists():
+                src.replace(dst)
+
+        head = path.with_name(f"{path.name}.1")
+        path.replace(head)
     except OSError as exc:
         LOG.warning("events rotation failed for %s: %s", path, exc)

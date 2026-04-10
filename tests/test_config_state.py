@@ -6,6 +6,7 @@ import pytest
 
 from raspi_sentinel.config import load_config
 from raspi_sentinel.state import StateStore
+from raspi_sentinel.state_helpers import maybe_rotate_file
 
 
 def _write(path: Path, text: str) -> None:
@@ -136,3 +137,50 @@ def test_state_store_round_trip_preserves_monitor_stats(tmp_path: Path) -> None:
     store.save(payload)
     loaded = store.load()
     assert loaded["monitor_stats"]["last_written_ts"] == 123.0
+
+
+def test_state_store_save_blocks_oversized_payload(tmp_path: Path) -> None:
+    state_file = tmp_path / "state.json"
+    store = StateStore(state_file)
+    payload = {
+        "targets": {},
+        "reboots": [],
+        "followups": {},
+        "notify": {"big": "x" * 5000},
+        "monitor_stats": {},
+    }
+    ok = store.save(payload, max_file_bytes=128, max_reboots_entries=256)
+    assert not ok
+    assert not state_file.exists()
+
+
+def test_state_store_save_trims_reboots_list(tmp_path: Path) -> None:
+    state_file = tmp_path / "state.json"
+    store = StateStore(state_file)
+    payload = {
+        "targets": {},
+        "reboots": [{"ts": float(i)} for i in range(10)],
+        "followups": {},
+        "notify": {},
+        "monitor_stats": {},
+    }
+    ok = store.save(payload, max_file_bytes=10_000, max_reboots_entries=3)
+    assert ok
+    loaded = store.load()
+    assert len(loaded["reboots"]) == 3
+    assert loaded["reboots"][0]["ts"] == 7.0
+
+
+def test_maybe_rotate_file_supports_multiple_generations(tmp_path: Path) -> None:
+    events = tmp_path / "events.jsonl"
+    events.write_text("current\n", encoding="utf-8")
+    (tmp_path / "events.jsonl.1").write_text("old-1\n", encoding="utf-8")
+    (tmp_path / "events.jsonl.2").write_text("old-2\n", encoding="utf-8")
+    (tmp_path / "events.jsonl.3").write_text("old-3\n", encoding="utf-8")
+
+    maybe_rotate_file(events, max_bytes=1, backup_generations=3)
+
+    assert not events.exists()
+    assert (tmp_path / "events.jsonl.1").read_text(encoding="utf-8") == "current\n"
+    assert (tmp_path / "events.jsonl.2").read_text(encoding="utf-8") == "old-1\n"
+    assert (tmp_path / "events.jsonl.3").read_text(encoding="utf-8") == "old-2\n"

@@ -183,7 +183,12 @@ def build_config_validation_report(config_path: Path, config: AppConfig) -> dict
         "config_permission_warning": _config_permission_warning(config_path),
         "global": {
             "state_file": str(config.global_config.state_file),
+            "state_max_file_bytes": config.global_config.state_max_file_bytes,
+            "state_reboots_max_entries": config.global_config.state_reboots_max_entries,
+            "state_lock_timeout_sec": config.global_config.state_lock_timeout_sec,
             "events_file": str(config.global_config.events_file),
+            "events_max_file_bytes": config.global_config.events_max_file_bytes,
+            "events_backup_generations": config.global_config.events_backup_generations,
             "monitor_stats_file": str(config.global_config.monitor_stats_file),
             "loop_interval_sec": config.global_config.loop_interval_sec,
             "restart_threshold": config.global_config.restart_threshold,
@@ -191,7 +196,23 @@ def build_config_validation_report(config_path: Path, config: AppConfig) -> dict
         },
         "targets": target_summaries,
         "shell_command_targets": shell_command_targets,
+        "warning_count": _count_warnings_from_target_summaries(
+            target_summaries,
+            _config_permission_warning(config_path),
+        ),
     }
+
+
+def _count_warnings_from_target_summaries(
+    target_summaries: list[dict[str, Any]],
+    config_permission_warning: str | None,
+) -> int:
+    count = 1 if config_permission_warning else 0
+    for summary in target_summaries:
+        warnings = summary.get("warnings", [])
+        if isinstance(warnings, list):
+            count += len(warnings)
+    return count
 
 
 def format_config_validation_report(report: dict[str, Any]) -> str:
@@ -205,6 +226,7 @@ def format_config_validation_report(report: dict[str, Any]) -> str:
 
     targets = report.get("targets", [])
     lines.append(f"targets: {len(targets)}")
+    lines.append(f"warnings: {report.get('warning_count', 0)}")
 
     shell_targets = report.get("shell_command_targets", [])
     if shell_targets:

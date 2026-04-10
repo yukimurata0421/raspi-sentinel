@@ -52,6 +52,7 @@ def send_issue_notification(
     dry_run: bool,
     events_file: Path | None = None,
     events_max_bytes: int = 0,
+    events_backup_generations: int = 1,
     now_ts: float | None = None,
 ) -> None:
     severity = "ERROR" if action == "reboot" else "WARN"
@@ -71,6 +72,7 @@ def send_issue_notification(
         record_notify_failure_event(
             events_file,
             events_max_bytes,
+            events_backup_generations,
             f"issue_notification:{target_name}",
             now_ts,
         )
@@ -82,6 +84,7 @@ def send_recovery_notification(
     previous_failures: int,
     events_file: Path | None = None,
     events_max_bytes: int = 0,
+    events_backup_generations: int = 1,
     now_ts: float | None = None,
 ) -> None:
     sent = notifier.send_lines(
@@ -97,6 +100,7 @@ def send_recovery_notification(
         record_notify_failure_event(
             events_file,
             events_max_bytes,
+            events_backup_generations,
             f"recovery_notification:{target_name}",
             now_ts,
         )
@@ -109,6 +113,7 @@ def send_due_followups(
     now_ts: float,
     events_file: Path | None = None,
     events_max_bytes: int = 0,
+    events_backup_generations: int = 1,
 ) -> None:
     followups = state.setdefault("followups", {})
     if not isinstance(followups, dict):
@@ -159,6 +164,7 @@ def send_due_followups(
             record_notify_failure_event(
                 events_file,
                 events_max_bytes,
+                events_backup_generations,
                 f"followup:{target_name}",
                 now_ts,
             )
@@ -174,6 +180,7 @@ def send_periodic_heartbeat(
     now_ts: float,
     events_file: Path | None = None,
     events_max_bytes: int = 0,
+    events_backup_generations: int = 1,
 ) -> None:
     interval_sec = notifier.config.heartbeat_interval_sec
     if interval_sec <= 0:
@@ -205,6 +212,7 @@ def send_periodic_heartbeat(
         record_notify_failure_event(
             events_file,
             events_max_bytes,
+            events_backup_generations,
             "periodic_heartbeat",
             now_ts,
         )

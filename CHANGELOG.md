@@ -16,6 +16,12 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 - CLI option: `run-once --json` to emit one-cycle machine-readable evaluation output (`overall_status`, per-target `status/reason/action/evidence`).
 - `config_summary.py` helper module for operator-facing config diagnostics, including optional service-unit/path checks and config-permission warnings.
 - Documentation set under `docs/` reorganized into `facts/` and `principles/`, including `docs/principles/engineering-decisions.md`.
+- `validate-config --strict` (non-zero exit on warnings) for automation/CI preflight enforcement.
+- New global config controls:
+  - `events_backup_generations`
+  - `state_max_file_bytes`
+  - `state_reboots_max_entries`
+  - `state_lock_timeout_sec`
 
 ### Changed
 
@@ -35,17 +41,27 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - `run-once --json` examples
   - `stats.json` vs `events.jsonl` role separation
   - explicit guarantees / non-guarantees
+- State store now uses an exclusive lock to prevent concurrent read-modify-write lost updates.
+- `state.json` persistence now has explicit success/failure handling and size guard checks.
+- `events.jsonl` rotation now supports multiple backup generations (not only `.1`).
+- Time-health check now supports injected monotonic timestamp (`now_mono_ts`) for testability/DI.
+- Discord webhook retry logic now respects HTTP `429` `Retry-After` when present.
 
 ### Testing
 
 - Added CLI tests for:
   - `run-once --json` output shape
   - `validate-config --json` summary content
+  - `validate-config --strict` non-zero behavior
+  - end-to-end unhealthy cycle integration (`_run_cycle_collect`: degrade -> restart -> event/state persistence)
 - Added config-summary tests for:
   - config permission warning detection
   - formatted summary output for shell-command targets
 - Added `TargetState` round-trip and `merge_into()` tests covering new clock fields.
 - Added branch tests for `apply_records_progress_check()` model-based behavior (missing/stalled/drop cases).
+- Added state persistence/rotation tests:
+  - `state.json` size guard and reboot-list trimming
+  - multi-generation events rotation behavior
 
 ## [0.3.1] - 2026-04-10
 

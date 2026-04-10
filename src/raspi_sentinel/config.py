@@ -12,8 +12,12 @@ LOG = logging.getLogger(__name__)
 @dataclass(slots=True)
 class GlobalConfig:
     state_file: Path
+    state_max_file_bytes: int
+    state_reboots_max_entries: int
+    state_lock_timeout_sec: int
     events_file: Path
     events_max_file_bytes: int
+    events_backup_generations: int
     monitor_stats_file: Path
     monitor_stats_interval_sec: int
     restart_threshold: int
@@ -266,8 +270,12 @@ def load_config(path: Path) -> AppConfig:
 
     global_config = GlobalConfig(
         state_file=Path(global_raw.get("state_file", "/var/lib/raspi-sentinel/state.json")),
+        state_max_file_bytes=_require_int(global_raw, "state_max_file_bytes", 2_000_000),
+        state_reboots_max_entries=_require_int(global_raw, "state_reboots_max_entries", 256),
+        state_lock_timeout_sec=_require_int(global_raw, "state_lock_timeout_sec", 5),
         events_file=Path(global_raw.get("events_file", "/var/lib/raspi-sentinel/events.jsonl")),
         events_max_file_bytes=_require_int(global_raw, "events_max_file_bytes", 5_000_000),
+        events_backup_generations=_require_int(global_raw, "events_backup_generations", 3),
         monitor_stats_file=Path(
             global_raw.get("monitor_stats_file", "/var/lib/raspi-sentinel/stats.json")
         ),
@@ -303,6 +311,16 @@ def load_config(path: Path) -> AppConfig:
         raise ValueError(
             "global events_max_file_bytes must be >= 0 (0 disables events.jsonl size rotation)"
         )
+    if global_config.events_backup_generations <= 0:
+        raise ValueError("global events_backup_generations must be > 0")
+    if global_config.state_max_file_bytes < 0:
+        raise ValueError(
+            "global state_max_file_bytes must be >= 0 (0 disables state.json size guard)"
+        )
+    if global_config.state_reboots_max_entries <= 0:
+        raise ValueError("global state_reboots_max_entries must be > 0")
+    if global_config.state_lock_timeout_sec <= 0:
+        raise ValueError("global state_lock_timeout_sec must be > 0")
 
     notify_raw = raw.get("notify", {})
     if not isinstance(notify_raw, dict):

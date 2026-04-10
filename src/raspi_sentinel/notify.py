@@ -86,11 +86,13 @@ class DiscordNotifier:
         data = json.dumps(payload).encode("utf-8")
         max_attempts = 3
         for attempt in range(max_attempts):
-            ok = self._post_discord_payload(data)
+            ok, retry_after_sec = self._post_discord_payload(data)
             if ok:
                 return True
             if attempt < max_attempts - 1:
-                time.sleep(0.5 * (attempt + 1))
+                backoff_sec = 0.5 * (attempt + 1)
+                sleep_sec = retry_after_sec if retry_after_sec is not None else backoff_sec
+                time.sleep(max(0.0, sleep_sec))
                 LOG.warning(
                     "discord webhook send retry attempt %s/%s",
                     attempt + 2,
@@ -98,7 +100,7 @@ class DiscordNotifier:
                 )
         return False
 
-    def _post_discord_payload(self, data: bytes) -> bool:
+    def _post_discord_payload(self, data: bytes) -> tuple[bool, float | None]:
         req = urllib.request.Request(
             self.config.webhook_url or "",
             data=data,
@@ -114,22 +116,33 @@ class DiscordNotifier:
                 code = getattr(resp, "status", 204)
                 if code not in (200, 204):
                     LOG.error("discord webhook returned status=%s", code)
-                    return False
+                    return False, None
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             LOG.error("discord webhook HTTP error: %s %s", exc.code, detail[:300])
-            return False
+            retry_after = _parse_retry_after_seconds(exc.headers.get("Retry-After"))
+            return False, retry_after
         except urllib.error.URLError as exc:
             LOG.error("discord webhook URL error: %s", exc)
-            return False
+            return False, None
         except TimeoutError:
             LOG.error("discord webhook timeout")
-            return False
+            return False, None
         except OSError as exc:
             LOG.error("discord webhook send failed: %s", exc)
-            return False
+            return False, None
 
-        return True
+        return True, None
+
+
+def _parse_retry_after_seconds(raw_value: Any) -> float | None:
+    if raw_value is None:
+        return None
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, value)
 
 
 def format_failures(result: CheckResult) -> str:

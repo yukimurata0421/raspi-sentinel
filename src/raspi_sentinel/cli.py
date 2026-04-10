@@ -41,6 +41,7 @@ def evaluate_target(
     target: TargetConfig,
     state: dict[str, Any],
     now_ts: float,
+    now_mono_ts: float | None = None,
 ) -> tuple[CheckResult, PolicySnapshot] | None:
     """Run checks, semantic progress, time health; return policy snapshot or None if suppressed."""
     before = target_state(state, target.name)
@@ -69,6 +70,7 @@ def evaluate_target(
         target_state=before,
         result=result,
         now_wall_ts=now_ts,
+        now_mono_ts=now_mono_ts,
     )
     policy = classify_target_policy(result=result, target_state=before)
     apply_policy_to_result(result, policy)
@@ -104,6 +106,7 @@ def emit_target_notifications(
     dry_run: bool,
     events_file: Path,
     events_max_bytes: int,
+    events_backup_generations: int,
     now_ts: float,
 ) -> None:
     if not notifier.enabled:
@@ -116,6 +119,7 @@ def emit_target_notifications(
             previous_failures=previous_failures,
             events_file=events_file,
             events_max_bytes=events_max_bytes,
+            events_backup_generations=events_backup_generations,
             now_ts=now_ts,
         )
 
@@ -135,6 +139,7 @@ def emit_target_notifications(
                 dry_run=dry_run,
                 events_file=events_file,
                 events_max_bytes=events_max_bytes,
+                events_backup_generations=events_backup_generations,
                 now_ts=now_ts,
             )
 
@@ -152,8 +157,14 @@ def emit_target_notifications(
 def persist_cycle_outputs(
     store: StateStore,
     state: dict[str, Any],
-) -> None:
-    store.save(state)
+    max_file_bytes: int,
+    max_reboots_entries: int,
+) -> bool:
+    return store.save(
+        state,
+        max_file_bytes=max_file_bytes,
+        max_reboots_entries=max_reboots_entries,
+    )
 
 
 def _overall_status(target_reports: dict[str, dict[str, Any]]) -> str:
@@ -166,8 +177,11 @@ def _overall_status(target_reports: dict[str, dict[str, Any]]) -> str:
     return "ok"
 
 
-def _run_cycle_collect(config: AppConfig, dry_run: bool) -> tuple[int, dict[str, Any]]:
-    store = StateStore(config.global_config.state_file)
+def _run_cycle_collect_locked(
+    config: AppConfig,
+    dry_run: bool,
+    store: StateStore,
+) -> tuple[int, dict[str, Any]]:
     state = store.load()
     notifier = DiscordNotifier(config.notify_config.discord)
 
@@ -178,12 +192,18 @@ def _run_cycle_collect(config: AppConfig, dry_run: bool) -> tuple[int, dict[str,
     target_reports: dict[str, dict[str, Any]] = {}
     events_file = config.global_config.events_file
     events_max = config.global_config.events_max_file_bytes
+    events_backups = config.global_config.events_backup_generations
 
     for target in config.targets:
         before = target_state(state, target.name)
         previous_failures = TargetState.from_dict(before).consecutive_failures
 
-        evaluated = evaluate_target(target=target, state=state, now_ts=now_ts)
+        evaluated = evaluate_target(
+            target=target,
+            state=state,
+            now_ts=now_ts,
+            now_mono_ts=time.monotonic(),
+        )
         if evaluated is None:
             target_reports[target.name] = {
                 "status": "ok",
@@ -221,6 +241,7 @@ def _run_cycle_collect(config: AppConfig, dry_run: bool) -> tuple[int, dict[str,
             action=outcome.action,
             now_ts=now_ts,
             max_file_bytes=events_max,
+            backup_generations=events_backups,
         )
 
         emit_target_notifications(
@@ -234,6 +255,7 @@ def _run_cycle_collect(config: AppConfig, dry_run: bool) -> tuple[int, dict[str,
             dry_run=dry_run,
             events_file=events_file,
             events_max_bytes=events_max,
+            events_backup_generations=events_backups,
             now_ts=now_ts,
         )
 
@@ -263,6 +285,7 @@ def _run_cycle_collect(config: AppConfig, dry_run: bool) -> tuple[int, dict[str,
             now_ts=now_ts,
             events_file=events_file,
             events_max_bytes=events_max,
+            events_backup_generations=events_backups,
         )
         send_periodic_heartbeat(
             notifier=notifier,
@@ -271,6 +294,7 @@ def _run_cycle_collect(config: AppConfig, dry_run: bool) -> tuple[int, dict[str,
             now_ts=now_ts,
             events_file=events_file,
             events_max_bytes=events_max,
+            events_backup_generations=events_backups,
         )
 
     maybe_write_monitor_stats(
@@ -279,8 +303,6 @@ def _run_cycle_collect(config: AppConfig, dry_run: bool) -> tuple[int, dict[str,
         target_results=target_results,
         now_ts=now_ts,
     )
-
-    persist_cycle_outputs(store=store, state=state)
 
     updated_at = datetime.fromtimestamp(now_ts).astimezone().isoformat(timespec="seconds")
     report = {
@@ -291,11 +313,44 @@ def _run_cycle_collect(config: AppConfig, dry_run: bool) -> tuple[int, dict[str,
         "targets": target_reports,
     }
 
+    persisted = persist_cycle_outputs(
+        store=store,
+        state=state,
+        max_file_bytes=config.global_config.state_max_file_bytes,
+        max_reboots_entries=config.global_config.state_reboots_max_entries,
+    )
+    report["state_persisted"] = persisted
+    if not persisted:
+        LOG.error("cycle state persistence failed")
+        return 14, report
+
     if reboot_requested:
         return 2, report
     if unhealthy_count:
         return 1, report
     return 0, report
+
+
+def _run_cycle_collect(config: AppConfig, dry_run: bool) -> tuple[int, dict[str, Any]]:
+    store = StateStore(config.global_config.state_file)
+    try:
+        with store.exclusive_lock(timeout_sec=config.global_config.state_lock_timeout_sec):
+            return _run_cycle_collect_locked(config=config, dry_run=dry_run, store=store)
+    except (TimeoutError, OSError) as exc:
+        LOG.error("%s", exc)
+        now_ts = time.time()
+        updated_at = datetime.fromtimestamp(now_ts).astimezone().isoformat(timespec="seconds")
+        reason = "state_lock_timeout" if isinstance(exc, TimeoutError) else "state_lock_error"
+        report = {
+            "updated_at": updated_at,
+            "overall_status": "failed",
+            "dry_run": dry_run,
+            "reboot_requested": False,
+            "targets": {},
+            "reason": reason,
+            "state_persisted": False,
+        }
+        return 13, report
 
 
 def _run_cycle(config: AppConfig, dry_run: bool) -> int:
@@ -346,6 +401,11 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print config validation summary as JSON",
     )
+    validate_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Return non-zero when config summary contains warnings",
+    )
 
     return parser
 
@@ -388,6 +448,9 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(report, indent=2, sort_keys=True))
         else:
             print(format_config_validation_report(report))
+        if args.strict and int(report.get("warning_count", 0)) > 0:
+            LOG.error("validate-config strict mode failed: warnings=%s", report["warning_count"])
+            return 15
         return 0
 
     parser.print_help()

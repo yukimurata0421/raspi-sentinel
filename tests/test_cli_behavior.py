@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from raspi_sentinel import cli, config_summary
+from raspi_sentinel import recovery as recovery_module
 from raspi_sentinel.checks import CheckFailure, CheckResult
 from raspi_sentinel.config import load_config
 from raspi_sentinel.status_events import classify_target_reason, classify_target_status
@@ -229,3 +230,114 @@ def test_validate_config_returns_error_code_for_invalid_config(tmp_path: Path) -
 
     rc = cli.main(["-c", str(conf), "validate-config"])
     assert rc == 10
+
+
+def test_validate_config_strict_returns_nonzero_on_warnings(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    conf = tmp_path / "config.toml"
+    missing = tmp_path / "missing.txt"
+    _write(
+        conf,
+        f"""
+        [global]
+        state_file = "/tmp/state.json"
+        restart_threshold = 2
+        reboot_threshold = 3
+        restart_cooldown_sec = 10
+        reboot_cooldown_sec = 20
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 60
+        default_command_timeout_sec = 5
+        loop_interval_sec = 30
+
+        [notify.discord]
+        enabled = false
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "demo"
+        services = []
+        service_active = false
+        command = "true"
+        heartbeat_file = "{missing}"
+        heartbeat_max_age_sec = 60
+        """,
+    )
+    monkeypatch.setattr(
+        config_summary,
+        "_check_service_unit_load_state",
+        lambda unit, timeout_sec=3: "loaded",
+    )
+
+    rc = cli.main(["-c", str(conf), "validate-config", "--strict"])
+    assert rc == 15
+
+
+def test_full_cycle_unhealthy_target_restarts_and_logs(tmp_path: Path, monkeypatch: Any) -> None:
+    conf = tmp_path / "config.toml"
+    state_file = tmp_path / "state.json"
+    events_file = tmp_path / "events.jsonl"
+    monitor_stats_file = tmp_path / "stats.json"
+    _write(
+        conf,
+        f"""
+        [global]
+        state_file = "{state_file}"
+        state_lock_timeout_sec = 1
+        events_file = "{events_file}"
+        events_max_file_bytes = 100000
+        events_backup_generations = 2
+        monitor_stats_file = "{monitor_stats_file}"
+        monitor_stats_interval_sec = 30
+        restart_threshold = 1
+        reboot_threshold = 9
+        restart_cooldown_sec = 0
+        reboot_cooldown_sec = 10
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 0
+        default_command_timeout_sec = 2
+        loop_interval_sec = 30
+
+        [notify.discord]
+        enabled = false
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "demo"
+        services = ["demo.service"]
+        service_active = true
+        """,
+    )
+    cfg = load_config(conf)
+
+    monkeypatch.setattr(cli.time, "time", lambda: 1000.0)
+    monkeypatch.setattr(cli.time, "monotonic", lambda: 500.0)
+
+    restart_calls: list[list[str]] = []
+
+    def fake_restart_services(services: list[str], dry_run: bool) -> bool:
+        restart_calls.append(["systemctl", "restart", *services])
+        return True
+
+    monkeypatch.setattr(recovery_module, "_restart_services", fake_restart_services)
+
+    rc, report = cli._run_cycle_collect(config=cfg, dry_run=False)
+
+    assert rc == 1
+    assert report["targets"]["demo"]["action"] == "restart"
+    assert report["targets"]["demo"]["status"] == "failed"
+    assert restart_calls and restart_calls[0] == ["systemctl", "restart", "demo.service"]
+    events_text = events_file.read_text(encoding="utf-8")
+    assert '"action": "restart"' in events_text
+    saved = json.loads(state_file.read_text(encoding="utf-8"))
+    assert saved["targets"]["demo"]["consecutive_failures"] == 1
+    assert saved["targets"]["demo"]["last_action"] == "restart"

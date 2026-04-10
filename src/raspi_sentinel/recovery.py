@@ -277,6 +277,8 @@ def apply_recovery(
     has_gateway_failure = _has_failure(check_result, "dependency_gateway")
     has_non_dependency_failure = _has_non_dependency_failure(check_result)
 
+    # DNS-only dependency failures should not escalate to reboot.
+    # See docs/principles/recovery-philosophy.md.
     if has_dns_failure and not has_gateway_failure and not has_non_dependency_failure:
         LOG.warning(
             (
@@ -298,6 +300,7 @@ def apply_recovery(
                 ),
                 target.name,
             )
+        # Clock-only anomalies must pass additional persistence/dependency evidence before reboot.
         elif _is_clock_only_failure(check_result) and not _clock_reboot_ready(check_result):
             LOG.error(
                 (

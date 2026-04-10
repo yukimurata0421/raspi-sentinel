@@ -12,8 +12,12 @@ from raspi_sentinel.recovery import apply_recovery
 def _global() -> GlobalConfig:
     return GlobalConfig(
         state_file=Path("/tmp/raspi-sentinel-test-state.json"),
+        state_max_file_bytes=2_000_000,
+        state_reboots_max_entries=256,
+        state_lock_timeout_sec=5,
         events_file=Path("/tmp/raspi-sentinel-test-events.jsonl"),
         events_max_file_bytes=5_000_000,
+        events_backup_generations=3,
         monitor_stats_file=Path("/tmp/raspi-sentinel-test-monitor-stats.json"),
         monitor_stats_interval_sec=30,
         restart_threshold=1,

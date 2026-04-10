@@ -12,8 +12,12 @@ from raspi_sentinel.config import GlobalConfig, TargetConfig
 def _global(**overrides: Any) -> GlobalConfig:
     base = {
         "state_file": Path("/tmp/state.json"),
+        "state_max_file_bytes": 2_000_000,
+        "state_reboots_max_entries": 256,
+        "state_lock_timeout_sec": 5,
         "events_file": Path("/tmp/events.jsonl"),
         "events_max_file_bytes": 5_000_000,
+        "events_backup_generations": 3,
         "monitor_stats_file": Path("/tmp/stats.json"),
         "monitor_stats_interval_sec": 30,
         "restart_threshold": 2,

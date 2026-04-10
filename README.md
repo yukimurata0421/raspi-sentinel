@@ -185,12 +185,17 @@ Set `heartbeat_interval_sec = 0` to disable periodic healthy-state notifications
 
 ```toml
 [global]
+state_max_file_bytes = 2000000
+state_reboots_max_entries = 256
+state_lock_timeout_sec = 5
 monitor_stats_file = "/var/lib/raspi-sentinel/stats.json"
 monitor_stats_interval_sec = 30
 events_max_file_bytes = 5000000
+events_backup_generations = 3
 ```
 
 Set `events_max_file_bytes = 0` to disable rotation of `events.jsonl`.
+Set `state_max_file_bytes = 0` to disable `state.json` size guard.
 
 Example output:
 
@@ -292,6 +297,9 @@ One cycle with machine-readable output:
 raspi-sentinel -c /etc/raspi-sentinel/config.toml run-once --json
 ```
 
+`run-once --json` is reporting-enabled execution, not evaluation-only mode.
+It runs the same recovery/event/state-persistence flow as `run-once`.
+
 Example:
 
 ```json
@@ -333,6 +341,12 @@ JSON summary output (for automation):
 raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --json
 ```
 
+Fail validation when warnings exist:
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
+```
+
 ### Exit codes (`run-once`)
 
 | Code | Meaning |
@@ -343,6 +357,9 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --json
 | `10` | Config load error |
 | `11` | Invalid loop interval |
 | `12` | No subcommand / help |
+| `13` | State lock timeout (another cycle holds the lock) |
+| `14` | State persistence failed |
+| `15` | `validate-config --strict` found warnings |
 
 Use `0` vs `1` / `2` in systemd `ExecStart=` or scripts if you alert on unhealthy cycles or reboot requests.
 

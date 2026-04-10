@@ -315,3 +315,22 @@ def test_time_health_http_probe_failed_reason(monkeypatch: Any) -> None:
     )
     assert result.observations["http_probe_ok"] is False
     assert result.observations["clock_reason"] == "http_probe_failed"
+
+
+def test_time_health_accepts_injected_monotonic_time(monkeypatch: Any) -> None:
+    monkeypatch.setattr("raspi_sentinel.time_health._query_ntp_sync_ok", lambda timeout_sec=3: None)
+
+    state = {
+        "clock_prev_wall_time_epoch": 1000.0,
+        "clock_prev_monotonic_sec": 100.0,
+    }
+    result = CheckResult(target="clock_target", healthy=True, failures=[])
+    apply_time_health_checks(
+        target=_target(check_interval_threshold_sec=5),
+        target_state=state,
+        result=result,
+        now_wall_ts=1010.0,
+        now_mono_ts=110.0,
+    )
+
+    assert result.observations["delta_monotonic_sec"] == 10.0
