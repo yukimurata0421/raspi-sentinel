@@ -98,6 +98,49 @@ def test_can_reboot_guard_paths(monkeypatch: Any) -> None:
     assert state["reboots"] == []
 
 
+def test_can_reboot_guard_boundary_values(monkeypatch: Any) -> None:
+    monkeypatch.setattr(recovery, "_get_uptime_sec", lambda: 60.0)
+    edge_state: dict[str, Any] = {
+        "reboots": [
+            {
+                "ts": 80.0,
+                "target": "demo",
+                "reason": "edge",
+            }
+        ]
+    }
+    ok, reason = recovery._can_reboot(
+        _global(
+            min_uptime_for_reboot_sec=60,
+            reboot_cooldown_sec=20,
+            reboot_window_sec=20,
+            max_reboots_in_window=3,
+        ),
+        edge_state,
+        100.0,
+    )
+    assert ok and reason == "allowed"
+    assert edge_state["reboots"][0]["ts"] == 80.0
+
+    cap_state: dict[str, Any] = {
+        "reboots": [
+            {"ts": 81.0, "target": "demo", "reason": "a"},
+            {"ts": 99.0, "target": "demo", "reason": "b"},
+        ]
+    }
+    ok, reason = recovery._can_reboot(
+        _global(
+            min_uptime_for_reboot_sec=0,
+            reboot_cooldown_sec=0,
+            reboot_window_sec=20,
+            max_reboots_in_window=2,
+        ),
+        cap_state,
+        100.0,
+    )
+    assert not ok and "window cap" in reason
+
+
 def test_restart_services_branches(monkeypatch: Any) -> None:
     assert not recovery._restart_services([], dry_run=True)
     assert recovery._restart_services(["svc"], dry_run=True)
