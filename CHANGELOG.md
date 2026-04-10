@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 
 Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
-## [0.4.0] - Unreleased
+## [0.4.0] - 2026-04-11
 
 ### Added
 
