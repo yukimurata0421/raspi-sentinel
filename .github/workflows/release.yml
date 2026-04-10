@@ -16,5 +16,6 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
           name: Release ${{ github.ref_name }}
+          # Curated notes; add docs/release-notes/vX.Y.Z.md before tagging (see docs/VERSIONING.md).
+          body_path: docs/release-notes/${{ github.ref_name }}.md

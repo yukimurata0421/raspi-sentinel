@@ -32,6 +32,14 @@ A lightweight git tag **`v0.2.0`** may exist from an intermediate snapshot. Ther
 
 1. Bump `__version__` in `_version.py` only.
 2. Update `CHANGELOG.md` with the new section and date.
-3. Run tests (`pytest`).
-4. Tag: `git tag -s vX.Y.Z -m "Release vX.Y.Z"` (or unsigned `-a` if you do not use `-s`).
-5. Push the tag and publish the GitHub Release / PyPI artifact as you prefer.
+3. Add **`docs/release-notes/vX.Y.Z.md`** with the GitHub Release body (Markdown). The [Release workflow](../.github/workflows/release.yml) uses this path when a tag `vX.Y.Z` is pushed.
+4. Run tests (`pytest`) and Ruff (`ruff check src tests`, `ruff format --check src tests`).
+5. Tag: `git tag -a vX.Y.Z -m "Release vX.Y.Z"` (or `git tag -s` if you sign tags).
+6. Push the tag (`git push origin vX.Y.Z`). The workflow creates/updates the GitHub Release with the notes file.
+7. Publish PyPI or other artifacts if you use them.
+
+## Existing release without notes
+
+If a tag was pushed before `docs/release-notes/vX.Y.Z.md` existed, edit the release on GitHub or run:
+
+`gh release edit vX.Y.Z --notes-file docs/release-notes/vX.Y.Z.md`
