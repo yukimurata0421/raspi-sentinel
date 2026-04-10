@@ -8,16 +8,6 @@ from typing import Any
 LOG = logging.getLogger(__name__)
 
 
-def target_state(state: dict[str, Any], target_name: str) -> dict[str, Any]:
-    """Return (and create if needed) the mutable dict for ``state['targets'][target_name]``."""
-    targets = state.setdefault("targets", {})
-    current = targets.get(target_name)
-    if not isinstance(current, dict):
-        current = {}
-        targets[target_name] = current
-    return current
-
-
 def safe_bool(value: Any) -> bool | None:
     if isinstance(value, bool):
         return value

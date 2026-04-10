@@ -4,6 +4,42 @@ All notable changes to this project are documented in this file.
 
 Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
+## [Unreleased]
+
+### Added
+
+- `mypy --strict` support:
+  - `pyproject.toml` now includes strict mypy configuration
+  - `dev` dependencies now include `mypy`
+  - CI adds a dedicated `typecheck` job and requires it before tests
+
+### Changed
+
+- Introduced typed top-level runtime state model:
+  - `GlobalState`
+  - `RebootRecord`
+  - `FollowupRecord`
+  - `NotifyState`
+  - `MonitorStatsRuntimeState`
+- Migrated runtime flow to use typed global state end-to-end:
+  - state load/save and diagnostics
+  - cycle orchestration
+  - recovery / reboot guard handling
+  - follow-up scheduling and heartbeat state
+  - monitor stats runtime metadata
+- `TargetState` now includes `maintenance_suppress_until_ts` as a typed field.
+- Removed remaining direct top-level `dict` mutation paths for `targets/reboots/followups/notify/monitor_stats` in runtime modules.
+- Kept compatibility adapters in selected functions so existing tests/callers that pass raw dict target slices continue to work.
+
+### Testing
+
+- Verified full local gate:
+  - `ruff check`
+  - `ruff format --check`
+  - `mypy` (strict)
+  - `pytest`
+  - `pytest --cov --cov-branch --cov-fail-under=80`
+
 ## [0.4.0] - 2026-04-11
 
 ### Added

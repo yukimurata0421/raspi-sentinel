@@ -69,7 +69,7 @@ def _query_ntp_sync_ok(timeout_sec: int = 3) -> bool | None:
 
 def apply_time_health_checks(
     target: TargetConfig,
-    target_state: dict[str, Any],
+    target_state: TargetState | dict[str, Any],
     result: CheckResult,
     now_wall_ts: float | None = None,
     now_mono_ts: float | None = None,
@@ -83,7 +83,13 @@ def apply_time_health_checks(
     result.observations["monotonic_sec"] = mono_now
     result.observations["clock_skew_threshold_sec"] = target.clock_skew_threshold_sec
 
-    model = TargetState.from_dict(target_state)
+    if isinstance(target_state, TargetState):
+        model = target_state
+        raw_target_state: dict[str, Any] | None = None
+    else:
+        model = TargetState.from_dict(target_state)
+        raw_target_state = target_state
+
     prev_wall = model.clock_prev_wall_time_epoch
     prev_mono = model.clock_prev_monotonic_sec
     freeze_detected = False
@@ -202,5 +208,6 @@ def apply_time_health_checks(
         reason = "insufficient_interval"
 
     model.clock_last_reason = reason
-    model.merge_into(target_state)
+    if raw_target_state is not None:
+        model.merge_into(raw_target_state)
     result.observations["clock_reason"] = reason

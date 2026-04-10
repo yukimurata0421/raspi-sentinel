@@ -10,6 +10,7 @@ from .config import AppConfig, load_config
 from .config_summary import build_config_validation_report, format_config_validation_report
 from .engine import run_cycle_collect
 from .logging_utils import configure_logging
+from .state_helpers import safe_int
 
 LOG = logging.getLogger(__name__)
 
@@ -119,7 +120,8 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(report, indent=2, sort_keys=True))
         else:
             print(format_config_validation_report(report))
-        if args.strict and int(report.get("warning_count", 0)) > 0:
+        warning_count = safe_int(report.get("warning_count"), 0)
+        if args.strict and warning_count > 0:
             LOG.error("validate-config strict mode failed: warnings=%s", report["warning_count"])
             return 15
         return 0

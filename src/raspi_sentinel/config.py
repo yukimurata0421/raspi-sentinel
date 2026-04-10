@@ -5,6 +5,7 @@ import stat
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Mapping
 
 LOG = logging.getLogger(__name__)
 
@@ -92,14 +93,14 @@ class NotifyConfig:
     discord: DiscordNotifyConfig
 
 
-def _require_int(data: dict, key: str, default: int | None = None) -> int:
+def _require_int(data: Mapping[str, object], key: str, default: int | None = None) -> int:
     value = data.get(key, default)
     if not isinstance(value, int):
         raise ValueError(f"'{key}' must be an integer")
     return value
 
 
-def _optional_int(data: dict, key: str) -> int | None:
+def _optional_int(data: Mapping[str, object], key: str) -> int | None:
     value = data.get(key)
     if value is None:
         return None
@@ -108,7 +109,7 @@ def _optional_int(data: dict, key: str) -> int | None:
     return value
 
 
-def _optional_str(data: dict, key: str) -> str | None:
+def _optional_str(data: Mapping[str, object], key: str) -> str | None:
     value = data.get(key)
     if value is None:
         return None
@@ -117,12 +118,12 @@ def _optional_str(data: dict, key: str) -> str | None:
     return value
 
 
-def _optional_path(data: dict, key: str) -> Path | None:
+def _optional_path(data: Mapping[str, object], key: str) -> Path | None:
     value = _optional_str(data, key)
     return Path(value) if value else None
 
 
-def _optional_bool(data: dict, key: str, default: bool) -> bool:
+def _optional_bool(data: Mapping[str, object], key: str, default: bool) -> bool:
     value = data.get(key, default)
     if not isinstance(value, bool):
         raise ValueError(f"'{key}' must be boolean")

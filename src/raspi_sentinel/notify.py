@@ -14,6 +14,7 @@ from typing import Any
 from ._version import __version__
 from .checks import CheckResult
 from .config import DiscordNotifyConfig
+from .state_models import GlobalState
 
 LOG = logging.getLogger(__name__)
 
@@ -157,12 +158,11 @@ def format_failures(result: CheckResult) -> str:
 
 
 def should_send_periodic_heartbeat(
-    state: dict[str, Any],
+    state: GlobalState,
     interval_sec: int,
     now_ts: float,
 ) -> bool:
-    notify_state = state.setdefault("notify", {})
-    last_ts = notify_state.get("last_heartbeat_ts")
+    last_ts = state.notify.last_heartbeat_ts
     if last_ts is None:
         return True
     try:
@@ -172,6 +172,5 @@ def should_send_periodic_heartbeat(
     return elapsed >= interval_sec
 
 
-def mark_heartbeat_sent(state: dict[str, Any], now_ts: float) -> None:
-    notify_state = state.setdefault("notify", {})
-    notify_state["last_heartbeat_ts"] = now_ts
+def mark_heartbeat_sent(state: GlobalState, now_ts: float) -> None:
+    state.notify.last_heartbeat_ts = now_ts

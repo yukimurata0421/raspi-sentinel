@@ -4,6 +4,8 @@ import shlex
 import subprocess
 from typing import Any
 
+from .state_models import TargetState
+
 
 def run_command_success(command: str, timeout_sec: int, use_shell: bool) -> bool:
     if not use_shell and any(token in command for token in ("|", "&&", "||", ";", "$(", "`")):
@@ -34,14 +36,10 @@ def run_command_success(command: str, timeout_sec: int, use_shell: bool) -> bool
 
 def is_target_suppressed_by_maintenance(
     target: Any,
-    target_state: dict[str, Any],
+    target_state: TargetState,
     now_ts: float,
 ) -> tuple[bool, str]:
-    suppress_until_raw = target_state.get("maintenance_suppress_until_ts", 0)
-    try:
-        suppress_until = float(suppress_until_raw)
-    except (TypeError, ValueError):
-        suppress_until = 0.0
+    suppress_until = target_state.maintenance_suppress_until_ts or 0.0
 
     if now_ts < suppress_until:
         remain = int(suppress_until - now_ts)
@@ -62,5 +60,5 @@ def is_target_suppressed_by_maintenance(
 
     grace_sec = target.maintenance_grace_sec or 0
     if grace_sec > 0:
-        target_state["maintenance_suppress_until_ts"] = now_ts + grace_sec
+        target_state.maintenance_suppress_until_ts = now_ts + grace_sec
     return True, "maintenance mode command matched"

@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from typing import Any
 
 from .checks import CheckResult
 from .config import AppConfig
 from .state_helpers import safe_int, safe_optional_int, write_json_atomic
+from .state_models import GlobalState
 from .status_events import classify_target_reason, classify_target_status
 
 LOG = logging.getLogger(__name__)
@@ -15,16 +15,14 @@ LOG = logging.getLogger(__name__)
 
 def build_monitor_stats_snapshot(
     config: AppConfig,
-    state: dict[str, Any],
+    state: GlobalState,
     target_results: dict[str, CheckResult],
     now_ts: float,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     ts_text = datetime.fromtimestamp(now_ts).astimezone().isoformat(timespec="seconds")
-    state_targets = state.get("targets", {})
-    if not isinstance(state_targets, dict):
-        state_targets = {}
+    state_targets = state.targets
 
-    targets_payload: dict[str, Any] = {}
+    targets_payload: dict[str, object] = {}
     counts: dict[str, int] = {
         "ok": 0,
         "degraded": 0,
@@ -35,28 +33,30 @@ def build_monitor_stats_snapshot(
     for target in config.targets:
         result = target_results.get(target.name)
         if result is None:
-            target_state = state_targets.get(target.name, {})
-            status = str(target_state.get("last_status", "unknown"))
-            reason = str(target_state.get("last_reason", "unknown"))
+            target_state = state_targets.get(target.name)
+            if target_state is None:
+                status = "unknown"
+                reason = "unknown"
+            else:
+                status = target_state.last_status
+                reason = target_state.last_reason
         else:
-            status = classify_target_status(
-                result=result, target_state=state_targets.get(target.name, {})
-            )
-            reason = classify_target_reason(
-                result=result, target_state=state_targets.get(target.name, {})
-            )
+            state_for_target = state_targets.get(target.name)
+            status = classify_target_status(result=result, target_state=state_for_target)
+            reason = classify_target_reason(result=result, target_state=state_for_target)
 
         counts[status] = counts.get(status, 0) + 1
-        target_state = state_targets.get(target.name, {})
-        if not isinstance(target_state, dict):
-            target_state = {}
+        target_state = state_targets.get(target.name)
+        last_action = target_state.last_action if target_state is not None else "unknown"
+        last_failure_reason = target_state.last_failure_reason if target_state is not None else ""
+        consecutive_failures = target_state.consecutive_failures if target_state is not None else 0
 
-        payload: dict[str, Any] = {
+        payload: dict[str, object] = {
             "status": status,
             "reason": reason,
-            "last_action": str(target_state.get("last_action", "unknown")),
-            "consecutive_failures": safe_int(target_state.get("consecutive_failures"), 0),
-            "last_failure_reason": str(target_state.get("last_failure_reason", "")),
+            "last_action": str(last_action),
+            "consecutive_failures": safe_int(consecutive_failures, 0),
+            "last_failure_reason": str(last_failure_reason),
         }
         if result is not None:
             clock_reason = result.observations.get("clock_reason")
@@ -102,21 +102,17 @@ def build_monitor_stats_snapshot(
 
 def maybe_write_monitor_stats(
     config: AppConfig,
-    state: dict[str, Any],
+    state: GlobalState,
     target_results: dict[str, CheckResult],
     now_ts: float,
 ) -> None:
-    monitor_state = state.setdefault("monitor_stats", {})
-    if not isinstance(monitor_state, dict):
-        monitor_state = {}
-        state["monitor_stats"] = monitor_state
-
     interval_sec = config.global_config.monitor_stats_interval_sec
-    last_written_ts = monitor_state.get("last_written_ts")
-    try:
-        elapsed = now_ts - float(last_written_ts)
-    except (TypeError, ValueError):
-        elapsed = interval_sec
+    last_written_ts = state.monitor_stats.last_written_ts
+    elapsed: float
+    if last_written_ts is None:
+        elapsed = float(interval_sec)
+    else:
+        elapsed = now_ts - last_written_ts
 
     snapshot = build_monitor_stats_snapshot(
         config=config,
@@ -127,12 +123,12 @@ def maybe_write_monitor_stats(
     signature_payload = dict(snapshot)
     signature_payload.pop("updated_at", None)
     signature = json.dumps(signature_payload, sort_keys=True, separators=(",", ":"))
-    previous_signature = monitor_state.get("last_snapshot_signature")
+    previous_signature = state.monitor_stats.last_snapshot_signature
 
     should_write = elapsed >= interval_sec or previous_signature != signature
     if not should_write:
         return
 
     if write_json_atomic(config.global_config.monitor_stats_file, snapshot, indent=2):
-        monitor_state["last_written_ts"] = now_ts
-        monitor_state["last_snapshot_signature"] = signature
+        state.monitor_stats.last_written_ts = now_ts
+        state.monitor_stats.last_snapshot_signature = signature

@@ -155,6 +155,8 @@ def _age_check_from_stats(
     ts, err = _parse_ts(ts_raw, key)
     if err:
         return CheckFailure(check_name, err)
+    if ts is None:
+        return CheckFailure(check_name, f"{key} missing timestamp")
 
     age = now_ts - ts
     if age > max_age_sec:
@@ -209,6 +211,9 @@ def _stats_checks(
         if updated_ts_err is not None:
             failures.append(CheckFailure("semantic_updated_at", updated_ts_err))
         else:
+            if updated_ts is None:
+                failures.append(CheckFailure("semantic_updated_at", "updated_at missing timestamp"))
+                return
             age = now_ts - updated_ts
             if age > target.stats_updated_max_age_sec:
                 failures.append(
@@ -293,7 +298,7 @@ def _stats_checks(
 
 def apply_records_progress_check(
     target: TargetConfig,
-    target_state: dict[str, Any],
+    target_state: TargetState | dict[str, Any],
     result: CheckResult,
 ) -> None:
     """Detect stalled ``records_processed_total`` in semantic stats (same cycle as other checks)."""
@@ -305,7 +310,13 @@ def apply_records_progress_check(
     if current_records is None:
         return
 
-    model = TargetState.from_dict(target_state)
+    if isinstance(target_state, TargetState):
+        model = target_state
+        raw_target_state: dict[str, Any] | None = None
+    else:
+        model = TargetState.from_dict(target_state)
+        raw_target_state = target_state
+
     previous_records = model.last_records_processed_total
     stalled_cycles = model.records_stalled_cycles
 
@@ -329,7 +340,8 @@ def apply_records_progress_check(
 
     model.last_records_processed_total = current_records
     model.records_stalled_cycles = stalled_cycles
-    model.merge_into(target_state)
+    if raw_target_state is not None:
+        model.merge_into(raw_target_state)
     result.healthy = not result.failures
 
 

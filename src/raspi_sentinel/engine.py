@@ -20,8 +20,7 @@ from .notify import DiscordNotifier, format_failures
 from .policy import PolicySnapshot, classify_target_policy
 from .recovery import RecoveryOutcome, apply_recovery
 from .state import StateLoadDiagnostics, StateStore
-from .state_helpers import safe_int, target_state
-from .state_models import TargetState
+from .state_models import GlobalState
 from .status_events import (
     append_event,
     apply_policy_to_result,
@@ -35,11 +34,11 @@ LOG = logging.getLogger(__name__)
 
 def evaluate_target(
     target: TargetConfig,
-    state: dict[str, Any],
+    state: GlobalState,
     now_ts: float,
     now_mono_ts: float | None = None,
 ) -> tuple[CheckResult, PolicySnapshot] | None:
-    before = target_state(state, target.name)
+    before = state.ensure_target(target.name)
 
     suppressed, suppress_reason = is_target_suppressed_by_maintenance(
         target=target,
@@ -76,7 +75,7 @@ def apply_recovery_phase(
     target: TargetConfig,
     result: CheckResult,
     config: AppConfig,
-    state: dict[str, Any],
+    state: GlobalState,
     dry_run: bool,
     now_ts: float,
     allow_disruptive_actions: bool = True,
@@ -94,7 +93,7 @@ def apply_recovery_phase(
 
 def emit_target_notifications(
     notifier: DiscordNotifier,
-    state: dict[str, Any],
+    state: GlobalState,
     target: TargetConfig,
     result: CheckResult,
     outcome: RecoveryOutcome,
@@ -153,7 +152,7 @@ def emit_target_notifications(
 
 def persist_cycle_outputs(
     store: StateStore,
-    state: dict[str, Any],
+    state: GlobalState,
     max_file_bytes: int,
     max_reboots_entries: int,
 ) -> bool:
@@ -229,8 +228,8 @@ def _run_cycle_collect_locked(
     )
 
     for target in config.targets:
-        before = target_state(state, target.name)
-        previous_failures = TargetState.from_dict(before).consecutive_failures
+        before = state.ensure_target(target.name)
+        previous_failures = before.consecutive_failures
 
         evaluated = evaluate_target(
             target=target,
@@ -264,8 +263,8 @@ def _run_cycle_collect_locked(
             allow_disruptive_actions=not limited_mode,
         )
 
-        after = target_state(state, target.name)
-        current_failures = safe_int(after.get("consecutive_failures"), 0)
+        after = state.ensure_target(target.name)
+        current_failures = after.consecutive_failures
         record_status_events(
             events_file=events_file,
             target_state=after,

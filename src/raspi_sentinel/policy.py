@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from .checks import CheckResult
 from .state_helpers import safe_bool, safe_float, safe_int
+from .state_models import TargetState
 
 PolicyStatus = Literal["ok", "degraded", "failed"]
 
@@ -26,12 +27,14 @@ class PolicySnapshot:
 
 def classify_target_policy(
     result: CheckResult,
-    target_state: dict[str, Any] | None = None,
+    target_state: TargetState | dict[str, Any] | None = None,
 ) -> PolicySnapshot:
     checks = {failure.check for failure in result.failures}
     observations = result.observations
     previous_reason = ""
-    if isinstance(target_state, dict):
+    if isinstance(target_state, TargetState):
+        previous_reason = target_state.last_reason or ""
+    elif isinstance(target_state, dict):
         previous_reason = str(target_state.get("last_reason", "") or "")
 
     dns_ok = safe_bool(observations.get("dns_ok"))
