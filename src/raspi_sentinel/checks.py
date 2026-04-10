@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from .config import TargetConfig
-from .state_helpers import safe_int, safe_optional_int
+from .state_helpers import safe_optional_int
+from .state_models import TargetState
 
 LOG = logging.getLogger(__name__)
 
@@ -281,8 +282,9 @@ def apply_records_progress_check(
     if current_records is None:
         return
 
-    previous_records = safe_optional_int(target_state.get("last_records_processed_total"))
-    stalled_cycles = safe_int(target_state.get("records_stalled_cycles"), 0)
+    model = TargetState.from_dict(target_state)
+    previous_records = model.last_records_processed_total
+    stalled_cycles = model.records_stalled_cycles
 
     if previous_records is None or current_records < previous_records:
         stalled_cycles = 0
@@ -302,8 +304,9 @@ def apply_records_progress_check(
     else:
         stalled_cycles = 0
 
-    target_state["last_records_processed_total"] = current_records
-    target_state["records_stalled_cycles"] = stalled_cycles
+    model.last_records_processed_total = current_records
+    model.records_stalled_cycles = stalled_cycles
+    model.merge_into(target_state)
     result.healthy = not result.failures
 
 

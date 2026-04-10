@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from .checks import CheckResult, apply_records_progress_check, run_checks
 from .config import AppConfig, TargetConfig, load_config
+from .config_summary import build_config_validation_report, format_config_validation_report
 from .cycle_notifications import (
     schedule_followup,
     send_due_followups,
@@ -26,6 +29,7 @@ from .state_helpers import safe_int, target_state
 from .state_models import TargetState
 from .status_events import (
     apply_policy_to_result,
+    build_event_evidence,
     record_status_events,
 )
 from .time_health import apply_time_health_checks
@@ -152,7 +156,17 @@ def persist_cycle_outputs(
     store.save(state)
 
 
-def _run_cycle(config: AppConfig, dry_run: bool) -> int:
+def _overall_status(target_reports: dict[str, dict[str, Any]]) -> str:
+    has_failed = any(report.get("status") == "failed" for report in target_reports.values())
+    if has_failed:
+        return "failed"
+    has_degraded = any(report.get("status") == "degraded" for report in target_reports.values())
+    if has_degraded:
+        return "degraded"
+    return "ok"
+
+
+def _run_cycle_collect(config: AppConfig, dry_run: bool) -> tuple[int, dict[str, Any]]:
     store = StateStore(config.global_config.state_file)
     state = store.load()
     notifier = DiscordNotifier(config.notify_config.discord)
@@ -161,12 +175,23 @@ def _run_cycle(config: AppConfig, dry_run: bool) -> int:
     unhealthy_count = 0
     reboot_requested = False
     target_results: dict[str, CheckResult] = {}
+    target_reports: dict[str, dict[str, Any]] = {}
     events_file = config.global_config.events_file
     events_max = config.global_config.events_max_file_bytes
 
     for target in config.targets:
+        before = target_state(state, target.name)
+        previous_failures = TargetState.from_dict(before).consecutive_failures
+
         evaluated = evaluate_target(target=target, state=state, now_ts=now_ts)
         if evaluated is None:
+            target_reports[target.name] = {
+                "status": "ok",
+                "reason": "maintenance_suppressed",
+                "action": "none",
+                "healthy": True,
+                "evidence": {},
+            }
             continue
 
         result, policy = evaluated
@@ -174,9 +199,6 @@ def _run_cycle(config: AppConfig, dry_run: bool) -> int:
 
         if policy.status != "ok":
             unhealthy_count += 1
-
-        before = target_state(state, target.name)
-        previous_failures = TargetState.from_dict(before).consecutive_failures
 
         outcome = apply_recovery_phase(
             target=target,
@@ -215,6 +237,19 @@ def _run_cycle(config: AppConfig, dry_run: bool) -> int:
             now_ts=now_ts,
         )
 
+        report_payload: dict[str, Any] = {
+            "status": policy.status,
+            "reason": policy.reason,
+            "action": outcome.action,
+            "healthy": result.healthy,
+            "evidence": build_event_evidence(result),
+        }
+        if result.failures:
+            report_payload["failures"] = [
+                {"check": failure.check, "message": failure.message} for failure in result.failures
+            ]
+        target_reports[target.name] = report_payload
+
         if outcome.requested_reboot:
             reboot_requested = True
             LOG.error("reboot requested after evaluating target '%s'", target.name)
@@ -247,11 +282,25 @@ def _run_cycle(config: AppConfig, dry_run: bool) -> int:
 
     persist_cycle_outputs(store=store, state=state)
 
+    updated_at = datetime.fromtimestamp(now_ts).astimezone().isoformat(timespec="seconds")
+    report = {
+        "updated_at": updated_at,
+        "overall_status": _overall_status(target_reports),
+        "dry_run": dry_run,
+        "reboot_requested": reboot_requested,
+        "targets": target_reports,
+    }
+
     if reboot_requested:
-        return 2
+        return 2, report
     if unhealthy_count:
-        return 1
-    return 0
+        return 1, report
+    return 0, report
+
+
+def _run_cycle(config: AppConfig, dry_run: bool) -> int:
+    rc, _ = _run_cycle_collect(config=config, dry_run=dry_run)
+    return rc
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -273,7 +322,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
 
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("run-once", help="Run one health/recovery evaluation cycle")
+    run_once_parser = sub.add_parser("run-once", help="Run one health/recovery evaluation cycle")
+    run_once_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print one-cycle evaluation result as JSON",
+    )
 
     loop_parser = sub.add_parser("loop", help="Run health checks in a continuous loop")
     loop_parser.add_argument(
@@ -281,6 +335,16 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Override loop interval (default comes from [global].loop_interval_sec)",
+    )
+
+    validate_parser = sub.add_parser(
+        "validate-config",
+        help="Validate config and print rule summary",
+    )
+    validate_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print config validation summary as JSON",
     )
 
     return parser
@@ -299,7 +363,10 @@ def main(argv: list[str] | None = None) -> int:
         return 10
 
     if args.command == "run-once":
-        return _run_cycle(config=config, dry_run=args.dry_run)
+        rc, report = _run_cycle_collect(config=config, dry_run=args.dry_run)
+        if args.json:
+            print(json.dumps(report, indent=2, sort_keys=True))
+        return rc
 
     if args.command == "loop":
         interval = args.interval_sec or config.global_config.loop_interval_sec
@@ -314,6 +381,14 @@ def main(argv: list[str] | None = None) -> int:
                 LOG.error("reboot was requested; exiting loop")
                 return 0
             time.sleep(interval)
+
+    if args.command == "validate-config":
+        report = build_config_validation_report(config_path=args.config, config=config)
+        if args.json:
+            print(json.dumps(report, indent=2, sort_keys=True))
+        else:
+            print(format_config_validation_report(report))
+        return 0
 
     parser.print_help()
     return 12

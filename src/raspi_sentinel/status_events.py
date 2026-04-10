@@ -74,7 +74,7 @@ def append_event(
         LOG.error("failed to append event to %s: %s", events_file, exc)
 
 
-def _build_event_evidence(result: CheckResult) -> dict[str, Any]:
+def build_event_evidence(result: CheckResult) -> dict[str, Any]:
     observations = result.observations
     payload: dict[str, Any] = {}
     for field_name in (
@@ -116,7 +116,7 @@ def record_status_events(
     previous_reason_raw = target_state.get("last_reason")
     previous_reason = previous_reason_raw if isinstance(previous_reason_raw, str) else "unknown"
     ts_text = datetime.fromtimestamp(now_ts).astimezone().isoformat(timespec="seconds")
-    evidence = _build_event_evidence(result)
+    evidence = build_event_evidence(result)
 
     if previous_status != current_status or previous_reason != current_reason:
         append_event(

@@ -4,6 +4,49 @@ All notable changes to this project are documented in this file.
 
 Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
+## [0.4.0] - Unreleased
+
+### Added
+
+- CLI subcommand: `validate-config`
+  - validates config loadability via existing `load_config()`
+  - prints per-target enabled rule summary, effective thresholds, time-health/maintenance settings
+  - lists targets that use shell commands
+  - supports JSON output (`validate-config --json`) for automation
+- CLI option: `run-once --json` to emit one-cycle machine-readable evaluation output (`overall_status`, per-target `status/reason/action/evidence`).
+- `config_summary.py` helper module for operator-facing config diagnostics, including optional service-unit/path checks and config-permission warnings.
+- Documentation set under `docs/` reorganized into `facts/` and `principles/`, including `docs/principles/engineering-decisions.md`.
+
+### Changed
+
+- `_run_cycle` now captures `previous_failures` before `evaluate_target()` mutation points for clearer intent.
+- `apply_records_progress_check()` now uses `TargetState` model mutation (`from_dict` + `merge_into`) instead of direct raw-dict writes.
+- `TargetState` now also models clock-related runtime fields:
+  - `clock_prev_wall_time_epoch`
+  - `clock_prev_monotonic_sec`
+  - `consecutive_clock_freeze_count`
+  - `clock_anomaly_consecutive`
+  - `clock_last_reason`
+- `apply_time_health_checks()` now updates target runtime state via `TargetState` end-to-end.
+- `state_models` numeric coercion helpers were unified with `state_helpers` (`safe_float`, `safe_optional_int`).
+- `status_events` evidence builder is now reusable (`build_event_evidence`) and used by JSON cycle output.
+- README expanded with:
+  - `validate-config` examples
+  - `run-once --json` examples
+  - `stats.json` vs `events.jsonl` role separation
+  - explicit guarantees / non-guarantees
+
+### Testing
+
+- Added CLI tests for:
+  - `run-once --json` output shape
+  - `validate-config --json` summary content
+- Added config-summary tests for:
+  - config permission warning detection
+  - formatted summary output for shell-command targets
+- Added `TargetState` round-trip and `merge_into()` tests covering new clock fields.
+- Added branch tests for `apply_records_progress_check()` model-based behavior (missing/stalled/drop cases).
+
 ## [0.3.1] - 2026-04-10
 
 ### Added

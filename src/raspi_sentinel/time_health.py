@@ -10,7 +10,8 @@ from urllib import error, request
 from ._version import __version__
 from .checks import CheckResult
 from .config import TargetConfig
-from .state_helpers import safe_bool, safe_float, safe_int
+from .state_helpers import safe_bool, safe_float
+from .state_models import TargetState
 
 LOG = logging.getLogger(__name__)
 
@@ -81,8 +82,9 @@ def apply_time_health_checks(
     result.observations["monotonic_sec"] = mono_now
     result.observations["clock_skew_threshold_sec"] = target.clock_skew_threshold_sec
 
-    prev_wall = safe_float(target_state.get("clock_prev_wall_time_epoch"))
-    prev_mono = safe_float(target_state.get("clock_prev_monotonic_sec"))
+    model = TargetState.from_dict(target_state)
+    prev_wall = model.clock_prev_wall_time_epoch
+    prev_mono = model.clock_prev_monotonic_sec
     freeze_detected = False
     jump_detected = False
     skew_detected = False
@@ -109,8 +111,8 @@ def apply_time_health_checks(
     else:
         insufficient_interval = True
 
-    target_state["clock_prev_wall_time_epoch"] = wall_now
-    target_state["clock_prev_monotonic_sec"] = mono_now
+    model.clock_prev_wall_time_epoch = wall_now
+    model.clock_prev_monotonic_sec = mono_now
 
     http_probe_ok: bool | None = None
     if target.http_time_probe_url:
@@ -134,20 +136,18 @@ def apply_time_health_checks(
         result.observations["ntp_sync_ok"] = ntp_sync_ok
 
     if freeze_detected:
-        consecutive_clock_freeze_count = (
-            safe_int(target_state.get("consecutive_clock_freeze_count"), 0) + 1
-        )
+        consecutive_clock_freeze_count = model.consecutive_clock_freeze_count + 1
     else:
         consecutive_clock_freeze_count = 0
-    target_state["consecutive_clock_freeze_count"] = consecutive_clock_freeze_count
+    model.consecutive_clock_freeze_count = consecutive_clock_freeze_count
     result.observations["consecutive_clock_freeze_count"] = consecutive_clock_freeze_count
 
     has_clock_anomaly = freeze_detected or jump_detected or skew_detected
     if has_clock_anomaly:
-        clock_anomaly_consecutive = safe_int(target_state.get("clock_anomaly_consecutive"), 0) + 1
+        clock_anomaly_consecutive = model.clock_anomaly_consecutive + 1
     else:
         clock_anomaly_consecutive = 0
-    target_state["clock_anomaly_consecutive"] = clock_anomaly_consecutive
+    model.clock_anomaly_consecutive = clock_anomaly_consecutive
     result.observations["clock_anomaly_consecutive"] = clock_anomaly_consecutive
 
     dns_ok = safe_bool(result.observations.get("dns_ok"))
@@ -200,5 +200,6 @@ def apply_time_health_checks(
     elif insufficient_interval:
         reason = "insufficient_interval"
 
-    target_state["clock_last_reason"] = reason
+    model.clock_last_reason = reason
+    model.merge_into(target_state)
     result.observations["clock_reason"] = reason

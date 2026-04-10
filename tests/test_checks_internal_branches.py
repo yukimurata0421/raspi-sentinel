@@ -300,3 +300,76 @@ def test_stats_checks_handles_none_payload(monkeypatch: Any) -> None:
         now_wall_ts=1_000_000.0,
     )
     assert failures == []
+
+
+def test_apply_records_progress_check_ignores_missing_records() -> None:
+    state: dict[str, Any] = {
+        "last_records_processed_total": 5,
+        "records_stalled_cycles": 2,
+        "clock_prev_wall_time_epoch": 1234.5,
+    }
+    result = checks.CheckResult(target="demo", healthy=True, failures=[], observations={})
+
+    checks.apply_records_progress_check(
+        target=_target(stats_records_stall_cycles=2),
+        target_state=state,
+        result=result,
+    )
+
+    assert result.failures == []
+    assert result.healthy
+    assert state["last_records_processed_total"] == 5
+    assert state["records_stalled_cycles"] == 2
+    assert state["clock_prev_wall_time_epoch"] == 1234.5
+
+
+def test_apply_records_progress_check_detects_stall_and_preserves_extra_state() -> None:
+    state: dict[str, Any] = {
+        "last_records_processed_total": 10,
+        "records_stalled_cycles": 1,
+        "clock_prev_wall_time_epoch": 2000.0,
+    }
+    result = checks.CheckResult(
+        target="demo",
+        healthy=True,
+        failures=[],
+        observations={"records_processed_total": 10},
+    )
+
+    checks.apply_records_progress_check(
+        target=_target(stats_records_stall_cycles=2),
+        target_state=state,
+        result=result,
+    )
+
+    assert state["last_records_processed_total"] == 10
+    assert state["records_stalled_cycles"] == 2
+    assert state["clock_prev_wall_time_epoch"] == 2000.0
+    assert any(f.check == "semantic_records_stalled" for f in result.failures)
+    assert not result.healthy
+
+
+def test_apply_records_progress_check_resets_on_counter_drop() -> None:
+    state: dict[str, Any] = {
+        "last_records_processed_total": 10,
+        "records_stalled_cycles": 4,
+        "clock_prev_monotonic_sec": 333.3,
+    }
+    result = checks.CheckResult(
+        target="demo",
+        healthy=True,
+        failures=[],
+        observations={"records_processed_total": 7},
+    )
+
+    checks.apply_records_progress_check(
+        target=_target(stats_records_stall_cycles=3),
+        target_state=state,
+        result=result,
+    )
+
+    assert state["last_records_processed_total"] == 7
+    assert state["records_stalled_cycles"] == 0
+    assert state["clock_prev_monotonic_sec"] == 333.3
+    assert result.failures == []
+    assert result.healthy

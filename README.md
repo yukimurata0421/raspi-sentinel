@@ -286,10 +286,51 @@ One cycle:
 raspi-sentinel -c /etc/raspi-sentinel/config.toml run-once
 ```
 
+One cycle with machine-readable output:
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml run-once --json
+```
+
+Example:
+
+```json
+{
+  "updated_at": "2026-04-10T21:30:00+09:00",
+  "overall_status": "degraded",
+  "dry_run": true,
+  "reboot_requested": false,
+  "targets": {
+    "network_uplink": {
+      "status": "degraded",
+      "reason": "dns_error",
+      "action": "warn",
+      "healthy": false,
+      "evidence": {
+        "dns_ok": false,
+        "gateway_ok": true
+      }
+    }
+  }
+}
+```
+
 Continuous loop (core only):
 
 ```bash
 raspi-sentinel -c /etc/raspi-sentinel/config.toml loop
+```
+
+Validate config before enabling systemd timer/service:
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config
+```
+
+JSON summary output (for automation):
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --json
 ```
 
 ### Exit codes (`run-once`)
@@ -304,6 +345,34 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml loop
 | `12` | No subcommand / help |
 
 Use `0` vs `1` / `2` in systemd `ExecStart=` or scripts if you alert on unhealthy cycles or reboot requests.
+
+## `stats.json` vs `events.jsonl`
+
+- `stats.json`: current snapshot ("now"), overwritten atomically.
+- `events.jsonl`: append-only transition/history log ("what changed"), written only on status/reason/action changes.
+
+Example `events.jsonl` lines:
+
+```json
+{"ts":"2026-04-10T21:25:00+09:00","service":"network_uplink","from":"ok","to":"degraded","reason":"dns_error","dns_ok":false,"gateway_ok":true}
+{"ts":"2026-04-10T21:27:00+09:00","service":"network_uplink","from":"degraded","to":"degraded","reason":"dns_error","action":"warn","dns_ok":false,"gateway_ok":true}
+{"ts":"2026-04-10T21:31:00+09:00","service":"network_uplink","from":"degraded","to":"ok","reason":"healthy"}
+```
+
+## Guarantees and Non-Guarantees
+
+Guaranteed:
+
+- explicit status/reason decisions per target (`ok` / `degraded` / `failed`)
+- staged recovery policy with safeguards (warn/restart/reboot)
+- transition evidence persisted to `events.jsonl`
+- no direct wall-clock correction (`date -s` is not executed)
+
+Not guaranteed:
+
+- full kernel/hardware hang detection on its own (use watchdog/external monitor if required)
+- perfect root-cause certainty from a single probe/sample
+- automatic time correction or NTP repair logic
 
 ## Tests and CI
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from .state_helpers import safe_float, safe_int, safe_optional_int
+
 
 @dataclass
 class TargetState:
@@ -22,6 +24,11 @@ class TargetState:
     last_healthy_ts: float | None = None
     last_records_processed_total: int | None = None
     records_stalled_cycles: int = 0
+    clock_prev_wall_time_epoch: float | None = None
+    clock_prev_monotonic_sec: float | None = None
+    consecutive_clock_freeze_count: int = 0
+    clock_anomaly_consecutive: int = 0
+    clock_last_reason: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -39,19 +46,38 @@ class TargetState:
             "last_healthy_ts",
             "last_records_processed_total",
             "records_stalled_cycles",
+            "clock_prev_wall_time_epoch",
+            "clock_prev_monotonic_sec",
+            "consecutive_clock_freeze_count",
+            "clock_anomaly_consecutive",
+            "clock_last_reason",
         }
         extra = {k: v for k, v in data.items() if k not in known}
         return cls(
-            consecutive_failures=int(data.get("consecutive_failures", 0) or 0),
+            consecutive_failures=safe_int(data.get("consecutive_failures"), 0),
             last_status=str(data.get("last_status", "unknown") or "unknown"),
             last_reason=str(data.get("last_reason", "unknown") or "unknown"),
             last_action=data.get("last_action") if data.get("last_action") is not None else None,
-            last_action_ts=_optional_float(data.get("last_action_ts")),
-            last_failure_ts=_optional_float(data.get("last_failure_ts")),
+            last_action_ts=safe_float(data.get("last_action_ts")),
+            last_failure_ts=safe_float(data.get("last_failure_ts")),
             last_failure_reason=str(data.get("last_failure_reason", "") or ""),
-            last_healthy_ts=_optional_float(data.get("last_healthy_ts")),
-            last_records_processed_total=_optional_int(data.get("last_records_processed_total")),
-            records_stalled_cycles=int(data.get("records_stalled_cycles", 0) or 0),
+            last_healthy_ts=safe_float(data.get("last_healthy_ts")),
+            last_records_processed_total=safe_optional_int(
+                data.get("last_records_processed_total")
+            ),
+            records_stalled_cycles=safe_int(data.get("records_stalled_cycles"), 0),
+            clock_prev_wall_time_epoch=safe_float(data.get("clock_prev_wall_time_epoch")),
+            clock_prev_monotonic_sec=safe_float(data.get("clock_prev_monotonic_sec")),
+            consecutive_clock_freeze_count=safe_int(
+                data.get("consecutive_clock_freeze_count"),
+                0,
+            ),
+            clock_anomaly_consecutive=safe_int(data.get("clock_anomaly_consecutive"), 0),
+            clock_last_reason=(
+                str(data.get("clock_last_reason"))
+                if data.get("clock_last_reason") is not None
+                else None
+            ),
             extra=extra,
         )
 
@@ -73,27 +99,17 @@ class TargetState:
         if self.last_records_processed_total is not None:
             out["last_records_processed_total"] = self.last_records_processed_total
         out["records_stalled_cycles"] = self.records_stalled_cycles
+        if self.clock_prev_wall_time_epoch is not None:
+            out["clock_prev_wall_time_epoch"] = self.clock_prev_wall_time_epoch
+        if self.clock_prev_monotonic_sec is not None:
+            out["clock_prev_monotonic_sec"] = self.clock_prev_monotonic_sec
+        out["consecutive_clock_freeze_count"] = self.consecutive_clock_freeze_count
+        out["clock_anomaly_consecutive"] = self.clock_anomaly_consecutive
+        if self.clock_last_reason is not None:
+            out["clock_last_reason"] = self.clock_last_reason
         return out
 
     def merge_into(self, raw: dict[str, Any]) -> None:
         """Replace *raw* contents with this model (preserves a single dict object identity)."""
         raw.clear()
         raw.update(self.to_dict())
-
-
-def _optional_float(value: Any) -> float | None:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _optional_int(value: Any) -> int | None:
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
