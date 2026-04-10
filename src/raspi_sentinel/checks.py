@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime
 import json
 import logging
-from pathlib import Path
 import subprocess
 import time
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from .config import TargetConfig
+from .state_helpers import safe_int, safe_optional_int
 
 LOG = logging.getLogger(__name__)
 
@@ -51,7 +52,9 @@ def _file_freshness_check(
     return None
 
 
-def _command_check(command: str, timeout_sec: int, check_name: str = "command") -> CheckFailure | None:
+def _command_check(
+    command: str, timeout_sec: int, check_name: str = "command"
+) -> CheckFailure | None:
     try:
         result = subprocess.run(
             command,
@@ -146,10 +149,14 @@ def _load_stats(path: Path) -> tuple[dict[str, Any] | None, CheckFailure | None]
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
-        return None, CheckFailure("semantic_stats_file", f"invalid JSON in stats file {path}: {exc}")
+        return None, CheckFailure(
+            "semantic_stats_file", f"invalid JSON in stats file {path}: {exc}"
+        )
 
     if not isinstance(data, dict):
-        return None, CheckFailure("semantic_stats_file", f"stats file root must be JSON object: {path}")
+        return None, CheckFailure(
+            "semantic_stats_file", f"stats file root must be JSON object: {path}"
+        )
     return data, None
 
 
@@ -219,7 +226,9 @@ def _stats_checks(
         else:
             observations["stats_status"] = status_raw
             if status_raw not in ("ok", "healthy"):
-                failures.append(CheckFailure("semantic_status", f"status is not healthy: {status_raw}"))
+                failures.append(
+                    CheckFailure("semantic_status", f"status is not healthy: {status_raw}")
+                )
 
     records_raw = stats.get("records_processed_total")
     if records_raw is not None:
@@ -247,11 +256,55 @@ def _stats_checks(
     gateway_ok = stats.get("gateway_ok")
     if gateway_ok is not None:
         if not isinstance(gateway_ok, bool):
-            failures.append(CheckFailure("dependency_gateway", "gateway_ok must be boolean when set"))
+            failures.append(
+                CheckFailure("dependency_gateway", "gateway_ok must be boolean when set")
+            )
         else:
             observations["gateway_ok"] = gateway_ok
             if not gateway_ok:
-                failures.append(CheckFailure("dependency_gateway", "gateway_ok=false in stats file"))
+                failures.append(
+                    CheckFailure("dependency_gateway", "gateway_ok=false in stats file")
+                )
+
+
+def apply_records_progress_check(
+    target: TargetConfig,
+    target_state: dict[str, Any],
+    result: CheckResult,
+) -> None:
+    """Detect stalled ``records_processed_total`` in semantic stats (same cycle as other checks)."""
+    stall_cycles_threshold = target.stats_records_stall_cycles
+    if stall_cycles_threshold is None:
+        return
+
+    current_records = safe_optional_int(result.observations.get("records_processed_total"))
+    if current_records is None:
+        return
+
+    previous_records = safe_optional_int(target_state.get("last_records_processed_total"))
+    stalled_cycles = safe_int(target_state.get("records_stalled_cycles"), 0)
+
+    if previous_records is None or current_records < previous_records:
+        stalled_cycles = 0
+    elif current_records == previous_records:
+        stalled_cycles += 1
+        if stalled_cycles >= stall_cycles_threshold:
+            result.failures.append(
+                CheckFailure(
+                    "semantic_records_stalled",
+                    (
+                        "records_processed_total is not increasing: "
+                        f"value={current_records} stalled_cycles={stalled_cycles} "
+                        f"threshold={stall_cycles_threshold}"
+                    ),
+                )
+            )
+    else:
+        stalled_cycles = 0
+
+    target_state["last_records_processed_total"] = current_records
+    target_state["records_stalled_cycles"] = stalled_cycles
+    result.healthy = not result.failures
 
 
 def run_checks(target: TargetConfig, now_wall_ts: float | None = None) -> CheckResult:

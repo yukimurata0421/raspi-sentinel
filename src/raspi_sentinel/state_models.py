@@ -6,7 +6,11 @@ from typing import Any
 
 @dataclass
 class TargetState:
-    """Typed view of per-target entries under state['targets'][name]."""
+    """Per-target slice of ``state['targets'][name]`` (recovery + events + progress).
+
+    Unknown keys (clock, maintenance, …) round-trip via ``extra``.
+    Use :meth:`merge_into` to write back.
+    """
 
     consecutive_failures: int = 0
     last_status: str = "unknown"
@@ -16,6 +20,8 @@ class TargetState:
     last_failure_ts: float | None = None
     last_failure_reason: str = ""
     last_healthy_ts: float | None = None
+    last_records_processed_total: int | None = None
+    records_stalled_cycles: int = 0
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -31,6 +37,8 @@ class TargetState:
             "last_failure_ts",
             "last_failure_reason",
             "last_healthy_ts",
+            "last_records_processed_total",
+            "records_stalled_cycles",
         }
         extra = {k: v for k, v in data.items() if k not in known}
         return cls(
@@ -42,6 +50,8 @@ class TargetState:
             last_failure_ts=_optional_float(data.get("last_failure_ts")),
             last_failure_reason=str(data.get("last_failure_reason", "") or ""),
             last_healthy_ts=_optional_float(data.get("last_healthy_ts")),
+            last_records_processed_total=_optional_int(data.get("last_records_processed_total")),
+            records_stalled_cycles=int(data.get("records_stalled_cycles", 0) or 0),
             extra=extra,
         )
 
@@ -60,7 +70,15 @@ class TargetState:
             out["last_failure_reason"] = self.last_failure_reason
         if self.last_healthy_ts is not None:
             out["last_healthy_ts"] = self.last_healthy_ts
+        if self.last_records_processed_total is not None:
+            out["last_records_processed_total"] = self.last_records_processed_total
+        out["records_stalled_cycles"] = self.records_stalled_cycles
         return out
+
+    def merge_into(self, raw: dict[str, Any]) -> None:
+        """Replace *raw* contents with this model (preserves a single dict object identity)."""
+        raw.clear()
+        raw.update(self.to_dict())
 
 
 def _optional_float(value: Any) -> float | None:
@@ -68,5 +86,14 @@ def _optional_float(value: Any) -> float | None:
         return None
     try:
         return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
     except (TypeError, ValueError):
         return None

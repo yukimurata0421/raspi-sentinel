@@ -8,6 +8,9 @@ from .state_helpers import safe_bool, safe_float, safe_int
 
 PolicyStatus = Literal["ok", "degraded", "failed"]
 
+# Failures from these checks are treated as hard "process" failures (failed / process_error).
+PROCESS_CHECK_NAMES = frozenset({"service_active", "command", "heartbeat_file", "output_file"})
+
 
 @dataclass(frozen=True, slots=True)
 class PolicySnapshot:
@@ -87,7 +90,7 @@ def classify_target_policy(
         return PolicySnapshot("ok", "recovered_from_clock_skew")
 
     if checks:
-        if "service_active" in checks or "command" in checks or "heartbeat_file" in checks or "output_file" in checks:
+        if checks & PROCESS_CHECK_NAMES:
             return PolicySnapshot("failed", "process_error")
         return PolicySnapshot("degraded", "unhealthy")
 

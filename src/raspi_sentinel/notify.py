@@ -1,19 +1,19 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import logging
 import os
 import platform
 import shutil
 import time
-from typing import Any
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
+from typing import Any
 
+from ._version import __version__
 from .checks import CheckResult
 from .config import DiscordNotifyConfig
-from ._version import __version__
 
 LOG = logging.getLogger(__name__)
 
@@ -91,7 +91,11 @@ class DiscordNotifier:
                 return True
             if attempt < max_attempts - 1:
                 time.sleep(0.5 * (attempt + 1))
-                LOG.warning("discord webhook send retry attempt %s/%s", attempt + 2, max_attempts)
+                LOG.warning(
+                    "discord webhook send retry attempt %s/%s",
+                    attempt + 2,
+                    max_attempts,
+                )
         return False
 
     def _post_discord_payload(self, data: bytes) -> bool:

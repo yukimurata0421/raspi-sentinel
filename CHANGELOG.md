@@ -4,6 +4,28 @@ All notable changes to this project are documented in this file.
 
 Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
+## [0.3.1] - 2026-04-10
+
+### Added
+
+- `PROCESS_CHECK_NAMES` (`policy.py`) for the “process error” branch; clearer than a long `or` chain.
+- Expanded `tests/test_policy.py` (clock freeze confirmed, HTTP probe failed, time sync broken skew, recovered-from-clock-skew, process_error).
+- CI: **Ruff** (`ruff check`, `ruff format --check`); pytest coverage includes `policy`, `status_events`, `time_health`; separate **coverage gates** for policy+status (≥85%) and checks+recovery (≥88%).
+
+### Changed
+
+- **Recovery** uses `TargetState` end-to-end: load with `TargetState.from_dict`, mutate fields, **`merge_into(raw_dict)`** on the live target dict (no mixed dict/get vs model).
+- **`TargetState`**: `last_records_processed_total`, `records_stalled_cycles`, and **`merge_into()`**; progress-check fields round-trip with semantic stats stall logic.
+- **`apply_records_progress_check`**: moved from `monitor_stats.py` to **`checks.py`** (same evaluation cycle as other checks).
+- **`state_helpers`**: `target_state()` lives here; **`runtime_state.py` removed** (callers import `state_helpers` directly).
+- **`state.py`**: empty-state returns use **`copy.deepcopy(DEFAULT_STATE)`** instead of repeated literals.
+- **`run-once` exit code**: returns **`1`** if any target is unhealthy this cycle and **`2`** if a reboot was requested (no longer mapped to **`0`**); see README.
+- README: **exit code** table; Tests/CI commands aligned with the workflow.
+
+### Removed
+
+- Unused `cli._classify_target_status` / `_classify_target_reason` wrappers (tests use `status_events` directly).
+
 ## [0.3.0] - 2026-04-10
 
 ### Added
@@ -15,7 +37,7 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 - Config validation: `service_active = true` requires at least one entry in `services`.
 - Config load warning when the config file is group/world-writable.
 - `state_helpers` (`safe_*`, atomic JSON write, optional events file rotation).
-- `state_models.TargetState` for typed read paths (e.g. consecutive failures).
+- `state_models.TargetState` as a typed view for per-target state (recovery uses full merge-back in **0.3.1**).
 - Discord webhook retries (limited attempts with backoff) and `notify_delivery_failed` events in `events.jsonl` when delivery fails.
 - Tests for policy, classification, and recovery time injection.
 

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +14,7 @@ LOG = logging.getLogger(__name__)
 
 
 def apply_policy_to_result(result: CheckResult, policy: PolicySnapshot) -> None:
-    """Set policy_status / policy_reason and align result.healthy with classification (status == 'ok')."""
+    """Set policy_status / policy_reason; align ``result.healthy`` with ``policy.is_ok``."""
     result.observations["policy_status"] = policy.status
     result.observations["policy_reason"] = policy.reason
     result.healthy = policy.is_ok

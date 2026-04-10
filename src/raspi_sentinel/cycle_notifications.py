@@ -11,7 +11,7 @@ from .notify import (
     mark_heartbeat_sent,
     should_send_periodic_heartbeat,
 )
-from .runtime_state import safe_int, target_state
+from .state_helpers import safe_int, target_state
 from .status_events import record_notify_failure_event
 
 

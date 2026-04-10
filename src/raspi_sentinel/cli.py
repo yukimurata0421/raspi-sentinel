@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import argparse
 import logging
-from pathlib import Path
 import time
+from pathlib import Path
 from typing import Any
 
-from .checks import CheckResult, run_checks
+from .checks import CheckResult, apply_records_progress_check, run_checks
 from .config import AppConfig, TargetConfig, load_config
-from .policy import PolicySnapshot, classify_target_policy
 from .cycle_notifications import (
     schedule_followup,
     send_due_followups,
@@ -18,30 +17,20 @@ from .cycle_notifications import (
 )
 from .logging_utils import configure_logging
 from .maintenance import is_target_suppressed_by_maintenance
-from .monitor_stats import apply_records_progress_check, maybe_write_monitor_stats
+from .monitor_stats import maybe_write_monitor_stats
 from .notify import DiscordNotifier, format_failures
+from .policy import PolicySnapshot, classify_target_policy
 from .recovery import RecoveryOutcome, apply_recovery
-from .runtime_state import safe_int, target_state
 from .state import StateStore
-from .state_models import TargetState as TargetStateView
+from .state_helpers import safe_int, target_state
+from .state_models import TargetState
 from .status_events import (
     apply_policy_to_result,
-    classify_target_reason,
-    classify_target_state,
-    classify_target_status,
     record_status_events,
 )
 from .time_health import apply_time_health_checks
 
 LOG = logging.getLogger(__name__)
-
-
-def _classify_target_status(result: CheckResult) -> str:
-    return classify_target_status(result)
-
-
-def _classify_target_reason(result: CheckResult) -> str:
-    return classify_target_reason(result)
 
 
 def evaluate_target(
@@ -127,7 +116,10 @@ def emit_target_notifications(
         )
 
     if not result.healthy:
-        should_notify_now = current_failures == 1 or outcome.action in ("restart", "reboot")
+        should_notify_now = current_failures == 1 or outcome.action in (
+            "restart",
+            "reboot",
+        )
         if should_notify_now:
             send_issue_notification(
                 notifier=notifier,
@@ -184,7 +176,7 @@ def _run_cycle(config: AppConfig, dry_run: bool) -> int:
             unhealthy_count += 1
 
         before = target_state(state, target.name)
-        previous_failures = TargetStateView.from_dict(before).consecutive_failures
+        previous_failures = TargetState.from_dict(before).consecutive_failures
 
         outcome = apply_recovery_phase(
             target=target,
@@ -273,7 +265,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=Path("/etc/raspi-sentinel/config.toml"),
         help="Path to TOML config file",
     )
-    parser.add_argument("--dry-run", action="store_true", help="Evaluate and log actions but do not restart/reboot")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Evaluate and log actions but do not restart/reboot",
+    )
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
 
     sub = parser.add_subparsers(dest="command", required=True)
@@ -303,8 +299,7 @@ def main(argv: list[str] | None = None) -> int:
         return 10
 
     if args.command == "run-once":
-        rc = _run_cycle(config=config, dry_run=args.dry_run)
-        return 0 if rc in (0, 1, 2) else rc
+        return _run_cycle(config=config, dry_run=args.dry_run)
 
     if args.command == "loop":
         interval = args.interval_sec or config.global_config.loop_interval_sec

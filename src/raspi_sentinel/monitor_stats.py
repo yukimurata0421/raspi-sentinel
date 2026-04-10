@@ -1,57 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime
 import json
 import logging
-from pathlib import Path
+from datetime import datetime
 from typing import Any
 
-from .checks import CheckFailure, CheckResult
+from .checks import CheckResult
 from .config import AppConfig
-from .runtime_state import safe_int, safe_optional_int
-from .state_helpers import write_json_atomic
+from .state_helpers import safe_int, safe_optional_int, write_json_atomic
 from .status_events import classify_target_reason, classify_target_status
 
 LOG = logging.getLogger(__name__)
-
-
-def apply_records_progress_check(
-    target: Any,
-    target_state: dict[str, Any],
-    result: CheckResult,
-) -> None:
-    stall_cycles_threshold = target.stats_records_stall_cycles
-    if stall_cycles_threshold is None:
-        return
-
-    current_records = safe_optional_int(result.observations.get("records_processed_total"))
-    if current_records is None:
-        return
-
-    previous_records = safe_optional_int(target_state.get("last_records_processed_total"))
-    stalled_cycles = safe_int(target_state.get("records_stalled_cycles"), 0)
-
-    if previous_records is None or current_records < previous_records:
-        stalled_cycles = 0
-    elif current_records == previous_records:
-        stalled_cycles += 1
-        if stalled_cycles >= stall_cycles_threshold:
-            result.failures.append(
-                CheckFailure(
-                    "semantic_records_stalled",
-                    (
-                        "records_processed_total is not increasing: "
-                        f"value={current_records} stalled_cycles={stalled_cycles} "
-                        f"threshold={stall_cycles_threshold}"
-                    ),
-                )
-            )
-    else:
-        stalled_cycles = 0
-
-    target_state["last_records_processed_total"] = current_records
-    target_state["records_stalled_cycles"] = stalled_cycles
-    result.healthy = not result.failures
 
 
 def build_monitor_stats_snapshot(
@@ -80,8 +39,12 @@ def build_monitor_stats_snapshot(
             status = str(target_state.get("last_status", "unknown"))
             reason = str(target_state.get("last_reason", "unknown"))
         else:
-            status = classify_target_status(result=result, target_state=state_targets.get(target.name, {}))
-            reason = classify_target_reason(result=result, target_state=state_targets.get(target.name, {}))
+            status = classify_target_status(
+                result=result, target_state=state_targets.get(target.name, {})
+            )
+            reason = classify_target_reason(
+                result=result, target_state=state_targets.get(target.name, {})
+            )
 
         counts[status] = counts.get(status, 0) + 1
         target_state = state_targets.get(target.name, {})

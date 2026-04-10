@@ -292,6 +292,19 @@ Continuous loop (core only):
 raspi-sentinel -c /etc/raspi-sentinel/config.toml loop
 ```
 
+### Exit codes (`run-once`)
+
+| Code | Meaning |
+|------|--------|
+| `0` | All targets **ok** this cycle |
+| `1` | At least one target **degraded** or **failed** |
+| `2` | A **reboot** was requested (process exits before the reboot) |
+| `10` | Config load error |
+| `11` | Invalid loop interval |
+| `12` | No subcommand / help |
+
+Use `0` vs `1` / `2` in systemd `ExecStart=` or scripts if you alert on unhealthy cycles or reboot requests.
+
 ## Tests and CI
 
 The goal of tests is to protect recovery policy behavior.
@@ -304,10 +317,11 @@ Priority scenarios:
 - `last_input_ts` fresh but `last_success_ts` stale -> processing failure
 - malformed/missing JSON fields -> fail safe (unhealthy)
 
-Coverage policy:
+Coverage policy (matches CI):
 
-- overall (policy modules): >= 80% with branch coverage
-- core decision logic (`checks.py`, `recovery.py`): >= 90%
+- Tracked modules: `checks`, `config`, `recovery`, **`policy`**, **`status_events`**, **`time_health`** — overall **≥ 80%** (branch coverage on).
+- **Policy + `status_events`**: dedicated report **≥ 85%**.
+- **`checks` + `recovery`**: dedicated report **≥ 88%**.
 
 Run locally:
 
@@ -315,23 +329,31 @@ Run locally:
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e ".[dev]"
+ruff check src tests
+ruff format --check src tests
 pytest \
   --cov=raspi_sentinel.checks \
   --cov=raspi_sentinel.config \
   --cov=raspi_sentinel.recovery \
+  --cov=raspi_sentinel.policy \
+  --cov=raspi_sentinel.status_events \
+  --cov=raspi_sentinel.time_health \
   --cov-branch \
   --cov-report=term-missing \
   --cov-fail-under=80
 python -m coverage report \
+  --include="src/raspi_sentinel/policy.py,src/raspi_sentinel/status_events.py" \
+  --fail-under=85
+python -m coverage report \
   --include="src/raspi_sentinel/checks.py,src/raspi_sentinel/recovery.py" \
-  --fail-under=90
+  --fail-under=88
 ```
 
 ## Versioning
 
-- **Current release line:** **0.3.0** (see `CHANGELOG.md`).
+- **Current release line:** **0.3.1** (see `CHANGELOG.md`).
 - **Single version string:** `src/raspi_sentinel/_version.py` (`raspi_sentinel.__version__`). `pyproject.toml` reads it at build time (no duplicate number).
-- **Git tags:** use `v0.3.0` style for releases. An older **`v0.2.0`** tag may exist as a snapshot; formal distribution is aligned from **0.3.0** onward — details in [docs/VERSIONING.md](docs/VERSIONING.md).
+- **Git tags:** use `v0.3.1` (or current `__version__`) for releases. An older **`v0.2.0`** tag may exist as a snapshot — details in [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ## License
 

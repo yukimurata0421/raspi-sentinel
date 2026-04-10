@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from email.utils import parsedate_to_datetime
 import logging
 import subprocess
 import time
+from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib import error, request
 
-from .checks import CheckResult
 from ._version import __version__
+from .checks import CheckResult
 from .config import TargetConfig
-from .runtime_state import safe_int
-from .state_helpers import safe_bool, safe_float
+from .state_helpers import safe_bool, safe_float, safe_int
 
 LOG = logging.getLogger(__name__)
 
@@ -192,7 +191,11 @@ def apply_time_health_checks(
         reason = "gateway_error"
     elif dns_ok is False and gateway_ok is True:
         reason = "dns_error"
-    elif ntp_sync_ok is False and target.http_time_probe_url and skew_abs < target.clock_skew_threshold_sec:
+    elif (
+        ntp_sync_ok is False
+        and target.http_time_probe_url
+        and skew_abs < target.clock_skew_threshold_sec
+    ):
         reason = "time_sync_broken"
     elif insufficient_interval:
         reason = "insufficient_interval"

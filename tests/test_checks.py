@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from raspi_sentinel import cli
 from raspi_sentinel.checks import run_checks
 from raspi_sentinel.config import TargetConfig
+from raspi_sentinel.status_events import classify_target_reason, classify_target_status
 
 
 def _target(**overrides: object) -> TargetConfig:
@@ -51,7 +51,9 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
-def test_stats_updated_at_stale_is_semantic_failure_and_degraded(tmp_path: Path) -> None:
+def test_stats_updated_at_stale_is_semantic_failure_and_degraded(
+    tmp_path: Path,
+) -> None:
     now = datetime.now(timezone.utc)
     stats_path = tmp_path / "stats.json"
     _write_json(
@@ -71,11 +73,13 @@ def test_stats_updated_at_stale_is_semantic_failure_and_degraded(tmp_path: Path)
     )
     assert not result.healthy
     assert any(f.check == "semantic_updated_at" for f in result.failures)
-    assert cli._classify_target_status(result) == "degraded"
-    assert cli._classify_target_reason(result) == "stats_stale"
+    assert classify_target_status(result) == "degraded"
+    assert classify_target_reason(result) == "stats_stale"
 
 
-def test_last_input_fresh_last_success_stale_is_processing_failure(tmp_path: Path) -> None:
+def test_last_input_fresh_last_success_stale_is_processing_failure(
+    tmp_path: Path,
+) -> None:
     now = datetime.now(timezone.utc)
     stats_path = tmp_path / "stats.json"
     _write_json(

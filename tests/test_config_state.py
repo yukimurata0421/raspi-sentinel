@@ -85,7 +85,9 @@ def test_load_config_rejects_stats_rules_without_stats_file(tmp_path: Path) -> N
         load_config(conf)
 
 
-def test_load_config_sets_dependency_timeout_from_global_default(tmp_path: Path) -> None:
+def test_load_config_sets_dependency_timeout_from_global_default(
+    tmp_path: Path,
+) -> None:
     conf = tmp_path / "config.toml"
     _write(
         conf,

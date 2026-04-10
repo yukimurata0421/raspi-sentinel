@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import logging
 from pathlib import Path
@@ -25,20 +26,20 @@ class StateStore:
 
     def load(self) -> dict[str, Any]:
         if not self.path.exists():
-            return {"targets": {}, "reboots": [], "followups": {}, "notify": {}, "monitor_stats": {}}
+            return copy.deepcopy(DEFAULT_STATE)
 
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             LOG.error("state file is invalid JSON (%s): %s", self.path, exc)
-            return {"targets": {}, "reboots": [], "followups": {}, "notify": {}, "monitor_stats": {}}
+            return copy.deepcopy(DEFAULT_STATE)
         except OSError as exc:
             LOG.error("cannot read state file %s: %s", self.path, exc)
-            return {"targets": {}, "reboots": [], "followups": {}, "notify": {}, "monitor_stats": {}}
+            return copy.deepcopy(DEFAULT_STATE)
 
         if not isinstance(data, dict):
             LOG.error("state file root must be object: %s", self.path)
-            return {"targets": {}, "reboots": [], "followups": {}, "notify": {}, "monitor_stats": {}}
+            return copy.deepcopy(DEFAULT_STATE)
 
         targets = data.get("targets")
         reboots = data.get("reboots")
