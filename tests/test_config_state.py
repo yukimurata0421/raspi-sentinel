@@ -184,3 +184,17 @@ def test_maybe_rotate_file_supports_multiple_generations(tmp_path: Path) -> None
     assert (tmp_path / "events.jsonl.1").read_text(encoding="utf-8") == "current\n"
     assert (tmp_path / "events.jsonl.2").read_text(encoding="utf-8") == "old-1\n"
     assert (tmp_path / "events.jsonl.3").read_text(encoding="utf-8") == "old-2\n"
+
+
+def test_state_store_quarantines_corrupted_json(tmp_path: Path) -> None:
+    state_file = tmp_path / "state.json"
+    state_file.write_text("{broken", encoding="utf-8")
+    store = StateStore(state_file)
+
+    loaded, diagnostics = store.load_with_diagnostics()
+    assert diagnostics.state_corrupted is True
+    assert diagnostics.used_default_state is True
+    assert diagnostics.corrupt_backup_path is not None
+    assert diagnostics.corrupt_backup_path.exists()
+    assert not state_file.exists()
+    assert loaded["targets"] == {}

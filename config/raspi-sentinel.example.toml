@@ -31,6 +31,8 @@ min_uptime_for_reboot_sec = 600
 # Misc
 default_command_timeout_sec = 10
 loop_interval_sec = 30
+# Command execution defaults to shell=false.
+# Use *_use_shell=true only for commands that require shell syntax.
 
 [notify.discord]
 enabled = true
@@ -97,7 +99,9 @@ name = "network_uplink"
 services = []
 service_active = false
 dns_check_command = "getent ahostsv4 blender.prod.fr24.io >/dev/null"
+dns_check_use_shell = true
 gateway_check_command = "ip route get 1.1.1.1 >/dev/null 2>&1 && nc -zw3 1.1.1.1 443 >/dev/null 2>&1"
+gateway_check_use_shell = true
 dependency_check_timeout_sec = 8
 # Optional: detect clock anomaly (no automatic clock correction).
 # This compares wall clock progression vs monotonic progression,

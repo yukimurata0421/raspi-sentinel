@@ -200,6 +200,7 @@ def apply_recovery(
     global_config: GlobalConfig,
     state: dict[str, Any],
     dry_run: bool,
+    allow_disruptive_actions: bool = True,
     now_ts: float | None = None,
 ) -> RecoveryOutcome:
     raw = get_target_dict(state, target.name)
@@ -228,6 +229,16 @@ def apply_recovery(
     ts.consecutive_failures = consecutive
     ts.last_failure_ts = effective_now
     ts.last_failure_reason = failures_text
+
+    if not allow_disruptive_actions:
+        LOG.error(
+            "target '%s': disruptive recovery actions disabled in limited mode; reason=%s",
+            target.name,
+            failures_text,
+        )
+        _record_action_model(ts, "warn", effective_now)
+        ts.merge_into(raw)
+        return RecoveryOutcome(action="warn", requested_reboot=False)
 
     if clock_reboot_confirmed:
         can_reboot, guard_reason = _can_reboot(global_config, state, effective_now)

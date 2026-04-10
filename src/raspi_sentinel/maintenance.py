@@ -1,14 +1,27 @@
 from __future__ import annotations
 
+import shlex
 import subprocess
 from typing import Any
 
 
-def run_shell_success(command: str, timeout_sec: int) -> bool:
+def run_command_success(command: str, timeout_sec: int, use_shell: bool) -> bool:
+    if not use_shell and any(token in command for token in ("|", "&&", "||", ";", "$(", "`")):
+        return False
+    args: str | list[str]
+    if use_shell:
+        args = command
+    else:
+        try:
+            args = shlex.split(command)
+        except ValueError:
+            return False
+        if not args:
+            return False
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            args,
+            shell=use_shell,
             check=False,
             timeout=timeout_sec,
             capture_output=True,
@@ -39,7 +52,11 @@ def is_target_suppressed_by_maintenance(
         return False, ""
 
     timeout = target.maintenance_mode_timeout_sec or 10
-    matched = run_shell_success(command=command, timeout_sec=timeout)
+    matched = run_command_success(
+        command=command,
+        timeout_sec=timeout,
+        use_shell=bool(target.maintenance_mode_use_shell),
+    )
     if not matched:
         return False, ""
 

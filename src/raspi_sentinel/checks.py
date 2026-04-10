@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shlex
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -54,12 +55,34 @@ def _file_freshness_check(
 
 
 def _command_check(
-    command: str, timeout_sec: int, check_name: str = "command"
+    command: str,
+    timeout_sec: int,
+    check_name: str = "command",
+    use_shell: bool = False,
 ) -> CheckFailure | None:
+    # Keep shell execution as explicit opt-in.
+    if not use_shell and any(token in command for token in ("|", "&&", "||", ";", "$(", "`")):
+        return CheckFailure(
+            check_name,
+            "shell syntax detected; set *_use_shell=true for this command",
+        )
+
+    args: str | list[str]
+    if use_shell:
+        args = command
+    else:
+        try:
+            parsed = shlex.split(command)
+        except ValueError as exc:
+            return CheckFailure(check_name, f"invalid command syntax: {exc}")
+        if not parsed:
+            return CheckFailure(check_name, "command is empty")
+        args = parsed
+
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            args,
+            shell=use_shell,
             check=False,
             timeout=timeout_sec,
             capture_output=True,
@@ -337,13 +360,23 @@ def run_checks(target: TargetConfig, now_wall_ts: float | None = None) -> CheckR
 
     if target.command:
         timeout_sec = target.command_timeout_sec or 10
-        failure = _command_check(target.command, timeout_sec, check_name="command")
+        failure = _command_check(
+            target.command,
+            timeout_sec,
+            check_name="command",
+            use_shell=target.command_use_shell,
+        )
         if failure:
             failures.append(failure)
 
     if target.dns_check_command:
         timeout_sec = target.dependency_check_timeout_sec or 10
-        failure = _command_check(target.dns_check_command, timeout_sec, check_name="dependency_dns")
+        failure = _command_check(
+            target.dns_check_command,
+            timeout_sec,
+            check_name="dependency_dns",
+            use_shell=target.dns_check_use_shell,
+        )
         observations["dns_ok"] = failure is None
         if failure:
             failures.append(failure)
@@ -354,6 +387,7 @@ def run_checks(target: TargetConfig, now_wall_ts: float | None = None) -> CheckR
             target.gateway_check_command,
             timeout_sec,
             check_name="dependency_gateway",
+            use_shell=target.gateway_check_use_shell,
         )
         observations["gateway_ok"] = failure is None
         if failure:

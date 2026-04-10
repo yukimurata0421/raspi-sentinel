@@ -9,7 +9,9 @@
 `raspi-sentinel` is designed for **trusted operator-controlled configuration** on a single machine (for example `/etc/raspi-sentinel/config.toml` owned by root).
 
 - **Not** a multi-tenant or internet-facing control plane: do not pass untrusted user input into config fields.
-- **Shell commands** from the config (`command`, `dns_check_command`, `gateway_check_command`, `maintenance_mode_command`) are executed with `subprocess` **`shell=True`**. Treat those strings like shell scripts: only trusted admins should edit them.
+- Config commands run with `shell=False` by default.
+- Shell execution is explicit opt-in via `command_use_shell`, `dns_check_use_shell`, `gateway_check_use_shell`, `maintenance_mode_use_shell`.
+- If shell syntax is detected without opt-in, the check fails safely and is recorded.
 - When running as **root**, restrict config file permissions (for example `chmod 600` / `root:root`) so webhook URLs and commands are not exposed to other local users.
 - On load, if the config file is **group- or world-writable**, a **warning** is logged (unsafe in shared-admin environments).
 
@@ -55,10 +57,12 @@ Many Raspberry Pi failures are logical stalls, not full kernel hangs:
   - last action / last reason
   - reboot history (loop guard)
   - notification follow-up schedule
+  - if state is corrupted, file is quarantined to `state.json.corrupt.<timestamp>` and cycle enters limited mode
 - **Event log** (`/var/lib/raspi-sentinel/events.jsonl` by default):
   - status/reason transitions only (no duplicate lines while state unchanged)
   - `action` field for `restart` / `reboot` outcomes
   - optional `kind: notify_delivery_failed` when Discord delivery fails (after retries)
+  - optional `kind: state_corrupted` / `kind: state_load_error` when state loading degrades
   - optional **size-based rotation** via `[global].events_max_file_bytes` (renames to `events.jsonl.1` when exceeded; `0` disables)
 - **Monitor snapshot** (`/var/lib/raspi-sentinel/stats.json` by default):
   - raspi-sentinel writes its own current aggregate status
@@ -196,6 +200,7 @@ events_backup_generations = 3
 
 Set `events_max_file_bytes = 0` to disable rotation of `events.jsonl`.
 Set `state_max_file_bytes = 0` to disable `state.json` size guard.
+`events_backup_generations` controls how many rotated files are kept (`events.jsonl.1..N`).
 
 Example output:
 
@@ -251,7 +256,9 @@ name = "network_uplink"
 services = []
 service_active = false
 dns_check_command = "getent ahostsv4 blender.prod.fr24.io >/dev/null"
+dns_check_use_shell = true
 gateway_check_command = "ip route get 1.1.1.1 >/dev/null 2>&1 && nc -zw3 1.1.1.1 443 >/dev/null 2>&1"
+gateway_check_use_shell = true
 time_health_enabled = true
 check_interval_threshold_sec = 30
 wall_clock_freeze_min_monotonic_sec = 25

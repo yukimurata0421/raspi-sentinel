@@ -20,9 +20,12 @@ def _target(**overrides: Any) -> TargetConfig:
         "output_file": None,
         "output_max_age_sec": None,
         "command": None,
+        "command_use_shell": False,
         "command_timeout_sec": None,
         "dns_check_command": None,
+        "dns_check_use_shell": False,
         "gateway_check_command": None,
+        "gateway_check_use_shell": False,
         "dependency_check_timeout_sec": None,
         "stats_file": None,
         "stats_updated_max_age_sec": None,
@@ -39,6 +42,7 @@ def _target(**overrides: Any) -> TargetConfig:
         "clock_skew_threshold_sec": 300,
         "clock_anomaly_reboot_consecutive": 3,
         "maintenance_mode_command": None,
+        "maintenance_mode_use_shell": False,
         "maintenance_mode_timeout_sec": None,
         "maintenance_grace_sec": None,
         "restart_threshold": None,
@@ -100,6 +104,12 @@ def test_command_check_timeout_oserror_nonzero_and_success(monkeypatch: Any) -> 
 
     monkeypatch.setattr(checks.subprocess, "run", ok_run)
     assert checks._command_check("x", 1, "command") is None
+
+
+def test_command_check_requires_shell_opt_in_for_shell_syntax() -> None:
+    failure = checks._command_check("echo ok | cat", 1, "command", use_shell=False)
+    assert failure is not None
+    assert "*_use_shell=true" in failure.message
 
 
 def test_service_active_check_all_branches(monkeypatch: Any) -> None:

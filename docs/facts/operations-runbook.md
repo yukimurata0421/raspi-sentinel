@@ -84,3 +84,5 @@ Typical interpretation order:
 - Do not assume `http_probe_failed` means local clock failure.
 - Keep config file permissions strict (`chmod 600` recommended on production hosts).
 - Treat command fields as trusted admin input only.
+- Use `*_use_shell=true` only where shell syntax is required.
+- If `state.json` is corrupt, the cycle runs in limited mode and records `state_corrupted` event.

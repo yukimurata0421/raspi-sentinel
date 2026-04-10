@@ -66,6 +66,19 @@ def _shell_commands(target: TargetConfig) -> dict[str, str]:
     return commands
 
 
+def _shell_opt_in_checks(target: TargetConfig) -> list[str]:
+    checks: list[str] = []
+    if target.command is not None and target.command_use_shell:
+        checks.append("command")
+    if target.dns_check_command is not None and target.dns_check_use_shell:
+        checks.append("dns_check_command")
+    if target.gateway_check_command is not None and target.gateway_check_use_shell:
+        checks.append("gateway_check_command")
+    if target.maintenance_mode_command is not None and target.maintenance_mode_use_shell:
+        checks.append("maintenance_mode_command")
+    return checks
+
+
 def _check_service_unit_load_state(unit: str, timeout_sec: int = 3) -> str | None:
     try:
         result = subprocess.run(
@@ -105,7 +118,11 @@ def _target_paths(target: TargetConfig) -> list[dict[str, Any]]:
     return entries
 
 
-def _target_warnings(target: TargetConfig, path_entries: list[dict[str, Any]]) -> list[str]:
+def _target_warnings(
+    target: TargetConfig,
+    path_entries: list[dict[str, Any]],
+    config_permission_warning: str | None,
+) -> list[str]:
     warnings: list[str] = []
 
     if target.service_active and not target.services:
@@ -123,13 +140,47 @@ def _target_warnings(target: TargetConfig, path_entries: list[dict[str, Any]]) -
         if load_state == "not-found":
             warnings.append(f"systemd unit not found: {unit}")
 
+    if (
+        config_permission_warning is not None
+        and _shell_opt_in_checks(target)
+        and "group/world-writable" in config_permission_warning
+    ):
+        warnings.append(
+            "config is writable and shell execution is opt-in for this target; tighten permissions"
+        )
+
+    restart_threshold = target.restart_threshold
+    reboot_threshold = target.reboot_threshold
+    if (
+        restart_threshold is not None
+        and reboot_threshold is not None
+        and reboot_threshold < restart_threshold
+    ):
+        warnings.append("reboot_threshold is lower than restart_threshold")
+
+    if (
+        target.time_health_enabled
+        and target.check_interval_threshold_sec > target.wall_clock_freeze_min_monotonic_sec
+    ):
+        warnings.append(
+            (
+                "time-health thresholds look inconsistent: "
+                "check_interval_threshold_sec > wall_clock_freeze_min_monotonic_sec"
+            )
+        )
+
     return warnings
 
 
-def _target_summary(target: TargetConfig, config: AppConfig) -> dict[str, Any]:
+def _target_summary(
+    target: TargetConfig,
+    config: AppConfig,
+    config_permission_warning: str | None,
+) -> dict[str, Any]:
     shell_commands = _shell_commands(target)
+    shell_opt_in_checks = _shell_opt_in_checks(target)
     path_entries = _target_paths(target)
-    warnings = _target_warnings(target, path_entries)
+    warnings = _target_warnings(target, path_entries, config_permission_warning)
 
     services: list[dict[str, Any]] = []
     for unit in target.services:
@@ -166,12 +217,16 @@ def _target_summary(target: TargetConfig, config: AppConfig) -> dict[str, Any]:
             "grace_sec": target.maintenance_grace_sec,
         },
         "shell_commands": shell_commands,
+        "shell_opt_in_checks": shell_opt_in_checks,
         "warnings": warnings,
     }
 
 
 def build_config_validation_report(config_path: Path, config: AppConfig) -> dict[str, Any]:
-    target_summaries = [_target_summary(target, config) for target in config.targets]
+    permission_warning = _config_permission_warning(config_path)
+    target_summaries = [
+        _target_summary(target, config, permission_warning) for target in config.targets
+    ]
     shell_command_targets = [
         summary["name"]
         for summary in target_summaries
@@ -180,7 +235,7 @@ def build_config_validation_report(config_path: Path, config: AppConfig) -> dict
 
     return {
         "config_path": str(config_path),
-        "config_permission_warning": _config_permission_warning(config_path),
+        "config_permission_warning": permission_warning,
         "global": {
             "state_file": str(config.global_config.state_file),
             "state_max_file_bytes": config.global_config.state_max_file_bytes,
@@ -198,7 +253,7 @@ def build_config_validation_report(config_path: Path, config: AppConfig) -> dict
         "shell_command_targets": shell_command_targets,
         "warning_count": _count_warnings_from_target_summaries(
             target_summaries,
-            _config_permission_warning(config_path),
+            permission_warning,
         ),
     }
 
@@ -265,6 +320,10 @@ def format_config_validation_report(report: dict[str, Any]) -> str:
             lines.append("shell_commands:")
             for key in sorted(shell_commands):
                 lines.append(f"  - {key}: {shell_commands[key]}")
+
+        shell_opt_in_checks = target.get("shell_opt_in_checks", [])
+        if shell_opt_in_checks:
+            lines.append("shell_opt_in_checks: " + ", ".join(shell_opt_in_checks))
 
         services = target.get("services", [])
         if services:

@@ -125,3 +125,13 @@ def test_check_interval_threshold_must_be_positive(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="check_interval_threshold_sec must be > 0"):
         load_config(conf)
+
+
+def test_command_use_shell_requires_command(tmp_path: Path) -> None:
+    conf = tmp_path / "config.toml"
+    _write(
+        conf,
+        _base_config(extra_target="command_use_shell = true"),
+    )
+    with pytest.raises(ValueError, match="command_use_shell=true requires command"):
+        load_config(conf)

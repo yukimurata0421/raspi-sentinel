@@ -6,6 +6,8 @@ import json
 import logging
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -28,28 +30,46 @@ DEFAULT_STATE: dict[str, Any] = {
 }
 
 
+@dataclass(slots=True)
+class StateLoadDiagnostics:
+    used_default_state: bool = False
+    state_corrupted: bool = False
+    state_load_error: str | None = None
+    corrupt_backup_path: Path | None = None
+
+    @property
+    def limited_mode(self) -> bool:
+        return self.state_corrupted or self.state_load_error is not None
+
+
 class StateStore:
     def __init__(self, path: Path) -> None:
         self.path = path
         self.lock_path = path.with_suffix(path.suffix + ".lock")
 
     def load(self) -> dict[str, Any]:
-        if not self.path.exists():
-            return copy.deepcopy(DEFAULT_STATE)
+        state, _ = self.load_with_diagnostics()
+        return state
 
+    def _default_state(self) -> dict[str, Any]:
+        return copy.deepcopy(DEFAULT_STATE)
+
+    def _quarantine_corrupt_state(self) -> Path | None:
+        ts_label = datetime.now().strftime("%Y%m%dT%H%M%S")
+        base = self.path.with_name(f"{self.path.name}.corrupt.{ts_label}")
+        candidate = base
+        for index in range(1, 100):
+            if not candidate.exists():
+                break
+            candidate = self.path.with_name(f"{base.name}.{index}")
         try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
-            LOG.error("state file is invalid JSON (%s): %s", self.path, exc)
-            return copy.deepcopy(DEFAULT_STATE)
+            self.path.replace(candidate)
+            return candidate
         except OSError as exc:
-            LOG.error("cannot read state file %s: %s", self.path, exc)
-            return copy.deepcopy(DEFAULT_STATE)
+            LOG.error("failed to quarantine corrupt state file %s: %s", self.path, exc)
+            return None
 
-        if not isinstance(data, dict):
-            LOG.error("state file root must be object: %s", self.path)
-            return copy.deepcopy(DEFAULT_STATE)
-
+    def _sanitize_loaded_state(self, data: dict[str, Any]) -> dict[str, Any]:
         targets = data.get("targets")
         reboots = data.get("reboots")
         followups = data.get("followups")
@@ -73,6 +93,36 @@ class StateStore:
             "notify": notify,
             "monitor_stats": monitor_stats,
         }
+
+    def load_with_diagnostics(self) -> tuple[dict[str, Any], StateLoadDiagnostics]:
+        diagnostics = StateLoadDiagnostics()
+        if not self.path.exists():
+            return self._default_state(), diagnostics
+
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            LOG.error("state file is invalid JSON (%s): %s", self.path, exc)
+            diagnostics.used_default_state = True
+            diagnostics.state_corrupted = True
+            diagnostics.state_load_error = f"invalid JSON: {exc}"
+            diagnostics.corrupt_backup_path = self._quarantine_corrupt_state()
+            return self._default_state(), diagnostics
+        except OSError as exc:
+            LOG.error("cannot read state file %s: %s", self.path, exc)
+            diagnostics.used_default_state = True
+            diagnostics.state_load_error = f"read error: {exc}"
+            return self._default_state(), diagnostics
+
+        if not isinstance(data, dict):
+            LOG.error("state file root must be object: %s", self.path)
+            diagnostics.used_default_state = True
+            diagnostics.state_corrupted = True
+            diagnostics.state_load_error = "state JSON root is not an object"
+            diagnostics.corrupt_backup_path = self._quarantine_corrupt_state()
+            return self._default_state(), diagnostics
+
+        return self._sanitize_loaded_state(data), diagnostics
 
     @contextmanager
     def exclusive_lock(self, timeout_sec: int = 5) -> Any:

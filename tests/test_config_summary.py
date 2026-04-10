@@ -65,6 +65,7 @@ def test_format_config_summary_includes_shell_target_and_target_block(
     target_rules = "\n".join(
         (
             'command = "true"',
+            "command_use_shell = true",
             'heartbeat_file = "/tmp/missing"',
             "heartbeat_max_age_sec = 30",
         )
@@ -88,3 +89,4 @@ def test_format_config_summary_includes_shell_target_and_target_block(
     assert "targets using shell commands: demo" in text
     assert "[demo]" in text
     assert "rules:" in text
+    assert "shell_opt_in_checks: command" in text

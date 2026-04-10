@@ -22,9 +22,19 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - `state_max_file_bytes`
   - `state_reboots_max_entries`
   - `state_lock_timeout_sec`
+- New command safety flags (default safe execution with explicit shell opt-in):
+  - `command_use_shell`
+  - `dns_check_use_shell`
+  - `gateway_check_use_shell`
+  - `maintenance_mode_use_shell`
 
 ### Changed
 
+- Cycle orchestration moved from `cli.py` into `engine.py`; CLI now focuses on argument parsing and dispatch.
+- `state.json` load path now supports corruption diagnostics:
+  - invalid state is quarantined to `state.json.corrupt.<timestamp>`
+  - cycle enters `limited_mode` with disruptive recovery disabled for that run
+  - `events.jsonl` records `state_corrupted` / `state_load_error` events
 - `_run_cycle` now captures `previous_failures` before `evaluate_target()` mutation points for clearer intent.
 - `apply_records_progress_check()` now uses `TargetState` model mutation (`from_dict` + `merge_into`) instead of direct raw-dict writes.
 - `TargetState` now also models clock-related runtime fields:
@@ -46,6 +56,7 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 - `events.jsonl` rotation now supports multiple backup generations (not only `.1`).
 - Time-health check now supports injected monotonic timestamp (`now_mono_ts`) for testability/DI.
 - Discord webhook retry logic now respects HTTP `429` `Retry-After` when present.
+- `validate-config` summary now surfaces shell opt-in checks and stronger warning patterns for risky combinations.
 
 ### Testing
 
@@ -62,6 +73,11 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 - Added state persistence/rotation tests:
   - `state.json` size guard and reboot-list trimming
   - multi-generation events rotation behavior
+- Added state corruption integration tests:
+  - corrupted `state.json` is quarantined
+  - cycle report switches to `limited_mode`
+  - restart/reboot actions are blocked in limited mode
+- Added command-execution safety test for shell syntax without explicit `*_use_shell=true`.
 
 ## [0.3.1] - 2026-04-10
 

@@ -41,9 +41,12 @@ class TargetConfig:
     output_file: Path | None
     output_max_age_sec: int | None
     command: str | None
+    command_use_shell: bool
     command_timeout_sec: int | None
     dns_check_command: str | None
+    dns_check_use_shell: bool
     gateway_check_command: str | None
+    gateway_check_use_shell: bool
     dependency_check_timeout_sec: int | None
     stats_file: Path | None
     stats_updated_max_age_sec: int | None
@@ -60,6 +63,7 @@ class TargetConfig:
     clock_skew_threshold_sec: int
     clock_anomaly_reboot_consecutive: int
     maintenance_mode_command: str | None
+    maintenance_mode_use_shell: bool
     maintenance_mode_timeout_sec: int | None
     maintenance_grace_sec: int | None
     restart_threshold: int | None
@@ -147,11 +151,34 @@ def _validate_target_rules(target: TargetConfig) -> None:
     if target.command_timeout_sec is not None and target.command_timeout_sec <= 0:
         raise ValueError(f"target '{target.name}': command_timeout_sec must be > 0")
 
+    if target.command_use_shell and target.command is None:
+        raise ValueError(
+            f"target '{target.name}': command_use_shell=true requires command to be set"
+        )
+
+    if target.dns_check_use_shell and target.dns_check_command is None:
+        raise ValueError(
+            f"target '{target.name}': dns_check_use_shell=true requires dns_check_command"
+        )
+
+    if target.gateway_check_use_shell and target.gateway_check_command is None:
+        raise ValueError(
+            (f"target '{target.name}': gateway_check_use_shell=true requires gateway_check_command")
+        )
+
     if target.dependency_check_timeout_sec is not None and target.dependency_check_timeout_sec <= 0:
         raise ValueError(f"target '{target.name}': dependency_check_timeout_sec must be > 0")
 
     if target.maintenance_mode_timeout_sec is not None and target.maintenance_mode_timeout_sec <= 0:
         raise ValueError(f"target '{target.name}': maintenance_mode_timeout_sec must be > 0")
+
+    if target.maintenance_mode_use_shell and target.maintenance_mode_command is None:
+        raise ValueError(
+            (
+                f"target '{target.name}': maintenance_mode_use_shell=true requires "
+                "maintenance_mode_command"
+            )
+        )
 
     if target.maintenance_grace_sec is not None and target.maintenance_grace_sec < 0:
         raise ValueError(f"target '{target.name}': maintenance_grace_sec must be >= 0")
@@ -391,9 +418,12 @@ def load_config(path: Path) -> AppConfig:
             output_file=_optional_path(item, "output_file"),
             output_max_age_sec=_optional_int(item, "output_max_age_sec"),
             command=_optional_str(item, "command"),
+            command_use_shell=_optional_bool(item, "command_use_shell", False),
             command_timeout_sec=_optional_int(item, "command_timeout_sec"),
             dns_check_command=_optional_str(item, "dns_check_command"),
+            dns_check_use_shell=_optional_bool(item, "dns_check_use_shell", False),
             gateway_check_command=_optional_str(item, "gateway_check_command"),
+            gateway_check_use_shell=_optional_bool(item, "gateway_check_use_shell", False),
             dependency_check_timeout_sec=_optional_int(item, "dependency_check_timeout_sec"),
             stats_file=_optional_path(item, "stats_file"),
             stats_updated_max_age_sec=_optional_int(item, "stats_updated_max_age_sec"),
@@ -426,6 +456,7 @@ def load_config(path: Path) -> AppConfig:
                 3,
             ),
             maintenance_mode_command=_optional_str(item, "maintenance_mode_command"),
+            maintenance_mode_use_shell=_optional_bool(item, "maintenance_mode_use_shell", False),
             maintenance_mode_timeout_sec=_optional_int(item, "maintenance_mode_timeout_sec"),
             maintenance_grace_sec=_optional_int(item, "maintenance_grace_sec"),
             restart_threshold=_optional_int(item, "restart_threshold"),

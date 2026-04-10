@@ -341,3 +341,72 @@ def test_full_cycle_unhealthy_target_restarts_and_logs(tmp_path: Path, monkeypat
     saved = json.loads(state_file.read_text(encoding="utf-8"))
     assert saved["targets"]["demo"]["consecutive_failures"] == 1
     assert saved["targets"]["demo"]["last_action"] == "restart"
+
+
+def test_state_corruption_enters_limited_mode_and_blocks_disruptive_actions(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    conf = tmp_path / "config.toml"
+    state_file = tmp_path / "state.json"
+    events_file = tmp_path / "events.jsonl"
+    monitor_stats_file = tmp_path / "stats.json"
+    _write(
+        conf,
+        f"""
+        [global]
+        state_file = "{state_file}"
+        state_lock_timeout_sec = 1
+        events_file = "{events_file}"
+        events_max_file_bytes = 100000
+        events_backup_generations = 2
+        monitor_stats_file = "{monitor_stats_file}"
+        monitor_stats_interval_sec = 30
+        restart_threshold = 1
+        reboot_threshold = 2
+        restart_cooldown_sec = 0
+        reboot_cooldown_sec = 0
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 0
+        default_command_timeout_sec = 2
+        loop_interval_sec = 30
+
+        [notify.discord]
+        enabled = false
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "demo"
+        services = ["demo.service"]
+        service_active = true
+        """,
+    )
+    cfg = load_config(conf)
+    state_file.write_text("{not-json", encoding="utf-8")
+
+    monkeypatch.setattr(cli.time, "time", lambda: 1234.0)
+    monkeypatch.setattr(cli.time, "monotonic", lambda: 567.0)
+
+    restart_calls: list[list[str]] = []
+
+    def fake_restart_services(services: list[str], dry_run: bool) -> bool:
+        restart_calls.append(["systemctl", "restart", *services])
+        return True
+
+    monkeypatch.setattr(recovery_module, "_restart_services", fake_restart_services)
+
+    rc, report = cli._run_cycle_collect(config=cfg, dry_run=False)
+    assert rc == 1
+    assert report["limited_mode"] is True
+    assert "invalid JSON" in str(report["state_issue"])
+    assert report["targets"]["demo"]["action"] == "warn"
+    assert restart_calls == []
+
+    backup_paths = sorted(tmp_path.glob("state.json.corrupt.*"))
+    assert backup_paths, "corrupted state should be quarantined"
+
+    events_text = events_file.read_text(encoding="utf-8")
+    assert '"kind": "state_corrupted"' in events_text
