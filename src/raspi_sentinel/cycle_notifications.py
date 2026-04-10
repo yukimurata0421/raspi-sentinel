@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from .checks import CheckResult
@@ -11,6 +12,7 @@ from .notify import (
     should_send_periodic_heartbeat,
 )
 from .runtime_state import safe_int, target_state
+from .status_events import record_notify_failure_event
 
 
 def schedule_followup(
@@ -48,9 +50,12 @@ def send_issue_notification(
     consecutive_failures: int,
     services: list[str],
     dry_run: bool,
+    events_file: Path | None = None,
+    events_max_bytes: int = 0,
+    now_ts: float | None = None,
 ) -> None:
     severity = "ERROR" if action == "reboot" else "WARN"
-    notifier.send_lines(
+    sent = notifier.send_lines(
         title=f"Issue detected: {target_name}",
         severity=severity,
         lines=[
@@ -62,14 +67,24 @@ def send_issue_notification(
             "follow_up=scheduled",
         ],
     )
+    if not sent and events_file is not None and now_ts is not None:
+        record_notify_failure_event(
+            events_file,
+            events_max_bytes,
+            f"issue_notification:{target_name}",
+            now_ts,
+        )
 
 
 def send_recovery_notification(
     notifier: DiscordNotifier,
     target_name: str,
     previous_failures: int,
+    events_file: Path | None = None,
+    events_max_bytes: int = 0,
+    now_ts: float | None = None,
 ) -> None:
-    notifier.send_lines(
+    sent = notifier.send_lines(
         title=f"Recovered: {target_name}",
         severity="INFO",
         lines=[
@@ -78,6 +93,13 @@ def send_recovery_notification(
             "action_taken=none",
         ],
     )
+    if not sent and events_file is not None and now_ts is not None:
+        record_notify_failure_event(
+            events_file,
+            events_max_bytes,
+            f"recovery_notification:{target_name}",
+            now_ts,
+        )
 
 
 def send_due_followups(
@@ -85,6 +107,8 @@ def send_due_followups(
     state: dict[str, Any],
     target_results: dict[str, CheckResult],
     now_ts: float,
+    events_file: Path | None = None,
+    events_max_bytes: int = 0,
 ) -> None:
     followups = state.setdefault("followups", {})
     if not isinstance(followups, dict):
@@ -131,6 +155,13 @@ def send_due_followups(
         )
         if sent:
             to_delete.append(target_name)
+        elif events_file is not None:
+            record_notify_failure_event(
+                events_file,
+                events_max_bytes,
+                f"followup:{target_name}",
+                now_ts,
+            )
 
     for target_name in to_delete:
         followups.pop(target_name, None)
@@ -141,6 +172,8 @@ def send_periodic_heartbeat(
     state: dict[str, Any],
     target_results: dict[str, CheckResult],
     now_ts: float,
+    events_file: Path | None = None,
+    events_max_bytes: int = 0,
 ) -> None:
     interval_sec = notifier.config.heartbeat_interval_sec
     if interval_sec <= 0:
@@ -168,3 +201,10 @@ def send_periodic_heartbeat(
     )
     if sent:
         mark_heartbeat_sent(state=state, now_ts=now_ts)
+    elif events_file is not None:
+        record_notify_failure_event(
+            events_file,
+            events_max_bytes,
+            "periodic_heartbeat",
+            now_ts,
+        )

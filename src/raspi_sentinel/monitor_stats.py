@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+from datetime import datetime
 import json
 import logging
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from .checks import CheckFailure, CheckResult
 from .config import AppConfig
 from .runtime_state import safe_int, safe_optional_int
+from .state_helpers import write_json_atomic
 from .status_events import classify_target_reason, classify_target_status
 
 LOG = logging.getLogger(__name__)
@@ -53,19 +54,6 @@ def apply_records_progress_check(
     result.healthy = not result.failures
 
 
-def _write_json_atomic(path: Path, payload: dict[str, Any]) -> bool:
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = path.with_suffix(path.suffix + ".tmp")
-        text = json.dumps(payload, sort_keys=True, indent=2)
-        tmp_path.write_text(text + "\n", encoding="utf-8")
-        tmp_path.replace(path)
-    except OSError as exc:
-        LOG.error("failed to write monitor stats %s: %s", path, exc)
-        return False
-    return True
-
-
 def build_monitor_stats_snapshot(
     config: AppConfig,
     state: dict[str, Any],
@@ -92,12 +80,8 @@ def build_monitor_stats_snapshot(
             status = str(target_state.get("last_status", "unknown"))
             reason = str(target_state.get("last_reason", "unknown"))
         else:
-            status = classify_target_status(
-                result=result, target_state=state_targets.get(target.name, {})
-            )
-            reason = classify_target_reason(
-                result=result, target_state=state_targets.get(target.name, {})
-            )
+            status = classify_target_status(result=result, target_state=state_targets.get(target.name, {}))
+            reason = classify_target_reason(result=result, target_state=state_targets.get(target.name, {}))
 
         counts[status] = counts.get(status, 0) + 1
         target_state = state_targets.get(target.name, {})
@@ -186,6 +170,6 @@ def maybe_write_monitor_stats(
     if not should_write:
         return
 
-    if _write_json_atomic(config.global_config.monitor_stats_file, snapshot):
+    if write_json_atomic(config.global_config.monitor_stats_file, snapshot, indent=2):
         monitor_state["last_written_ts"] = now_ts
         monitor_state["last_snapshot_signature"] = signature

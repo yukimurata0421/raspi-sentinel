@@ -1,17 +1,19 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 import logging
 import os
 import platform
 import shutil
+import time
+from typing import Any
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
-from typing import Any
 
 from .checks import CheckResult
 from .config import DiscordNotifyConfig
+from ._version import __version__
 
 LOG = logging.getLogger(__name__)
 
@@ -82,12 +84,23 @@ class DiscordNotifier:
         }
 
         data = json.dumps(payload).encode("utf-8")
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            ok = self._post_discord_payload(data)
+            if ok:
+                return True
+            if attempt < max_attempts - 1:
+                time.sleep(0.5 * (attempt + 1))
+                LOG.warning("discord webhook send retry attempt %s/%s", attempt + 2, max_attempts)
+        return False
+
+    def _post_discord_payload(self, data: bytes) -> bool:
         req = urllib.request.Request(
             self.config.webhook_url or "",
             data=data,
             headers={
                 "Content-Type": "application/json",
-                "User-Agent": "raspi-sentinel/0.1 (+https://local.raspi-sentinel)",
+                "User-Agent": f"raspi-sentinel/{__version__} (+https://local.raspi-sentinel)",
             },
             method="POST",
         )
@@ -118,7 +131,12 @@ class DiscordNotifier:
 def format_failures(result: CheckResult) -> str:
     if result.healthy:
         return "none"
-    return "; ".join(f"{f.check}: {f.message}" for f in result.failures)
+    pr = result.observations.get("policy_reason")
+    if isinstance(pr, str) and pr.strip():
+        return pr
+    if result.failures:
+        return "; ".join(f"{f.check}: {f.message}" for f in result.failures)
+    return "unhealthy"
 
 
 def should_send_periodic_heartbeat(

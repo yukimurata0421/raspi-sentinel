@@ -1,31 +1,26 @@
 from __future__ import annotations
 
+from email.utils import parsedate_to_datetime
 import logging
 import subprocess
 import time
-from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib import error, request
 
 from .checks import CheckResult
+from ._version import __version__
 from .config import TargetConfig
 from .runtime_state import safe_int
+from .state_helpers import safe_bool, safe_float
 
 LOG = logging.getLogger(__name__)
-
-
-def _safe_float(value: Any) -> float | None:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def _fetch_http_date_epoch(url: str, timeout_sec: int) -> tuple[float | None, str | None]:
     req = request.Request(
         url=url,
         method="HEAD",
-        headers={"User-Agent": "raspi-sentinel/0.1"},
+        headers={"User-Agent": f"raspi-sentinel/{__version__}"},
     )
     try:
         with request.urlopen(req, timeout=timeout_sec) as response:
@@ -72,12 +67,6 @@ def _query_ntp_sync_ok(timeout_sec: int = 3) -> bool | None:
     return None
 
 
-def _safe_bool(value: Any) -> bool | None:
-    if isinstance(value, bool):
-        return value
-    return None
-
-
 def apply_time_health_checks(
     target: TargetConfig,
     target_state: dict[str, Any],
@@ -93,8 +82,8 @@ def apply_time_health_checks(
     result.observations["monotonic_sec"] = mono_now
     result.observations["clock_skew_threshold_sec"] = target.clock_skew_threshold_sec
 
-    prev_wall = _safe_float(target_state.get("clock_prev_wall_time_epoch"))
-    prev_mono = _safe_float(target_state.get("clock_prev_monotonic_sec"))
+    prev_wall = safe_float(target_state.get("clock_prev_wall_time_epoch"))
+    prev_mono = safe_float(target_state.get("clock_prev_monotonic_sec"))
     freeze_detected = False
     jump_detected = False
     skew_detected = False
@@ -162,11 +151,11 @@ def apply_time_health_checks(
     target_state["clock_anomaly_consecutive"] = clock_anomaly_consecutive
     result.observations["clock_anomaly_consecutive"] = clock_anomaly_consecutive
 
-    dns_ok = _safe_bool(result.observations.get("dns_ok"))
-    gateway_ok = _safe_bool(result.observations.get("gateway_ok"))
+    dns_ok = safe_bool(result.observations.get("dns_ok"))
+    gateway_ok = safe_bool(result.observations.get("gateway_ok"))
     if target.http_time_probe_url and http_probe_ok is None:
-        http_probe_ok = _safe_bool(result.observations.get("http_probe_ok"))
-    skew_abs = abs(_safe_float(result.observations.get("http_time_skew_sec")) or 0.0)
+        http_probe_ok = safe_bool(result.observations.get("http_probe_ok"))
+    skew_abs = abs(safe_float(result.observations.get("http_time_skew_sec")) or 0.0)
 
     clock_frozen_confirmed = (
         consecutive_clock_freeze_count >= target.clock_anomaly_reboot_consecutive
@@ -203,11 +192,7 @@ def apply_time_health_checks(
         reason = "gateway_error"
     elif dns_ok is False and gateway_ok is True:
         reason = "dns_error"
-    elif (
-        ntp_sync_ok is False
-        and target.http_time_probe_url
-        and skew_abs < target.clock_skew_threshold_sec
-    ):
+    elif ntp_sync_ok is False and target.http_time_probe_url and skew_abs < target.clock_skew_threshold_sec:
         reason = "time_sync_broken"
     elif insufficient_interval:
         reason = "insufficient_interval"

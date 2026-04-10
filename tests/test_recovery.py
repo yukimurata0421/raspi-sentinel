@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 from typing import Any
+from pathlib import Path
 
 from raspi_sentinel.checks import CheckFailure, CheckResult
 from raspi_sentinel.config import GlobalConfig, TargetConfig
@@ -13,6 +13,7 @@ def _global() -> GlobalConfig:
     return GlobalConfig(
         state_file=Path("/tmp/raspi-sentinel-test-state.json"),
         events_file=Path("/tmp/raspi-sentinel-test-events.jsonl"),
+        events_max_file_bytes=5_000_000,
         monitor_stats_file=Path("/tmp/raspi-sentinel-test-monitor-stats.json"),
         monitor_stats_interval_sec=30,
         restart_threshold=1,
@@ -81,9 +82,7 @@ def test_systemd_failure_triggers_restart(monkeypatch: Any) -> None:
     )
     state: dict[str, Any] = {}
     outcome = apply_recovery(
-        target=_target(
-            services=["demo.service"], service_active=True, restart_threshold=1, reboot_threshold=5
-        ),
+        target=_target(services=["demo.service"], service_active=True, restart_threshold=1, reboot_threshold=5),
         check_result=result,
         global_config=_global(),
         state=state,

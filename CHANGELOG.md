@@ -2,9 +2,41 @@
 
 All notable changes to this project are documented in this file.
 
-## [0.2.0] - 2026-04-10 (Unreleased)
+Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
+
+## [0.3.0] - 2026-04-10
 
 ### Added
+
+- **`policy` module**: `PolicySnapshot` and `classify_target_policy()` as the single implementation of semantic status (`ok` / `degraded` / `failed`) and `reason`.
+- **`src/raspi_sentinel/_version.py`**: single source of truth for `__version__`; `pyproject.toml` uses dynamic version from this attribute.
+- **`docs/VERSIONING.md`**: versioning policy, relation to git tags, and release checklist.
+- Config: `events_max_file_bytes` for size-based rotation of `events.jsonl` (default 5 MiB; `0` disables).
+- Config validation: `service_active = true` requires at least one entry in `services`.
+- Config load warning when the config file is group/world-writable.
+- `state_helpers` (`safe_*`, atomic JSON write, optional events file rotation).
+- `state_models.TargetState` for typed read paths (e.g. consecutive failures).
+- Discord webhook retries (limited attempts with backoff) and `notify_delivery_failed` events in `events.jsonl` when delivery fails.
+- Tests for policy, classification, and recovery time injection.
+
+### Changed
+
+- **Policy alignment**: `apply_policy_to_result(result, policy: PolicySnapshot)`; `result.healthy` follows policy `is_ok`; notifications use `policy_reason` in messages when present.
+- **Time injection**: `run_checks(..., now_wall_ts=...)` and `apply_recovery(..., now_ts=...)` use one wall-clock value per cycle for consistent ages and recovery timestamps (tests use explicit `now_ts` instead of monkeypatching private clocks).
+- README: security model (`shell=True`, trusted config, permissions).
+- `status_events` delegates classification to `policy`; duplicate classification logic removed.
+- User-Agent strings for HTTP clients derive from `__version__` (no hard-coded `0.1`).
+
+### Notes
+
+- A git tag **`v0.2.0`** may exist from an earlier snapshot; there was no formal GitHub Release / PyPI release aligned with that tag. **0.3.0** is the first version where packaging metadata, changelog, and runtime version strings are aligned for distribution. Use tag **`v0.3.0`** for the next release.
+
+## [0.2.0] - 2026-04-10 (snapshot only; superseded by 0.3.0)
+
+Content below reflects the feature set accumulated up to the `v0.2.0` tag; for releases, prefer **0.3.0** and [docs/VERSIONING.md](docs/VERSIONING.md).
+
+### Added
+
 - Clock anomaly monitoring based on `time.time()` vs `time.monotonic()` progression.
 - Optional HTTP `Date` header probe and skew observation (`http_time_skew_sec`).
 - NTP sync state observation via `timedatectl` (`ntp_sync_ok`).
@@ -14,6 +46,7 @@ All notable changes to this project are documented in this file.
 - MIT `LICENSE` file and README license section.
 
 ### Changed
+
 - Refactored CLI and monitoring responsibilities into smaller modules:
   - `runtime_state.py`
   - `maintenance.py`
@@ -42,13 +75,15 @@ All notable changes to this project are documented in this file.
 - Added implementation policy document: `docs/time-health-decision-table.md`.
 
 ### Testing
+
 - Added clock anomaly tests and recovery-branch tests.
 - Added coverage for HTTP Date parsing/error branches, NTP query branches, confirmed clock-freeze reboot gating, and new configuration validation (`check_interval_threshold_sec`).
 - CI/coverage expectations kept aligned with policy-driven checks and recovery logic.
 
-## [0.1.0] - Baseline (Current GitHub state)
+## [0.1.0] - Baseline (initial public layout)
 
 ### Added
+
 - Initial standalone `raspi-sentinel` implementation for Raspberry Pi service self-healing.
 - Rule-based checks for service liveness, heartbeat/output freshness, command checks, semantic stats, and dependency checks (DNS/gateway).
 - Staged recovery flow (`warn -> restart -> reboot`) with cooldown and reboot-window safeguards.

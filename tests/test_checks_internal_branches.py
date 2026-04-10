@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import json
-import subprocess
 from datetime import datetime, timezone
+import json
 from pathlib import Path
+import subprocess
 from typing import Any
 
 from raspi_sentinel import checks
@@ -116,9 +116,7 @@ def test_service_active_check_all_branches(monkeypatch: Any) -> None:
     assert checks._service_active_check("svc") is not None
 
     def inactive_run(*_: Any, **__: Any) -> Any:
-        return subprocess.CompletedProcess(
-            args=["systemctl"], returncode=3, stdout="inactive", stderr=""
-        )
+        return subprocess.CompletedProcess(args=["systemctl"], returncode=3, stdout="inactive", stderr="")
 
     monkeypatch.setattr(checks.subprocess, "run", inactive_run)
     assert checks._service_active_check("svc") is not None
@@ -295,5 +293,6 @@ def test_stats_checks_handles_none_payload(monkeypatch: Any) -> None:
         target=_target(stats_file=Path("/tmp/unused.json"), stats_updated_max_age_sec=10),
         failures=failures,
         observations=obs,
+        now_wall_ts=1_000_000.0,
     )
     assert failures == []

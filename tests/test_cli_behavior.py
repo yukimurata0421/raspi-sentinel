@@ -14,32 +14,21 @@ def _write(path: Path, text: str) -> None:
 
 
 def test_classify_status_prioritizes_dependency_types() -> None:
-    assert (
-        cli._classify_target_status(CheckResult("t", False, [CheckFailure("dependency_dns", "x")]))
-        == "degraded"
-    )
-    assert (
-        cli._classify_target_reason(CheckResult("t", False, [CheckFailure("dependency_dns", "x")]))
-        == "dns_error"
-    )
-    assert (
-        cli._classify_target_status(
-            CheckResult("t", False, [CheckFailure("dependency_gateway", "x")])
-        )
-        == "degraded"
-    )
-    assert (
-        cli._classify_target_reason(
-            CheckResult("t", False, [CheckFailure("dependency_gateway", "x")])
-        )
-        == "gateway_error"
-    )
-    assert (
-        cli._classify_target_status(
-            CheckResult("t", False, [CheckFailure("semantic_last_success_ts", "x")])
-        )
-        == "degraded"
-    )
+    assert cli._classify_target_status(
+        CheckResult("t", False, [CheckFailure("dependency_dns", "x")])
+    ) == "degraded"
+    assert cli._classify_target_reason(
+        CheckResult("t", False, [CheckFailure("dependency_dns", "x")])
+    ) == "dns_error"
+    assert cli._classify_target_status(
+        CheckResult("t", False, [CheckFailure("dependency_gateway", "x")])
+    ) == "degraded"
+    assert cli._classify_target_reason(
+        CheckResult("t", False, [CheckFailure("dependency_gateway", "x")])
+    ) == "gateway_error"
+    assert cli._classify_target_status(
+        CheckResult("t", False, [CheckFailure("semantic_last_success_ts", "x")])
+    ) == "degraded"
 
 
 def test_run_cycle_writes_monitor_stats_and_events(tmp_path: Path, monkeypatch: Any) -> None:

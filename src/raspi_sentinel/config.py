@@ -1,14 +1,19 @@
 from __future__ import annotations
 
-import tomllib
 from dataclasses import dataclass
+import logging
 from pathlib import Path
+import stat
+import tomllib
+
+LOG = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
 class GlobalConfig:
     state_file: Path
     events_file: Path
+    events_max_file_bytes: int
     monitor_stats_file: Path
     monitor_stats_interval_sec: int
     restart_threshold: int
@@ -165,17 +170,21 @@ def _validate_target_rules(target: TargetConfig) -> None:
     if target.stats_last_input_max_age_sec is not None and target.stats_last_input_max_age_sec <= 0:
         raise ValueError(f"target '{target.name}': stats_last_input_max_age_sec must be > 0")
 
-    if (
-        target.stats_last_success_max_age_sec is not None
-        and target.stats_last_success_max_age_sec <= 0
-    ):
+    if target.stats_last_success_max_age_sec is not None and target.stats_last_success_max_age_sec <= 0:
         raise ValueError(f"target '{target.name}': stats_last_success_max_age_sec must be > 0")
 
     if target.stats_records_stall_cycles is not None and target.stats_records_stall_cycles <= 0:
         raise ValueError(f"target '{target.name}': stats_records_stall_cycles must be > 0")
 
+    if target.service_active and not target.services:
+        raise ValueError(
+            f"target '{target.name}': when service_active=true, services must list at least one unit"
+        )
+
     if target.wall_clock_freeze_min_monotonic_sec <= 0:
-        raise ValueError(f"target '{target.name}': wall_clock_freeze_min_monotonic_sec must be > 0")
+        raise ValueError(
+            f"target '{target.name}': wall_clock_freeze_min_monotonic_sec must be > 0"
+        )
 
     if target.check_interval_threshold_sec <= 0:
         raise ValueError(f"target '{target.name}': check_interval_threshold_sec must be > 0")
@@ -230,7 +239,22 @@ def _validate_target_rules(target: TargetConfig) -> None:
         )
 
 
+def _warn_config_permissions(path: Path) -> None:
+    try:
+        st = path.stat()
+    except OSError:
+        return
+    mode = stat.S_IMODE(st.st_mode)
+    if mode & (stat.S_IWGRP | stat.S_IWOTH):
+        LOG.warning(
+            "config file %s is group/world-writable (mode=%04o); use a trusted path and chmod go-w",
+            path,
+            mode,
+        )
+
+
 def load_config(path: Path) -> AppConfig:
+    _warn_config_permissions(path)
     with path.open("rb") as fh:
         raw = tomllib.load(fh)
 
@@ -241,9 +265,8 @@ def load_config(path: Path) -> AppConfig:
     global_config = GlobalConfig(
         state_file=Path(global_raw.get("state_file", "/var/lib/raspi-sentinel/state.json")),
         events_file=Path(global_raw.get("events_file", "/var/lib/raspi-sentinel/events.jsonl")),
-        monitor_stats_file=Path(
-            global_raw.get("monitor_stats_file", "/var/lib/raspi-sentinel/stats.json")
-        ),
+        events_max_file_bytes=_require_int(global_raw, "events_max_file_bytes", 5_000_000),
+        monitor_stats_file=Path(global_raw.get("monitor_stats_file", "/var/lib/raspi-sentinel/stats.json")),
         monitor_stats_interval_sec=_require_int(global_raw, "monitor_stats_interval_sec", 30),
         restart_threshold=_require_int(global_raw, "restart_threshold", 3),
         reboot_threshold=_require_int(global_raw, "reboot_threshold", 6),
@@ -272,6 +295,8 @@ def load_config(path: Path) -> AppConfig:
         raise ValueError("global loop_interval_sec must be > 0")
     if global_config.monitor_stats_interval_sec <= 0:
         raise ValueError("global monitor_stats_interval_sec must be > 0")
+    if global_config.events_max_file_bytes < 0:
+        raise ValueError("global events_max_file_bytes must be >= 0 (0 disables events.jsonl size rotation)")
 
     notify_raw = raw.get("notify", {})
     if not isinstance(notify_raw, dict):
@@ -385,14 +410,12 @@ def load_config(path: Path) -> AppConfig:
 
         if target.command_timeout_sec is None and target.command is not None:
             target.command_timeout_sec = global_config.default_command_timeout_sec
-        if target.dependency_check_timeout_sec is None and (
-            target.dns_check_command is not None or target.gateway_check_command is not None
+        if (
+            target.dependency_check_timeout_sec is None
+            and (target.dns_check_command is not None or target.gateway_check_command is not None)
         ):
             target.dependency_check_timeout_sec = global_config.default_command_timeout_sec
-        if (
-            target.maintenance_mode_timeout_sec is None
-            and target.maintenance_mode_command is not None
-        ):
+        if target.maintenance_mode_timeout_sec is None and target.maintenance_mode_command is not None:
             target.maintenance_mode_timeout_sec = global_config.default_command_timeout_sec
 
         _validate_target_rules(target)

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
 import subprocess
 import time
-from dataclasses import dataclass
 from typing import Any
 
 from .checks import CheckResult
@@ -24,10 +24,6 @@ CLOCK_FAILURE_CHECKS = frozenset(
 class RecoveryOutcome:
     action: str
     requested_reboot: bool
-
-
-def _now() -> float:
-    return time.time()
 
 
 def _get_uptime_sec() -> float:
@@ -56,9 +52,9 @@ def _thresholds(target: TargetConfig, global_config: GlobalConfig) -> tuple[int,
     return restart_threshold, reboot_threshold
 
 
-def _record_action(target_state: dict[str, Any], action: str) -> None:
+def _record_action(target_state: dict[str, Any], action: str, now_ts: float) -> None:
     target_state["last_action"] = action
-    target_state["last_action_ts"] = _now()
+    target_state["last_action_ts"] = now_ts
 
 
 def _within_cooldown(last_ts: float | int | None, cooldown_sec: int, now_ts: float) -> bool:
@@ -93,9 +89,7 @@ def _clock_reboot_confirmed(result: CheckResult) -> bool:
     return result.observations.get("clock_frozen_confirmed") is True
 
 
-def _can_reboot(
-    global_config: GlobalConfig, state: dict[str, Any], now_ts: float
-) -> tuple[bool, str]:
+def _can_reboot(global_config: GlobalConfig, state: dict[str, Any], now_ts: float) -> tuple[bool, str]:
     uptime = _get_uptime_sec()
     if uptime < global_config.min_uptime_for_reboot_sec:
         return (
@@ -125,7 +119,10 @@ def _can_reboot(
         if _within_cooldown(last_ts, global_config.reboot_cooldown_sec, now_ts):
             return (
                 False,
-                (f"reboot blocked by cooldown: cooldown={global_config.reboot_cooldown_sec}s"),
+                (
+                    "reboot blocked by cooldown: "
+                    f"cooldown={global_config.reboot_cooldown_sec}s"
+                ),
             )
 
     if len(filtered) >= global_config.max_reboots_in_window:
@@ -211,22 +208,19 @@ def apply_recovery(
     global_config: GlobalConfig,
     state: dict[str, Any],
     dry_run: bool,
+    now_ts: float | None = None,
 ) -> RecoveryOutcome:
     target_state = _target_state(state, target.name)
-    now_ts = _now()
+    effective_now = time.time() if now_ts is None else now_ts
     clock_reboot_confirmed = _clock_reboot_confirmed(check_result)
 
     if check_result.healthy and not clock_reboot_confirmed:
         previous = int(target_state.get("consecutive_failures", 0) or 0)
         target_state["consecutive_failures"] = 0
-        target_state["last_healthy_ts"] = now_ts
+        target_state["last_healthy_ts"] = effective_now
         if previous > 0:
-            LOG.info(
-                "target '%s' recovered naturally, failure counter reset (%d -> 0)",
-                target.name,
-                previous,
-            )
-        _record_action(target_state, "none")
+            LOG.info("target '%s' recovered naturally, failure counter reset (%d -> 0)", target.name, previous)
+        _record_action(target_state, "none", effective_now)
         return RecoveryOutcome(action="none", requested_reboot=False)
 
     failures_text = "; ".join(f"{f.check}: {f.message}" for f in check_result.failures).strip()
@@ -234,11 +228,11 @@ def apply_recovery(
         failures_text = str(check_result.observations.get("policy_reason", "unhealthy"))
     consecutive = int(target_state.get("consecutive_failures", 0) or 0) + 1
     target_state["consecutive_failures"] = consecutive
-    target_state["last_failure_ts"] = now_ts
+    target_state["last_failure_ts"] = effective_now
     target_state["last_failure_reason"] = failures_text
 
     if clock_reboot_confirmed:
-        can_reboot, guard_reason = _can_reboot(global_config, state, now_ts)
+        can_reboot, guard_reason = _can_reboot(global_config, state, effective_now)
         if can_reboot:
             LOG.error(
                 "target '%s': confirmed clock freeze anomaly; requesting reboot. reason=%s",
@@ -248,8 +242,8 @@ def apply_recovery(
             reboot_ok = _trigger_reboot(dry_run=dry_run, reason=failures_text)
             if reboot_ok:
                 reboots = state.setdefault("reboots", [])
-                reboots.append({"ts": now_ts, "target": target.name, "reason": failures_text})
-                _record_action(target_state, "reboot")
+                reboots.append({"ts": effective_now, "target": target.name, "reason": failures_text})
+                _record_action(target_state, "reboot", effective_now)
                 return RecoveryOutcome(action="reboot", requested_reboot=True)
             LOG.error("target '%s': confirmed clock reboot request failed", target.name)
         else:
@@ -258,7 +252,7 @@ def apply_recovery(
                 target.name,
                 guard_reason,
             )
-        _record_action(target_state, "warn")
+        _record_action(target_state, "warn", effective_now)
         return RecoveryOutcome(action="warn", requested_reboot=False)
 
     restart_threshold, reboot_threshold = _thresholds(target, global_config)
@@ -282,7 +276,7 @@ def apply_recovery(
             "target '%s': DNS-only dependency failure detected; skip restart/reboot and keep warning state",
             target.name,
         )
-        _record_action(target_state, "warn")
+        _record_action(target_state, "warn", effective_now)
         return RecoveryOutcome(action="warn", requested_reboot=False)
 
     if consecutive >= reboot_threshold:
@@ -300,7 +294,7 @@ def apply_recovery(
                 target.name,
             )
         else:
-            can_reboot, guard_reason = _can_reboot(global_config, state, now_ts)
+            can_reboot, guard_reason = _can_reboot(global_config, state, effective_now)
             if can_reboot:
                 LOG.error(
                     "target '%s': reboot threshold reached. requesting reboot. reason=%s",
@@ -310,12 +304,10 @@ def apply_recovery(
                 reboot_ok = _trigger_reboot(dry_run=dry_run, reason=failures_text)
                 if reboot_ok:
                     reboots = state.setdefault("reboots", [])
-                    reboots.append({"ts": now_ts, "target": target.name, "reason": failures_text})
-                    _record_action(target_state, "reboot")
+                    reboots.append({"ts": effective_now, "target": target.name, "reason": failures_text})
+                    _record_action(target_state, "reboot", effective_now)
                     return RecoveryOutcome(action="reboot", requested_reboot=True)
-                LOG.error(
-                    "target '%s': reboot request failed, falling back to restart path", target.name
-                )
+                LOG.error("target '%s': reboot request failed, falling back to restart path", target.name)
             else:
                 LOG.error("target '%s': reboot blocked by safeguard: %s", target.name, guard_reason)
 
@@ -323,20 +315,20 @@ def apply_recovery(
         if last_action == "restart" and _within_cooldown(
             last_action_ts,
             global_config.restart_cooldown_sec,
-            now_ts,
+            effective_now,
         ):
             LOG.warning(
                 "target '%s': restart suppressed by cooldown (%ss)",
                 target.name,
                 global_config.restart_cooldown_sec,
             )
-            _record_action(target_state, "warn")
+            _record_action(target_state, "warn", effective_now)
             return RecoveryOutcome(action="warn", requested_reboot=False)
 
         restarted = _restart_services(target.services, dry_run=dry_run)
         action = "restart" if restarted else "warn"
-        _record_action(target_state, action)
+        _record_action(target_state, action, effective_now)
         return RecoveryOutcome(action=action, requested_reboot=False)
 
-    _record_action(target_state, "warn")
+    _record_action(target_state, "warn", effective_now)
     return RecoveryOutcome(action="warn", requested_reboot=False)

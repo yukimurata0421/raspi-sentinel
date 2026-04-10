@@ -3,6 +3,8 @@
 state_file = "/var/lib/raspi-sentinel/state.json"
 # Lightweight transition event log
 events_file = "/var/lib/raspi-sentinel/events.jsonl"
+# Rotate events.jsonl when file size exceeds this (bytes). 0 = disable rotation.
+events_max_file_bytes = 5000000
 # raspi-sentinel's own health snapshot
 monitor_stats_file = "/var/lib/raspi-sentinel/stats.json"
 monitor_stats_interval_sec = 30

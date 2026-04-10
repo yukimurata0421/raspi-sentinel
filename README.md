@@ -4,6 +4,15 @@
 
 ## Responsibility Boundary
 
+## Security model (read this)
+
+`raspi-sentinel` is designed for **trusted operator-controlled configuration** on a single machine (for example `/etc/raspi-sentinel/config.toml` owned by root).
+
+- **Not** a multi-tenant or internet-facing control plane: do not pass untrusted user input into config fields.
+- **Shell commands** from the config (`command`, `dns_check_command`, `gateway_check_command`, `maintenance_mode_command`) are executed with `subprocess` **`shell=True`**. Treat those strings like shell scripts: only trusted admins should edit them.
+- When running as **root**, restrict config file permissions (for example `chmod 600` / `root:root`) so webhook URLs and commands are not exposed to other local users.
+- On load, if the config file is **group- or world-writable**, a **warning** is logged (unsafe in shared-admin environments).
+
 ## Core (this project)
 
 - logical health monitoring while the OS is alive
@@ -47,8 +56,10 @@ Many Raspberry Pi failures are logical stalls, not full kernel hangs:
   - reboot history (loop guard)
   - notification follow-up schedule
 - **Event log** (`/var/lib/raspi-sentinel/events.jsonl` by default):
-  - `status_change` on transitions only
-  - `action_taken` for restart/reboot only
+  - status/reason transitions only (no duplicate lines while state unchanged)
+  - `action` field for `restart` / `reboot` outcomes
+  - optional `kind: notify_delivery_failed` when Discord delivery fails (after retries)
+  - optional **size-based rotation** via `[global].events_max_file_bytes` (renames to `events.jsonl.1` when exceeded; `0` disables)
 - **Monitor snapshot** (`/var/lib/raspi-sentinel/stats.json` by default):
   - raspi-sentinel writes its own current aggregate status
   - updated every 30 seconds (or immediately on status change)
@@ -176,7 +187,10 @@ Set `heartbeat_interval_sec = 0` to disable periodic healthy-state notifications
 [global]
 monitor_stats_file = "/var/lib/raspi-sentinel/stats.json"
 monitor_stats_interval_sec = 30
+events_max_file_bytes = 5000000
 ```
+
+Set `events_max_file_bytes = 0` to disable rotation of `events.jsonl`.
 
 Example output:
 
@@ -312,6 +326,12 @@ python -m coverage report \
   --include="src/raspi_sentinel/checks.py,src/raspi_sentinel/recovery.py" \
   --fail-under=90
 ```
+
+## Versioning
+
+- **Current release line:** **0.3.0** (see `CHANGELOG.md`).
+- **Single version string:** `src/raspi_sentinel/_version.py` (`raspi_sentinel.__version__`). `pyproject.toml` reads it at build time (no duplicate number).
+- **Git tags:** use `v0.3.0` style for releases. An older **`v0.2.0`** tag may exist as a snapshot; formal distribution is aligned from **0.3.0** onward — details in [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ## License
 

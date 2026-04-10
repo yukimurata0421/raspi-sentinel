@@ -93,7 +93,7 @@ def test_discord_enabled_requires_webhook(tmp_path: Path) -> None:
 
 def test_target_requires_at_least_one_rule(tmp_path: Path) -> None:
     conf = tmp_path / "config.toml"
-    _write(conf, _base_config(extra_target=""))
+    _write(conf, _base_config(extra_target=''))
     with pytest.raises(ValueError, match="at least one rule is required"):
         load_config(conf)
 
@@ -109,7 +109,7 @@ def test_target_can_use_time_health_as_single_rule(tmp_path: Path) -> None:
     conf = tmp_path / "config.toml"
     _write(
         conf,
-        _base_config(extra_target="time_health_enabled = true"),
+        _base_config(extra_target='time_health_enabled = true'),
     )
     cfg = load_config(conf)
     assert cfg.targets[0].time_health_enabled is True
@@ -119,9 +119,7 @@ def test_check_interval_threshold_must_be_positive(tmp_path: Path) -> None:
     conf = tmp_path / "config.toml"
     _write(
         conf,
-        _base_config(
-            extra_target="time_health_enabled = true\n    check_interval_threshold_sec = 0"
-        ),
+        _base_config(extra_target='time_health_enabled = true\n    check_interval_threshold_sec = 0'),
     )
     with pytest.raises(ValueError, match="check_interval_threshold_sec must be > 0"):
         load_config(conf)
