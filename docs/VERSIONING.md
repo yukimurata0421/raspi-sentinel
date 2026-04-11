@@ -22,11 +22,11 @@ This project uses **SemVer 2.0** (`MAJOR.MINOR.PATCH`):
 
 ## Git tags
 
-Release tags use the `v` prefix (example: `v0.4.0`), matching the `__version__` string without the prefix.
+Release tags use the `v` prefix (example: `v0.4.1`), matching the `__version__` string without the prefix.
 
 ## Historical note
 
-A lightweight git tag **`v0.2.0`** may exist from an intermediate snapshot. There was **no formal GitHub Release / PyPI publication** tied to that tag. **0.4.x** is the current release line where packaging, changelog, and runtime strings are aligned for distribution; use **`v0.4.0`** (or current `__version__`) for the release tag.
+A lightweight git tag **`v0.2.0`** may exist from an intermediate snapshot. There was **no formal GitHub Release / PyPI publication** tied to that tag. **0.4.x** is the current release line where packaging, changelog, and runtime strings are aligned for distribution; use **`v0.4.1`** (or current `__version__`) for the release tag.
 
 ## Release checklist
 

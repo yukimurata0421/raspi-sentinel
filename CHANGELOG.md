@@ -6,6 +6,10 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ## [Unreleased]
 
+No notable changes yet.
+
+## [0.4.1] - 2026-04-11
+
 ### Added
 
 - `mypy --strict` support:
@@ -33,6 +37,12 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ### Testing
 
+- Added operational boundary tests for high-risk scenarios:
+  - corrupted state + limited mode + notify interaction
+  - reboot guard boundary values (uptime/cooldown/window cap)
+  - shell opt-in misconfiguration behavior in full cycle execution
+  - state lock timeout behavior for timer/service-visible return/report
+  - state migration/backward compatibility from legacy persisted shapes
 - Verified full local gate:
   - `ruff check`
   - `ruff format --check`
