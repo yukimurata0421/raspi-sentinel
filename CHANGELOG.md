@@ -8,6 +8,21 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 No notable changes yet.
 
+## [0.4.2] - 2026-04-12
+
+### Changed
+
+- Reworked `README.md` for clearer operator-first flow:
+  - tightened project scope and recovery boundary explanation
+  - clarified check categories and staged recovery behavior
+  - refreshed quick-start and documentation navigation
+- Added `docs/images/operator-topology-view.png` and referenced it from README as a downstream `stats.json` consumer example.
+- Updated docs index release-notes pointer to the latest release note entry.
+
+### Documentation
+
+- Aligned version policy references to `0.4.2` across version-related docs and metadata.
+
 ## [0.4.1] - 2026-04-11
 
 ### Added
