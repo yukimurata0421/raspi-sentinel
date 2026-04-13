@@ -6,6 +6,8 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-04-13
+
 ### Added
 
 - Public-layer secret guardrails:
