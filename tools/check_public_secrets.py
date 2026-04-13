@@ -14,6 +14,7 @@ ASSIGNMENT_RE = re.compile(
 )
 
 SKIP_DIRS = {".git", ".venv", "build", "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache"}
+SKIP_TOP_LEVEL = {"tests"}
 
 
 def _is_safe_placeholder(value: str) -> bool:
@@ -47,6 +48,9 @@ def _tracked_files(root: Path) -> list[Path]:
     for line in cp.stdout.splitlines():
         p = root / line.strip()
         if p.is_file():
+            rel_parts = p.relative_to(root).parts
+            if rel_parts and rel_parts[0] in SKIP_TOP_LEVEL:
+                continue
             files.append(p)
     return files
 
@@ -57,6 +61,12 @@ def _walk_files(root: Path) -> list[Path]:
         if not p.is_file():
             continue
         if any(part in SKIP_DIRS for part in p.parts):
+            continue
+        try:
+            rel_parts = p.relative_to(root).parts
+        except ValueError:
+            rel_parts = p.parts
+        if rel_parts and rel_parts[0] in SKIP_TOP_LEVEL:
             continue
         files.append(p)
     return files

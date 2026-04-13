@@ -136,6 +136,7 @@ http_total = 1200
 gateway = 20
 internet_ip = 30
 
-# Optional command-based checks can be combined with built-in probe if needed.
+# Optional legacy fallback: command-based checks can be combined if needed,
+# but layered `network_probe_enabled` is the recommended primary path.
 # dns_check_command = "getent ahostsv4 blender.prod.fr24.io >/dev/null"
 # dns_check_use_shell = true

@@ -18,6 +18,9 @@
 ## Core (this project)
 
 - logical health monitoring while the OS is alive
+- layered network reachability classification for `network_uplink`:
+  - `link_ok -> default_route_ok -> gateway_ok -> internet_ip_ok -> dns_ok -> http_probe_ok`
+  - explicit reason split (`link_error`, `route_missing`, `gateway_error`, `wan_error`, `dns_error`, `http_error`)
 - staged recovery policy:
   1. warn
   2. restart target services
@@ -50,7 +53,8 @@ Many Raspberry Pi failures are logical stalls, not full kernel hangs:
   - command exit status
   - service active status
   - semantic `stats.json` checks (`updated_at`, `last_input_ts`, `last_success_ts`, `records_processed_total`)
-  - dependency checks split into DNS and gateway path
+  - layered network probe path from link to HTTP (`network_probe_enabled`)
+  - optional command-based dependency checks (legacy/fallback integration)
   - optional clock anomaly checks (`time.time` vs `time.monotonic`, optional HTTP `Date` skew)
 - **State file** (`/var/lib/raspi-sentinel/state.json` by default):
   - consecutive failure counters
@@ -285,7 +289,8 @@ http_total = 1200
 gateway = 20
 internet_ip = 30
 
-# optional command-based dependency checks can coexist
+# Optional legacy fallback: command-based checks can coexist, but
+# layered `network_probe_enabled` is the recommended primary path.
 # dns_check_command = "getent ahostsv4 blender.prod.fr24.io >/dev/null"
 # dns_check_use_shell = true
 ```
