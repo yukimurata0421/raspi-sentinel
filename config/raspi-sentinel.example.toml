@@ -36,7 +36,7 @@ loop_interval_sec = 30
 
 [notify.discord]
 enabled = true
-webhook_url = "https://discord.com/api/webhooks/1492334056405209310/KfQ3NlrfYhdcW0fsZ1V3up69mnVcgn1nfkVrMQHHODxIKfM4qcB3XUs8hShiRPDG0WEc"
+webhook_url = "https://discord.com/api/webhooks/..."
 username = "raspi-sentinel"
 timeout_sec = 5
 followup_delay_sec = 300
