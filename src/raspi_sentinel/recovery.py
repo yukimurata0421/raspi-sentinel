@@ -82,6 +82,10 @@ def _clock_reboot_confirmed(result: CheckResult) -> bool:
     return result.observations.get("clock_frozen_confirmed") is True
 
 
+def _policy_failed(result: CheckResult) -> bool:
+    return result.observations.get("policy_status") == "failed"
+
+
 def _can_reboot(
     global_config: GlobalConfig, state: GlobalState | dict[str, Any], now_ts: float
 ) -> tuple[bool, str]:
@@ -214,6 +218,7 @@ def apply_recovery(
     ts = state_model.ensure_target(target.name)
     effective_now = time.time() if now_ts is None else now_ts
     clock_reboot_confirmed = _clock_reboot_confirmed(check_result)
+    policy_failed = _policy_failed(check_result)
 
     if check_result.healthy and not clock_reboot_confirmed:
         previous = ts.consecutive_failures
@@ -252,6 +257,21 @@ def apply_recovery(
         return RecoveryOutcome(action="warn", requested_reboot=False)
 
     if clock_reboot_confirmed:
+        if not policy_failed:
+            LOG.warning(
+                (
+                    "target '%s': confirmed clock reboot blocked because "
+                    "policy_status is not failed (status=%s)"
+                ),
+                target.name,
+                check_result.observations.get("policy_status"),
+            )
+            _record_action_model(ts, "warn", effective_now)
+            if raw_state is not None:
+                raw_state.clear()
+                raw_state.update(state_model.to_dict())
+            return RecoveryOutcome(action="warn", requested_reboot=False)
+
         can_reboot, guard_reason = _can_reboot(global_config, state_model, effective_now)
         if can_reboot:
             LOG.error(
@@ -300,7 +320,6 @@ def apply_recovery(
     has_dns_failure = _has_failure(check_result, "dependency_dns")
     has_gateway_failure = _has_failure(check_result, "dependency_gateway")
     has_non_dependency_failure = _has_non_dependency_failure(check_result)
-
     # DNS-only dependency failures should not escalate to reboot.
     # See docs/principles/recovery-philosophy.md.
     if has_dns_failure and not has_gateway_failure and not has_non_dependency_failure:
@@ -315,7 +334,13 @@ def apply_recovery(
         return RecoveryOutcome(action="warn", requested_reboot=False)
 
     if consecutive >= reboot_threshold:
-        if has_dns_failure and not has_gateway_failure:
+        if not policy_failed:
+            LOG.warning(
+                "target '%s': reboot blocked because policy_status is not failed (status=%s)",
+                target.name,
+                check_result.observations.get("policy_status"),
+            )
+        elif has_dns_failure and not has_gateway_failure:
             LOG.error(
                 (
                     "target '%s': reboot blocked because failure is classified as "

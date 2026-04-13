@@ -59,6 +59,7 @@ def build_monitor_stats_snapshot(
             "last_failure_reason": str(last_failure_reason),
         }
         if result is not None:
+            missing = object()
             clock_reason = result.observations.get("clock_reason")
             if isinstance(clock_reason, str):
                 payload["clock_reason"] = clock_reason
@@ -76,6 +77,72 @@ def build_monitor_stats_snapshot(
             ntp_sync_ok = result.observations.get("ntp_sync_ok")
             if isinstance(ntp_sync_ok, bool):
                 payload["ntp_sync_ok"] = ntp_sync_ok
+
+            for field_name in (
+                "link_ok",
+                "iface_up",
+                "wifi_associated",
+                "ip_assigned",
+                "default_route_ok",
+                "gateway_ok",
+                "neighbor_resolved",
+                "arp_gateway_ok",
+                "internet_ip_ok",
+                "dns_server_reachable",
+                "dns_ok",
+                "wan_vs_target_ok",
+                "http_probe_ok",
+            ):
+                raw = result.observations.get(field_name, missing)
+                if isinstance(raw, bool):
+                    payload[field_name] = raw
+                elif raw is None:
+                    payload[field_name] = None
+
+            for field_name in (
+                "network_interface",
+                "operstate_raw",
+                "ssid",
+                "bssid",
+                "default_route_iface",
+                "gateway_ip",
+                "route_table_snapshot",
+                "internet_ip_target",
+                "dns_server",
+                "dns_query_target",
+                "dns_error_kind",
+                "http_probe_target",
+                "http_error_kind",
+            ):
+                raw = result.observations.get(field_name, missing)
+                if isinstance(raw, str):
+                    payload[field_name] = raw
+                elif raw is None:
+                    payload[field_name] = None
+
+            dns_latency_ms = result.observations.get("dns_latency_ms")
+            if isinstance(dns_latency_ms, (int, float)):
+                payload["dns_latency_ms"] = float(dns_latency_ms)
+
+            for field_name in (
+                "rssi_dbm",
+                "tx_bitrate_mbps",
+                "rx_bitrate_mbps",
+                "gateway_latency_ms",
+                "gateway_packet_loss_pct",
+                "internet_ip_latency_ms",
+                "internet_ip_packet_loss_pct",
+                "http_total_latency_ms",
+                "http_connect_latency_ms",
+                "http_tls_latency_ms",
+            ):
+                value = result.observations.get(field_name)
+                if isinstance(value, (int, float)):
+                    payload[field_name] = float(value)
+
+            http_status = result.observations.get("http_status_code")
+            if isinstance(http_status, int):
+                payload["http_status_code"] = http_status
 
         targets_payload[target.name] = payload
 

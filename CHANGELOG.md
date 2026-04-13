@@ -6,24 +6,7 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ## [Unreleased]
 
-No notable changes yet.
-
-## [0.4.2] - 2026-04-12
-
-### Changed
-
-- Reworked `README.md` for clearer operator-first flow:
-  - tightened project scope and recovery boundary explanation
-  - clarified check categories and staged recovery behavior
-  - refreshed quick-start and documentation navigation
-- Added `docs/images/operator-topology-view.png` and referenced it from README as a downstream `stats.json` consumer example.
-- Updated docs index release-notes pointer to the latest release note entry.
-
-### Documentation
-
-- Aligned version policy references to `0.4.2` across version-related docs and metadata.
-
-## [0.4.1] - 2026-04-11
+## [0.4.3] - 2026-04-13
 
 ### Added
 
@@ -31,6 +14,22 @@ No notable changes yet.
   - `pyproject.toml` now includes strict mypy configuration
   - `dev` dependencies now include `mypy`
   - CI adds a dedicated `typecheck` job and requires it before tests
+- Built-in `network_uplink` layered probe (`network_probe_enabled`) with configurable targets and thresholds:
+  - link layer evidence (`link_ok`, optional SSID/BSSID/RSSI/bitrate)
+  - default route evidence (`default_route_ok`, `default_route_iface`, `gateway_ip`)
+  - gateway quality evidence (`gateway_ok`, latency, packet loss, neighbor/ARP state)
+  - WAN reachability without DNS (`internet_ip_ok`, `internet_ip_targets`)
+  - DNS evidence (`dns_ok`, `dns_server`, `dns_query_target`, `dns_latency_ms`, `dns_error_kind`)
+  - HTTP/TLS evidence (`http_probe_ok`, target, status code, connect/TLS/total latency, error kind)
+- New target config fields for network probe tuning:
+  - `network_interface`
+  - `gateway_probe_timeout_sec`
+  - `internet_ip_targets`
+  - `dns_query_target`
+  - `http_probe_target`
+  - `consecutive_failure_thresholds`
+  - `latency_thresholds_ms`
+  - `packet_loss_thresholds_pct`
 
 ### Changed
 
@@ -49,21 +48,42 @@ No notable changes yet.
 - `TargetState` now includes `maintenance_suppress_until_ts` as a typed field.
 - Removed remaining direct top-level `dict` mutation paths for `targets/reboots/followups/notify/monitor_stats` in runtime modules.
 - Kept compatibility adapters in selected functions so existing tests/callers that pass raw dict target slices continue to work.
+- `network_uplink` policy reason split was refined for root-cause clarity:
+  - `link_error`, `route_missing`, `gateway_error`, `wan_error`, `dns_error`, `http_error`, `target_reachability_error`
+- Network policy now supports transient-failure suppression via consecutive counters:
+  - single-cycle failures can remain `ok` (`transient_network_failure`)
+  - sustained failures escalate to `degraded`/`failed` using configured thresholds
+- Event evidence serialization now preserves `null` vs `false` for probe fields to avoid mixing unknown state with explicit failure.
+- `network_uplink` HTTP probe semantics are stricter:
+  - `http_probe_ok=true` only when `200 <= http_status_code < 300`
+  - non-2xx responses are now `http_probe_ok=false` with `http_error_kind=non_2xx`
+  - HTTP errors are split into: `dns_resolution_failed`, `connect_timeout`, `read_timeout`, `tls_error`, `connection_refused`, `non_2xx`, `unknown`
+- DNS error classification was expanded:
+  - `nxdomain`, `timeout`, `resolver_config_missing`, `no_server`, `unreachable`, `unknown`
+- `link_ok` remains a summary flag, with explicit link evidence fields added:
+  - `iface_up`, `wifi_associated`, `ip_assigned`, `operstate_raw`
+- Gateway neighbor evidence is now exported consistently to observability outputs:
+  - `neighbor_resolved`, `arp_gateway_ok` are emitted in both events and monitor stats.
+- Reboot escalation now requires `policy_status=failed` on all reboot paths (including confirmed clock anomaly).
 
 ### Testing
 
-- Added operational boundary tests for high-risk scenarios:
-  - corrupted state + limited mode + notify interaction
-  - reboot guard boundary values (uptime/cooldown/window cap)
-  - shell opt-in misconfiguration behavior in full cycle execution
-  - state lock timeout behavior for timer/service-visible return/report
-  - state migration/backward compatibility from legacy persisted shapes
 - Verified full local gate:
   - `ruff check`
   - `ruff format --check`
   - `mypy` (strict)
   - `pytest`
   - `pytest --cov --cov-branch --cov-fail-under=80`
+- Added/updated tests for:
+  - layered network reason classification (`wan_error`, `http_error`, multi-factor outage)
+  - transient vs consecutive failure transitions
+  - graceful behavior when probe commands are unavailable
+  - JSONL evidence serialization preserving `null`/`false` distinction
+  - non-2xx HTTP response handling (`http_probe_ok=false`, `http_error_kind=non_2xx`)
+  - HTTP error kind split (DNS/timeout/connect/refused/TLS)
+  - DNS error kind split (`resolver_config_missing`, `no_server`, `unreachable`, etc.)
+  - link evidence emission (`iface_up`, `wifi_associated`, `ip_assigned`, `operstate_raw`)
+  - reboot guard enforcement requiring `policy_status=failed`
 
 ## [0.4.0] - 2026-04-11
 

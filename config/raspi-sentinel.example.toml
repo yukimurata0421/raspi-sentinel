@@ -36,7 +36,7 @@ loop_interval_sec = 30
 
 [notify.discord]
 enabled = true
-webhook_url = "https://discord.com/api/webhooks/..."
+webhook_url = "https://discord.com/api/webhooks/1492334056405209310/KfQ3NlrfYhdcW0fsZ1V3up69mnVcgn1nfkVrMQHHODxIKfM4qcB3XUs8hShiRPDG0WEc"
 username = "raspi-sentinel"
 timeout_sec = 5
 followup_delay_sec = 300
@@ -98,10 +98,12 @@ reboot_threshold = 5
 name = "network_uplink"
 services = []
 service_active = false
-dns_check_command = "getent ahostsv4 blender.prod.fr24.io >/dev/null"
-dns_check_use_shell = true
-gateway_check_command = "ip route get 1.1.1.1 >/dev/null 2>&1 && nc -zw3 1.1.1.1 443 >/dev/null 2>&1"
-gateway_check_use_shell = true
+network_probe_enabled = true
+network_interface = "wlan0"
+gateway_probe_timeout_sec = 2
+internet_ip_targets = ["1.1.1.1", "8.8.8.8"]
+dns_query_target = "blender.prod.fr24.io"
+http_probe_target = "https://www.google.com/generate_204"
 dependency_check_timeout_sec = 8
 # Optional: detect clock anomaly (no automatic clock correction).
 # This compares wall clock progression vs monotonic progression,
@@ -119,3 +121,21 @@ clock_anomaly_reboot_consecutive = 3
 # Gateway failures can still escalate by threshold/cooldown guards.
 restart_threshold = 5
 reboot_threshold = 10
+
+[targets.consecutive_failure_thresholds]
+degraded = 2
+failed = 6
+
+[targets.latency_thresholds_ms]
+gateway = 100
+internet_ip = 350
+dns = 500
+http_total = 1200
+
+[targets.packet_loss_thresholds_pct]
+gateway = 20
+internet_ip = 30
+
+# Optional command-based checks can be combined with built-in probe if needed.
+# dns_check_command = "getent ahostsv4 blender.prod.fr24.io >/dev/null"
+# dns_check_use_shell = true

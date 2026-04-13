@@ -6,7 +6,7 @@ It does not correct system time directly (`date -s` is never executed).
 ## Status and Reason
 
 - `status`: `ok` / `degraded` / `failed`
-- `reason`: `healthy`, `insufficient_interval`, `clock_frozen`, `clock_frozen_persistent`, `clock_frozen_confirmed`, `clock_jump`, `clock_skewed`, `http_probe_failed`, `dns_error`, `gateway_error`, `time_sync_broken`, `time_sync_broken_skewed`, `stats_stale`, `recovered_from_clock_jump`, `recovered_from_clock_skew`
+- `reason`: `healthy`, `insufficient_interval`, `clock_frozen`, `clock_frozen_persistent`, `clock_frozen_confirmed`, `clock_jump`, `clock_skewed`, `http_error`, `dns_error`, `gateway_error`, `time_sync_broken`, `time_sync_broken_skewed`, `stats_stale`, `recovered_from_clock_jump`, `recovered_from_clock_skew`
 
 ## Decision Table
 
@@ -16,7 +16,7 @@ It does not correct system time directly (`date -s` is never executed).
 | T2 | `delta_monotonic_sec >= wall_clock_freeze_min_monotonic_sec` and `delta_wall_sec <= wall_clock_freeze_max_wall_advance_sec` | `degraded` | `clock_frozen` | no reboot |
 | T3 | `abs(clock_drift_sec) >= wall_clock_drift_threshold_sec` and not T2 | `degraded` | `clock_jump` | no reboot |
 | T4 | `http_probe_ok=true` and `abs(http_time_skew_sec) >= clock_skew_threshold_sec` | `degraded` | `clock_skewed` | no reboot |
-| T5 | `http_probe_ok=false` | `degraded` | `http_probe_failed` | no reboot |
+| T5 | `http_probe_ok=false` | `degraded` | `http_error` | no reboot |
 | T6 | `dns_ok=false` and `gateway_ok=true` | `degraded` | `dns_error` | no reboot |
 | T7 | `gateway_ok=false` | `degraded` | `gateway_error` | no reboot |
 | T8 | `ntp_sync_ok=false` and skew is below threshold | `degraded` | `time_sync_broken` | no reboot |

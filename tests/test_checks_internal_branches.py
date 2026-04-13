@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import json
 import subprocess
 from datetime import datetime, timezone
@@ -24,8 +25,27 @@ def _target(**overrides: Any) -> TargetConfig:
         "command_timeout_sec": None,
         "dns_check_command": None,
         "dns_check_use_shell": False,
+        "dns_server_check_command": None,
+        "dns_server_check_use_shell": False,
         "gateway_check_command": None,
         "gateway_check_use_shell": False,
+        "link_check_command": None,
+        "link_check_use_shell": False,
+        "default_route_check_command": None,
+        "default_route_check_use_shell": False,
+        "internet_ip_check_command": None,
+        "internet_ip_check_use_shell": False,
+        "wan_vs_target_check_command": None,
+        "wan_vs_target_check_use_shell": False,
+        "network_probe_enabled": False,
+        "network_interface": None,
+        "gateway_probe_timeout_sec": 2,
+        "internet_ip_targets": ["1.1.1.1", "8.8.8.8"],
+        "dns_query_target": None,
+        "http_probe_target": None,
+        "consecutive_failure_thresholds": {"degraded": 2, "failed": 6},
+        "latency_thresholds_ms": {},
+        "packet_loss_thresholds_pct": {},
         "dependency_check_timeout_sec": None,
         "stats_file": None,
         "stats_updated_max_age_sec": None,
@@ -268,6 +288,29 @@ def test_run_checks_with_command_dns_gateway_and_service(monkeypatch: Any) -> No
     assert len(calls) >= 4
 
 
+def test_run_checks_with_extended_dependency_commands(monkeypatch: Any) -> None:
+    def fake_run(cmd: Any, **_: Any) -> Any:
+        return subprocess.CompletedProcess([cmd], 0, "", "")
+
+    monkeypatch.setattr(checks.subprocess, "run", fake_run)
+    result = checks.run_checks(
+        _target(
+            link_check_command="true",
+            default_route_check_command="true",
+            internet_ip_check_command="true",
+            dns_server_check_command="true",
+            wan_vs_target_check_command="true",
+            dependency_check_timeout_sec=1,
+        )
+    )
+    assert result.healthy
+    assert result.observations["link_ok"] is True
+    assert result.observations["default_route_ok"] is True
+    assert result.observations["internet_ip_ok"] is True
+    assert result.observations["dns_server_reachable"] is True
+    assert result.observations["wan_vs_target_ok"] is True
+
+
 def test_run_checks_heartbeat_output_and_service_failure(tmp_path: Path, monkeypatch: Any) -> None:
     hb = tmp_path / "hb.txt"
     out = tmp_path / "out.txt"
@@ -297,6 +340,571 @@ def test_run_checks_heartbeat_output_and_service_failure(tmp_path: Path, monkeyp
     )
     assert not result.healthy
     assert any(f.check == "service_active" for f in result.failures)
+
+
+def test_stats_schema_validates_extended_dependency_fields(tmp_path: Path) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    p = tmp_path / "stats.json"
+    p.write_text(
+        json.dumps(
+            {
+                "updated_at": now,
+                "link_ok": "x",
+                "default_route_ok": "x",
+                "internet_ip_ok": "x",
+                "dns_server_reachable": "x",
+                "wan_vs_target_ok": "x",
+                "dns_latency_ms": "x",
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = checks.run_checks(_target(stats_file=p, stats_updated_max_age_sec=120))
+    names = {f.check for f in result.failures}
+    assert "dependency_link" in names
+    assert "dependency_default_route" in names
+    assert "dependency_internet_ip" in names
+    assert "dependency_dns_server" in names
+    assert "dependency_wan_target" in names
+
+
+def test_network_probe_unavailable_commands_are_graceful(monkeypatch: Any) -> None:
+    def unavailable_run(*_: Any, **__: Any) -> Any:
+        raise OSError("command unavailable")
+
+    def unavailable_getaddrinfo(*_: Any, **__: Any) -> Any:
+        raise OSError("dns unavailable")
+
+    monkeypatch.setattr(checks.subprocess, "run", unavailable_run)
+    monkeypatch.setattr(checks.socket, "getaddrinfo", unavailable_getaddrinfo)
+    result = checks.run_checks(
+        _target(
+            network_probe_enabled=True,
+            network_interface="wlan999",
+            dns_query_target="example.invalid",
+            http_probe_target="https://example.invalid",
+        )
+    )
+    # Probe failures should be represented as unknown (None), not forced false.
+    assert result.observations.get("link_ok") is None
+    assert result.observations.get("default_route_ok") is None
+    assert result.observations.get("gateway_ok") is None
+    assert result.observations.get("internet_ip_ok") is None
+
+
+def test_network_http_probe_non_2xx_is_failure(monkeypatch: Any) -> None:
+    class DummyFile:
+        def readline(self, _: int) -> bytes:
+            return b"HTTP/1.1 503 Service Unavailable\r\n"
+
+        def close(self) -> None:
+            return None
+
+    class DummySocket:
+        def settimeout(self, _: float) -> None:
+            return None
+
+        def connect(self, _: Any) -> None:
+            return None
+
+        def sendall(self, _: bytes) -> None:
+            return None
+
+        def makefile(self, _: str) -> DummyFile:
+            return DummyFile()
+
+        def close(self) -> None:
+            return None
+
+    def fake_run_command_capture(args: list[str], timeout_sec: int) -> tuple[Any, Any]:
+        return None, "unavailable"
+
+    def fake_getaddrinfo(host: str, port: int, type: int = 0) -> list[tuple[Any, ...]]:
+        return [(checks.socket.AF_INET, checks.socket.SOCK_STREAM, 6, "", ("127.0.0.1", port))]
+
+    monkeypatch.setattr(checks, "_run_command_capture", fake_run_command_capture)
+    monkeypatch.setattr(checks.socket, "getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(checks.socket, "socket", lambda *args, **kwargs: DummySocket())
+    monkeypatch.setattr(
+        checks.Path,
+        "read_text",
+        lambda self, encoding="utf-8": "nameserver 1.1.1.1\n",
+        raising=False,
+    )
+
+    result = checks.run_checks(
+        _target(
+            network_probe_enabled=True,
+            network_interface="wlan0",
+            dns_query_target="dns.example",
+            http_probe_target="http://probe.example/health",
+        )
+    )
+    assert result.observations["http_status_code"] == 503
+    assert result.observations["http_probe_ok"] is False
+    assert result.observations["http_error_kind"] == "non_2xx"
+
+
+def test_network_http_error_kind_distinguishes_dns_connect_read_timeout_refused_tls(
+    monkeypatch: Any,
+) -> None:
+    class DummyFile:
+        def __init__(
+            self,
+            status_line: bytes = b"HTTP/1.1 204 No Content\r\n",
+            *,
+            timeout: bool = False,
+        ):
+            self._status_line = status_line
+            self._timeout = timeout
+
+        def readline(self, _: int) -> bytes:
+            if self._timeout:
+                raise TimeoutError("read timeout")
+            return self._status_line
+
+        def close(self) -> None:
+            return None
+
+    class DummySocket:
+        def __init__(
+            self,
+            *,
+            connect_timeout: bool = False,
+            connection_refused: bool = False,
+            read_timeout: bool = False,
+        ) -> None:
+            self.connect_timeout = connect_timeout
+            self.connection_refused = connection_refused
+            self.read_timeout = read_timeout
+
+        def settimeout(self, _: float) -> None:
+            return None
+
+        def connect(self, _: Any) -> None:
+            if self.connect_timeout:
+                raise TimeoutError("connect timeout")
+            if self.connection_refused:
+                raise ConnectionRefusedError(errno.ECONNREFUSED, "refused")
+
+        def sendall(self, _: bytes) -> None:
+            return None
+
+        def makefile(self, _: str) -> DummyFile:
+            return DummyFile(timeout=self.read_timeout)
+
+        def close(self) -> None:
+            return None
+
+    class TlsBrokenContext:
+        def wrap_socket(self, sock: Any, server_hostname: str) -> Any:
+            raise checks.ssl.SSLError("tls failed")
+
+    cases = [
+        ("dns_resolution_failed", "http://probe.example/health"),
+        ("connect_timeout", "http://probe.example/health"),
+        ("read_timeout", "http://probe.example/health"),
+        ("connection_refused", "http://probe.example/health"),
+        ("tls_error", "https://probe.example/health"),
+    ]
+
+    for expected_kind, http_target in cases:
+        with monkeypatch.context() as m:
+            m.setattr(
+                checks.Path,
+                "read_text",
+                lambda self, encoding="utf-8": "nameserver 1.1.1.1\n",
+                raising=False,
+            )
+            m.setattr(
+                checks,
+                "_run_command_capture",
+                lambda args, timeout_sec: (None, "unavailable"),
+            )
+
+            def fake_getaddrinfo(host: str, port: int, type: int = 0) -> list[tuple[Any, ...]]:
+                if host == "probe.example" and expected_kind == "dns_resolution_failed":
+                    raise checks.socket.gaierror(checks.socket.EAI_NONAME, "name not known")
+                return [
+                    (
+                        checks.socket.AF_INET,
+                        checks.socket.SOCK_STREAM,
+                        6,
+                        "",
+                        ("127.0.0.1", port),
+                    )
+                ]
+
+            m.setattr(checks.socket, "getaddrinfo", fake_getaddrinfo)
+
+            if expected_kind == "connect_timeout":
+                m.setattr(
+                    checks.socket,
+                    "socket",
+                    lambda *args, **kwargs: DummySocket(connect_timeout=True),
+                )
+            elif expected_kind == "read_timeout":
+                m.setattr(
+                    checks.socket,
+                    "socket",
+                    lambda *args, **kwargs: DummySocket(read_timeout=True),
+                )
+            elif expected_kind == "connection_refused":
+                m.setattr(
+                    checks.socket,
+                    "socket",
+                    lambda *args, **kwargs: DummySocket(connection_refused=True),
+                )
+            else:
+                m.setattr(checks.socket, "socket", lambda *args, **kwargs: DummySocket())
+
+            if expected_kind == "tls_error":
+                m.setattr(
+                    checks.ssl,
+                    "create_default_context",
+                    lambda: TlsBrokenContext(),
+                )
+
+            result = checks.run_checks(
+                _target(
+                    network_probe_enabled=True,
+                    network_interface="wlan0",
+                    dns_query_target="dns.example",
+                    http_probe_target=http_target,
+                )
+            )
+            assert result.observations["http_probe_ok"] is False
+            assert result.observations["http_error_kind"] == expected_kind
+
+
+def test_network_dns_error_kind_classifies_resolver_missing_no_server_unreachable_unknown(
+    monkeypatch: Any,
+) -> None:
+    base_target = _target(
+        network_probe_enabled=True,
+        network_interface="wlan0",
+        dns_query_target="dns.example",
+        http_probe_target=None,
+    )
+
+    cases = [
+        ("resolver_config_missing", "search local\n", None),
+        (
+            "no_server",
+            "nameserver 1.1.1.1\n",
+            checks.socket.gaierror(
+                getattr(checks.socket, "EAI_FAIL", checks.socket.EAI_AGAIN),
+                "no servers",
+            ),
+        ),
+        (
+            "unreachable",
+            "nameserver 1.1.1.1\n",
+            OSError(errno.ENETUNREACH, "network unreachable"),
+        ),
+        (
+            "unknown",
+            "nameserver 1.1.1.1\n",
+            OSError(errno.EPERM, "permission denied"),
+        ),
+        (
+            "nxdomain",
+            "nameserver 1.1.1.1\n",
+            checks.socket.gaierror(checks.socket.EAI_NONAME, "name not known"),
+        ),
+        (
+            "timeout",
+            "nameserver 1.1.1.1\n",
+            checks.socket.gaierror(checks.socket.EAI_AGAIN, "temporary failure"),
+        ),
+    ]
+
+    for expected_kind, resolv_conf_text, injected_error in cases:
+        with monkeypatch.context() as m:
+            m.setattr(
+                checks,
+                "_run_command_capture",
+                lambda args, timeout_sec: (None, "unavailable"),
+            )
+
+            def fake_read_text(self: Path, encoding: str = "utf-8") -> str:
+                if str(self) == "/etc/resolv.conf":
+                    return resolv_conf_text
+                raise OSError("unavailable")
+
+            m.setattr(checks.Path, "read_text", fake_read_text, raising=False)
+
+            def fake_getaddrinfo(host: str, port: int, type: int = 0) -> list[tuple[Any, ...]]:
+                if injected_error is not None:
+                    raise injected_error
+                return [
+                    (
+                        checks.socket.AF_INET,
+                        checks.socket.SOCK_STREAM,
+                        6,
+                        "",
+                        ("127.0.0.1", port),
+                    )
+                ]
+
+            m.setattr(checks.socket, "getaddrinfo", fake_getaddrinfo)
+
+            result = checks.run_checks(base_target)
+            assert result.observations["dns_ok"] is False
+            assert result.observations["dns_error_kind"] == expected_kind
+
+
+def test_network_link_ok_exposes_iface_up_wifi_associated_ip_assigned(monkeypatch: Any) -> None:
+    class Result:
+        def __init__(self, stdout: str) -> None:
+            self.stdout = stdout
+            self.stderr = ""
+            self.returncode = 0
+
+    def fake_run_command_capture(args: list[str], timeout_sec: int) -> tuple[Any, Any]:
+        if args[:4] == ["ip", "-4", "-o", "addr"]:
+            return Result("2: wlan0    inet 192.168.0.2/24"), None
+        if args[:3] == ["iw", "dev", "wlan0"]:
+            return Result("Not connected."), None
+        return None, "unavailable"
+
+    def fake_read_text(self: Path, encoding: str = "utf-8") -> str:
+        if str(self).endswith("/operstate"):
+            return "down\n"
+        if str(self) == "/etc/resolv.conf":
+            return "nameserver 1.1.1.1\n"
+        raise OSError("unavailable")
+
+    monkeypatch.setattr(checks, "_run_command_capture", fake_run_command_capture)
+    monkeypatch.setattr(checks.Path, "read_text", fake_read_text, raising=False)
+    monkeypatch.setattr(
+        checks.socket,
+        "getaddrinfo",
+        lambda host, port, type=0: [
+            (checks.socket.AF_INET, checks.socket.SOCK_STREAM, 6, "", ("127.0.0.1", port))
+        ],
+    )
+
+    result = checks.run_checks(
+        _target(
+            network_probe_enabled=True,
+            network_interface="wlan0",
+            http_probe_target=None,
+        )
+    )
+    assert result.observations["operstate_raw"] == "down"
+    assert result.observations["iface_up"] is False
+    assert result.observations["wifi_associated"] is False
+    assert result.observations["ip_assigned"] is True
+    assert result.observations["link_ok"] is False
+
+
+def test_dns_and_http_error_classifier_helpers() -> None:
+    assert (
+        checks._classify_dns_gaierror(
+            checks.socket.gaierror(checks.socket.EAI_NONAME, "name or service not known")
+        )
+        == "nxdomain"
+    )
+    assert (
+        checks._classify_dns_gaierror(
+            checks.socket.gaierror(checks.socket.EAI_AGAIN, "temporary failure in name resolution")
+        )
+        == "timeout"
+    )
+    assert checks._classify_dns_gaierror(
+        checks.socket.gaierror(-9999, "no servers could be reached")
+    ) == ("no_server")
+    assert checks._classify_dns_gaierror(checks.socket.gaierror(-9999, "network unreachable")) == (
+        "unreachable"
+    )
+    assert checks._classify_dns_gaierror(checks.socket.gaierror(-9999, "boom")) == "unknown"
+
+    assert checks._classify_dns_oserror(TimeoutError("x")) == "timeout"
+    assert checks._classify_dns_oserror(OSError(errno.ENETUNREACH, "x")) == "unreachable"
+    assert checks._classify_dns_oserror(OSError(errno.EPERM, "x")) == "unknown"
+
+    assert (
+        checks._classify_http_oserror(ConnectionRefusedError(errno.ECONNREFUSED, "x"), False)
+        == "connection_refused"
+    )
+    assert checks._classify_http_oserror(TimeoutError("x"), False) == "connect_timeout"
+    assert checks._classify_http_oserror(TimeoutError("x"), True) == "read_timeout"
+    assert checks._classify_http_oserror(OSError(errno.EPERM, "x"), True) == "unknown"
+
+
+def test_run_command_capture_and_ping_parser_branches(monkeypatch: Any) -> None:
+    def timeout_run(*_: Any, **__: Any) -> Any:
+        raise subprocess.TimeoutExpired(cmd="x", timeout=1)
+
+    monkeypatch.setattr(checks.subprocess, "run", timeout_run)
+    result, error = checks._run_command_capture(["echo", "x"], timeout_sec=1)
+    assert result is None and error == "timeout"
+
+    def os_run(*_: Any, **__: Any) -> Any:
+        raise OSError("missing")
+
+    monkeypatch.setattr(checks.subprocess, "run", os_run)
+    result, error = checks._run_command_capture(["echo", "x"], timeout_sec=1)
+    assert result is None and error == "unavailable"
+
+    def ok_run(*_: Any, **__: Any) -> Any:
+        return subprocess.CompletedProcess(args=["echo"], returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(checks.subprocess, "run", ok_run)
+    result, error = checks._run_command_capture(["echo", "x"], timeout_sec=1)
+    assert result is not None and error is None
+
+    latency, loss = checks._parse_ping_stats(
+        (
+            "3 packets transmitted, 3 received, 0% packet loss\n"
+            "rtt min/avg/max/mdev = 1.0/2.0/3.0/0.5 ms"
+        )
+    )
+    assert latency == 2.0
+    assert loss == 0.0
+
+
+def test_network_probe_route_gateway_and_internet_branches(monkeypatch: Any) -> None:
+    class Result:
+        def __init__(self, stdout: str, returncode: int = 0) -> None:
+            self.stdout = stdout
+            self.stderr = ""
+            self.returncode = returncode
+
+    def fake_read_text(self: Path, encoding: str = "utf-8") -> str:
+        if str(self).endswith("/operstate"):
+            return "up\n"
+        if str(self) == "/etc/resolv.conf":
+            return "nameserver 1.1.1.1\n"
+        raise OSError("unavailable")
+
+    def fake_getaddrinfo(host: str, port: int, type: int = 0) -> list[tuple[Any, ...]]:
+        return [(checks.socket.AF_INET, checks.socket.SOCK_STREAM, 6, "", ("127.0.0.1", port))]
+
+    class DummyFile:
+        def readline(self, _: int) -> bytes:
+            return b"HTTP/1.1 204 No Content\r\n"
+
+        def close(self) -> None:
+            return None
+
+    class DummySocket:
+        def settimeout(self, _: float) -> None:
+            return None
+
+        def connect(self, _: Any) -> None:
+            return None
+
+        def sendall(self, _: bytes) -> None:
+            return None
+
+        def makefile(self, _: str) -> DummyFile:
+            return DummyFile()
+
+        def close(self) -> None:
+            return None
+
+    call_state = {"internet_count": 0}
+
+    def fake_run_command_capture(args: list[str], timeout_sec: int) -> tuple[Any, Any]:
+        if args[:4] == ["ip", "-4", "-o", "addr"]:
+            return Result("2: wlan0    inet 192.168.1.2/24"), None
+        if args[:3] == ["iw", "dev", "wlan0"]:
+            return Result("Connected to aa:bb:cc:dd:ee:ff\nSSID: test\n"), None
+        if args[:5] == ["ip", "-4", "route", "show", "default"]:
+            return Result("default via 192.168.1.1 dev wlan0\n"), None
+        if args[:3] == ["ip", "neigh", "show"]:
+            return Result("192.168.1.1 dev wlan0 lladdr 00:11:22:33:44:55 REACHABLE"), None
+        if args[:5] == ["ping", "-n", "-c", "3", "-W"] and args[-1] == "192.168.1.1":
+            return Result(
+                "3 packets transmitted, 3 received, 0% packet loss\n"
+                "rtt min/avg/max/mdev = 1.0/2.0/3.0/0.1 ms",
+                returncode=0,
+            ), None
+        if args[:5] == ["ping", "-n", "-c", "3", "-W"] and args[-1] in ("1.1.1.1", "8.8.8.8"):
+            call_state["internet_count"] += 1
+            if call_state["internet_count"] == 1:
+                return Result(
+                    "3 packets transmitted, 0 received, 100% packet loss\n",
+                    returncode=1,
+                ), None
+            return Result(
+                "3 packets transmitted, 3 received, 0% packet loss\n"
+                "rtt min/avg/max/mdev = 10.0/20.0/30.0/1.0 ms",
+                returncode=0,
+            ), None
+        return None, "unavailable"
+
+    monkeypatch.setattr(checks.Path, "read_text", fake_read_text, raising=False)
+    monkeypatch.setattr(checks, "_run_command_capture", fake_run_command_capture)
+    monkeypatch.setattr(checks.socket, "getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(checks.socket, "socket", lambda *args, **kwargs: DummySocket())
+
+    result = checks.run_checks(
+        _target(
+            network_probe_enabled=True,
+            network_interface="wlan0",
+            internet_ip_targets=["1.1.1.1", "8.8.8.8"],
+            http_probe_target="http://probe.example/health",
+        )
+    )
+    obs = result.observations
+    assert obs["default_route_ok"] is True
+    assert obs["gateway_ok"] is True
+    assert obs["neighbor_resolved"] is True
+    assert obs["arp_gateway_ok"] is True
+    assert obs["internet_ip_ok"] is True
+    assert obs["internet_ip_target"] == "8.8.8.8"
+    assert obs["http_probe_ok"] is True
+
+
+def test_network_probe_handles_empty_route_and_gateway_timeout(monkeypatch: Any) -> None:
+    class Result:
+        def __init__(self, stdout: str, returncode: int = 0) -> None:
+            self.stdout = stdout
+            self.stderr = ""
+            self.returncode = returncode
+
+    def fake_read_text(self: Path, encoding: str = "utf-8") -> str:
+        if str(self).endswith("/operstate"):
+            return "up\n"
+        if str(self) == "/etc/resolv.conf":
+            return "nameserver 1.1.1.1\n"
+        raise OSError("unavailable")
+
+    def fake_run_command_capture(args: list[str], timeout_sec: int) -> tuple[Any, Any]:
+        if args[:4] == ["ip", "-4", "-o", "addr"]:
+            return Result("2: wlan0    inet 192.168.1.2/24"), None
+        if args[:3] == ["iw", "dev", "wlan0"]:
+            return Result("Connected to aa:bb:cc:dd:ee:ff\nSSID: test\n"), None
+        if args[:5] == ["ip", "-4", "route", "show", "default"]:
+            return Result(""), None
+        if args[:5] == ["ping", "-n", "-c", "3", "-W"]:
+            return None, "timeout"
+        return None, "unavailable"
+
+    monkeypatch.setattr(checks.Path, "read_text", fake_read_text, raising=False)
+    monkeypatch.setattr(checks, "_run_command_capture", fake_run_command_capture)
+    monkeypatch.setattr(
+        checks.socket,
+        "getaddrinfo",
+        lambda host, port, type=0: [
+            (checks.socket.AF_INET, checks.socket.SOCK_STREAM, 6, "", ("127.0.0.1", port))
+        ],
+    )
+
+    result = checks.run_checks(
+        _target(
+            network_probe_enabled=True,
+            network_interface="wlan0",
+            http_probe_target=None,
+        )
+    )
+    obs = result.observations
+    assert obs["default_route_ok"] is False
+    assert obs["gateway_ok"] is None
+    assert obs["internet_ip_ok"] is False
 
 
 def test_stats_checks_handles_none_payload(monkeypatch: Any) -> None:

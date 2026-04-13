@@ -37,3 +37,18 @@ It is not a replacement for:
 
 - hardware watchdog for full kernel hangs
 - NTP daemon responsibilities (it observes time-health; it does not set system time)
+
+## Network Uplink Layering
+
+When `network_probe_enabled=true`, `network_uplink` evidence is collected in this order:
+
+1. link (`link_ok`)
+2. route (`default_route_ok`)
+3. gateway (`gateway_ok`)
+4. WAN without DNS (`internet_ip_ok`)
+5. DNS (`dns_ok`)
+6. HTTP/TLS upper layer (`http_probe_ok`)
+
+Policy evaluates these as "state summary" while preserving raw measurements as evidence.
+Single-cycle failures can stay `ok` (`transient_network_failure`), and sustained failures are promoted
+to `degraded`/`failed` according to `consecutive_failure_thresholds`.

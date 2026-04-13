@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import errno
 import json
 import logging
+import re
 import shlex
+import socket
+import ssl
 import subprocess
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from .config import TargetConfig
 from .state_helpers import safe_optional_int
@@ -273,27 +278,419 @@ def _stats_checks(
         else:
             observations["records_processed_total"] = records
 
-    dns_ok = stats.get("dns_ok")
-    if dns_ok is not None:
-        if not isinstance(dns_ok, bool):
-            failures.append(CheckFailure("dependency_dns", "dns_ok must be boolean when set"))
-        else:
-            observations["dns_ok"] = dns_ok
-            if not dns_ok:
-                failures.append(CheckFailure("dependency_dns", "dns_ok=false in stats file"))
+    dependency_bool_fields = (
+        ("link_ok", "dependency_link"),
+        ("default_route_ok", "dependency_default_route"),
+        ("gateway_ok", "dependency_gateway"),
+        ("internet_ip_ok", "dependency_internet_ip"),
+        ("dns_server_reachable", "dependency_dns_server"),
+        ("dns_ok", "dependency_dns"),
+        ("wan_vs_target_ok", "dependency_wan_target"),
+    )
+    for field_name, check_name in dependency_bool_fields:
+        raw = stats.get(field_name)
+        if raw is None:
+            continue
+        if not isinstance(raw, bool):
+            failures.append(CheckFailure(check_name, f"{field_name} must be boolean when set"))
+            continue
+        observations[field_name] = raw
+        if not raw:
+            failures.append(CheckFailure(check_name, f"{field_name}=false in stats file"))
 
-    gateway_ok = stats.get("gateway_ok")
-    if gateway_ok is not None:
-        if not isinstance(gateway_ok, bool):
+    dns_latency_raw = stats.get("dns_latency_ms")
+    if dns_latency_raw is not None:
+        if isinstance(dns_latency_raw, bool) or not isinstance(dns_latency_raw, (int, float)):
             failures.append(
-                CheckFailure("dependency_gateway", "gateway_ok must be boolean when set")
+                CheckFailure("dependency_dns_server", "dns_latency_ms must be numeric when set")
             )
         else:
-            observations["gateway_ok"] = gateway_ok
-            if not gateway_ok:
+            dns_latency_ms = float(dns_latency_raw)
+            observations["dns_latency_ms"] = dns_latency_ms
+            if dns_latency_ms < 0:
                 failures.append(
-                    CheckFailure("dependency_gateway", "gateway_ok=false in stats file")
+                    CheckFailure("dependency_dns_server", "dns_latency_ms must be >= 0")
                 )
+
+
+def _run_command_capture(
+    args: list[str],
+    timeout_sec: int,
+) -> tuple[subprocess.CompletedProcess[str] | None, str | None]:
+    try:
+        result = subprocess.run(
+            args,
+            check=False,
+            timeout=timeout_sec,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.TimeoutExpired:
+        return None, "timeout"
+    except OSError:
+        return None, "unavailable"
+    return result, None
+
+
+def _parse_ping_stats(output: str) -> tuple[float | None, float | None]:
+    loss_match = re.search(r"(\d+(?:\.\d+)?)%\s+packet loss", output)
+    loss_pct = float(loss_match.group(1)) if loss_match else None
+    rtt_match = re.search(r"=\s*([\d.]+)/([\d.]+)/([\d.]+)/", output)
+    avg_ms = float(rtt_match.group(2)) if rtt_match else None
+    return avg_ms, loss_pct
+
+
+def _classify_dns_gaierror(exc: socket.gaierror) -> str:
+    if exc.errno == socket.EAI_NONAME:
+        return "nxdomain"
+    if exc.errno == socket.EAI_AGAIN:
+        return "timeout"
+    eai_fail = getattr(socket, "EAI_FAIL", None)
+    if eai_fail is not None and exc.errno == eai_fail:
+        return "no_server"
+
+    message = " ".join(str(part) for part in exc.args).lower()
+    if "temporary failure" in message or "timed out" in message:
+        return "timeout"
+    if "name or service not known" in message or "nodename nor servname provided" in message:
+        return "nxdomain"
+    if "no servers could be reached" in message or "no name servers" in message:
+        return "no_server"
+    if any(token in message for token in ("unreachable", "refused", "no route")):
+        return "unreachable"
+    return "unknown"
+
+
+def _classify_dns_oserror(exc: OSError) -> str:
+    if isinstance(exc, TimeoutError):
+        return "timeout"
+    if exc.errno in (errno.ETIMEDOUT,):
+        return "timeout"
+    if exc.errno in (
+        errno.EHOSTUNREACH,
+        errno.ENETUNREACH,
+        errno.ENETDOWN,
+        errno.EHOSTDOWN,
+        errno.ECONNREFUSED,
+    ):
+        return "unreachable"
+    return "unknown"
+
+
+def _classify_http_oserror(exc: OSError, connect_succeeded: bool) -> str:
+    if isinstance(exc, ConnectionRefusedError) or exc.errno == errno.ECONNREFUSED:
+        return "connection_refused"
+    if isinstance(exc, TimeoutError) or exc.errno in (errno.ETIMEDOUT,):
+        return "read_timeout" if connect_succeeded else "connect_timeout"
+    return "unknown"
+
+
+def _probe_network_uplink(target: TargetConfig, observations: dict[str, Any]) -> None:
+    if not target.network_probe_enabled or not target.network_interface:
+        return
+
+    iface = target.network_interface
+    timeout_sec = max(1, target.gateway_probe_timeout_sec)
+    observations["network_probe_enabled"] = True
+    observations["network_interface"] = iface
+
+    for key in (
+        "link_ok",
+        "iface_up",
+        "wifi_associated",
+        "ip_assigned",
+        "operstate_raw",
+        "default_route_ok",
+        "gateway_ok",
+        "internet_ip_ok",
+        "dns_ok",
+        "http_probe_ok",
+        "arp_gateway_ok",
+        "neighbor_resolved",
+        "ssid",
+        "bssid",
+        "rssi_dbm",
+        "tx_bitrate_mbps",
+        "rx_bitrate_mbps",
+        "default_route_iface",
+        "gateway_ip",
+        "route_table_snapshot",
+        "gateway_latency_ms",
+        "gateway_packet_loss_pct",
+        "internet_ip_target",
+        "internet_ip_latency_ms",
+        "internet_ip_packet_loss_pct",
+        "dns_server",
+        "dns_query_target",
+        "dns_latency_ms",
+        "dns_error_kind",
+        "http_probe_target",
+        "http_status_code",
+        "http_total_latency_ms",
+        "http_connect_latency_ms",
+        "http_tls_latency_ms",
+        "http_error_kind",
+    ):
+        observations.setdefault(key, None)
+
+    operstate_path = Path(f"/sys/class/net/{iface}/operstate")
+    oper_up: bool | None = None
+    oper_raw: str | None = None
+    try:
+        oper_raw = operstate_path.read_text(encoding="utf-8").strip().lower()
+        oper_up = oper_raw == "up"
+    except OSError:
+        oper_up = None
+    observations["operstate_raw"] = oper_raw
+    observations["iface_up"] = oper_up
+
+    addr_result, addr_error = _run_command_capture(
+        ["ip", "-4", "-o", "addr", "show", "dev", iface], timeout_sec=timeout_sec
+    )
+    has_ipv4: bool | None = None
+    if addr_result is not None:
+        has_ipv4 = bool(addr_result.stdout.strip())
+    elif addr_error == "timeout":
+        has_ipv4 = False
+    observations["ip_assigned"] = has_ipv4
+
+    wifi_connected: bool | None = None
+    iw_result, _ = _run_command_capture(["iw", "dev", iface, "link"], timeout_sec=timeout_sec)
+    if iw_result is not None:
+        iw_output = iw_result.stdout.strip()
+        wifi_connected = "Not connected." not in iw_output
+        if wifi_connected:
+            m = re.search(r"SSID:\s*(.+)", iw_output)
+            if m:
+                observations["ssid"] = m.group(1).strip()
+            m = re.search(r"Connected to\s+([0-9A-Fa-f:]{17})", iw_output)
+            if m:
+                observations["bssid"] = m.group(1).lower()
+            m = re.search(r"signal:\s*(-?\d+(?:\.\d+)?)\s*dBm", iw_output)
+            if m:
+                observations["rssi_dbm"] = float(m.group(1))
+            m = re.search(r"tx bitrate:\s*(\d+(?:\.\d+)?)\s*MBit/s", iw_output)
+            if m:
+                observations["tx_bitrate_mbps"] = float(m.group(1))
+            m = re.search(r"rx bitrate:\s*(\d+(?:\.\d+)?)\s*MBit/s", iw_output)
+            if m:
+                observations["rx_bitrate_mbps"] = float(m.group(1))
+    observations["wifi_associated"] = wifi_connected
+
+    if oper_up is False or has_ipv4 is False or wifi_connected is False:
+        observations["link_ok"] = False
+    elif oper_up is True and has_ipv4 is True and (wifi_connected in (True, None)):
+        observations["link_ok"] = True
+
+    route_result, _ = _run_command_capture(["ip", "-4", "route", "show", "default"], timeout_sec)
+    gateway_ip: str | None = None
+    route_iface: str | None = None
+    if route_result is not None:
+        route_text = route_result.stdout.strip()
+        if route_text:
+            observations["route_table_snapshot"] = route_text[:500]
+            for line in route_text.splitlines():
+                m = re.search(r"default via (\S+) dev (\S+)", line)
+                if not m:
+                    continue
+                cand_gateway, cand_iface = m.group(1), m.group(2)
+                if cand_iface == iface:
+                    gateway_ip = cand_gateway
+                    route_iface = cand_iface
+                    break
+                if gateway_ip is None:
+                    gateway_ip = cand_gateway
+                    route_iface = cand_iface
+            observations["default_route_ok"] = gateway_ip is not None
+        else:
+            observations["default_route_ok"] = False
+
+    if route_iface is not None:
+        observations["default_route_iface"] = route_iface
+    if gateway_ip is not None:
+        observations["gateway_ip"] = gateway_ip
+
+    if gateway_ip is not None:
+        neigh_result, _ = _run_command_capture(
+            ["ip", "neigh", "show", gateway_ip, "dev", route_iface or iface], timeout_sec
+        )
+        if neigh_result is not None:
+            neigh_text = neigh_result.stdout.strip().lower()
+            if neigh_text:
+                resolved = all(state not in neigh_text for state in ("failed", "incomplete"))
+                observations["neighbor_resolved"] = resolved
+                observations["arp_gateway_ok"] = resolved
+
+        ping_result, ping_error = _run_command_capture(
+            ["ping", "-n", "-c", "3", "-W", str(timeout_sec), gateway_ip],
+            timeout_sec=max(2, timeout_sec * 2),
+        )
+        if ping_result is not None:
+            latency_ms, loss_pct = _parse_ping_stats(
+                (ping_result.stdout or "") + "\n" + (ping_result.stderr or "")
+            )
+            observations["gateway_latency_ms"] = latency_ms
+            observations["gateway_packet_loss_pct"] = loss_pct
+            observations["gateway_ok"] = ping_result.returncode == 0
+        elif ping_error == "timeout":
+            observations["gateway_ok"] = False
+
+    internet_targets = target.internet_ip_targets or ["1.1.1.1", "8.8.8.8"]
+    internet_attempted = False
+    for ip_target in internet_targets:
+        ping_result, ping_error = _run_command_capture(
+            ["ping", "-n", "-c", "3", "-W", str(timeout_sec), ip_target],
+            timeout_sec=max(2, timeout_sec * 2),
+        )
+        if ping_result is None:
+            if ping_error == "timeout":
+                internet_attempted = True
+            continue
+        internet_attempted = True
+        latency_ms, loss_pct = _parse_ping_stats((ping_result.stdout or "") + "\n")
+        if ping_result.returncode == 0:
+            observations["internet_ip_ok"] = True
+            observations["internet_ip_target"] = ip_target
+            observations["internet_ip_latency_ms"] = latency_ms
+            observations["internet_ip_packet_loss_pct"] = loss_pct
+            break
+        if observations.get("internet_ip_ok") is not True:
+            observations["internet_ip_target"] = ip_target
+            observations["internet_ip_latency_ms"] = latency_ms
+            observations["internet_ip_packet_loss_pct"] = loss_pct
+            observations["internet_ip_ok"] = False
+    if observations.get("internet_ip_ok") is None and internet_attempted:
+        observations["internet_ip_ok"] = False
+
+    dns_target = target.dns_query_target or "example.com"
+    observations["dns_query_target"] = dns_target
+    nameservers: list[str] = []
+    resolv_conf_loaded = True
+    try:
+        resolv_conf = Path("/etc/resolv.conf").read_text(encoding="utf-8")
+    except OSError:
+        resolv_conf = ""
+        resolv_conf_loaded = False
+    for line in resolv_conf.splitlines():
+        parts = line.strip().split()
+        if len(parts) == 2 and parts[0] == "nameserver":
+            nameservers.append(parts[1])
+    if nameservers:
+        observations["dns_server"] = nameservers[0]
+
+    dns_start = time.monotonic()
+    try:
+        if resolv_conf_loaded and not nameservers:
+            observations["dns_ok"] = False
+            observations["dns_error_kind"] = "resolver_config_missing"
+        else:
+            try:
+                socket.getaddrinfo(dns_target, 443, type=socket.SOCK_STREAM)
+                observations["dns_ok"] = True
+            except socket.gaierror as exc:
+                observations["dns_ok"] = False
+                observations["dns_error_kind"] = _classify_dns_gaierror(exc)
+            except TimeoutError:
+                observations["dns_ok"] = False
+                observations["dns_error_kind"] = "timeout"
+            except OSError as exc:
+                observations["dns_ok"] = False
+                observations["dns_error_kind"] = _classify_dns_oserror(exc)
+    finally:
+        observations["dns_latency_ms"] = (time.monotonic() - dns_start) * 1000.0
+
+    http_target = target.http_probe_target or target.http_time_probe_url
+    if http_target:
+        observations["http_probe_target"] = http_target
+        parsed = urlparse(http_target)
+        host = parsed.hostname
+        scheme = parsed.scheme.lower()
+        if host and scheme in ("http", "https"):
+            path = parsed.path or "/"
+            if parsed.query:
+                path = f"{path}?{parsed.query}"
+            port = parsed.port or (443 if scheme == "https" else 80)
+            total_start = time.monotonic()
+            sock: socket.socket | None = None
+            wrapped: socket.socket | None = None
+            file_obj: Any = None
+            try:
+                addr_info = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+                family, socktype, proto, _, sockaddr = addr_info[0]
+                connect_start = time.monotonic()
+                sock = socket.socket(family, socktype, proto)
+                sock.settimeout(float(timeout_sec))
+                connect_succeeded = False
+                try:
+                    sock.connect(sockaddr)
+                    connect_succeeded = True
+                    observations["http_connect_latency_ms"] = (
+                        time.monotonic() - connect_start
+                    ) * 1000.0
+                    wrapped = sock
+                    if scheme == "https":
+                        tls_start = time.monotonic()
+                        context = ssl.create_default_context()
+                        wrapped = context.wrap_socket(sock, server_hostname=host)
+                        observations["http_tls_latency_ms"] = (
+                            time.monotonic() - tls_start
+                        ) * 1000.0
+                    request_bytes = (
+                        f"HEAD {path} HTTP/1.1\r\n"
+                        f"Host: {host}\r\n"
+                        "Connection: close\r\n"
+                        "User-Agent: raspi-sentinel\r\n\r\n"
+                    ).encode("ascii", errors="ignore")
+                    wrapped.sendall(request_bytes)
+                    file_obj = wrapped.makefile("rb")
+                    status_line = file_obj.readline(512).decode("iso-8859-1", errors="ignore")
+                    m = re.match(r"HTTP/\d\.\d\s+(\d{3})", status_line.strip())
+                    if m:
+                        status_code = int(m.group(1))
+                        observations["http_status_code"] = status_code
+                        if 200 <= status_code < 300:
+                            observations["http_probe_ok"] = True
+                        else:
+                            observations["http_probe_ok"] = False
+                            observations["http_error_kind"] = "non_2xx"
+                    else:
+                        observations["http_probe_ok"] = False
+                        observations["http_error_kind"] = "unknown"
+                except TimeoutError:
+                    observations["http_probe_ok"] = False
+                    observations["http_error_kind"] = (
+                        "read_timeout" if connect_succeeded else "connect_timeout"
+                    )
+                except ssl.SSLError:
+                    observations["http_probe_ok"] = False
+                    observations["http_error_kind"] = "tls_error"
+                except OSError as exc:
+                    observations["http_probe_ok"] = False
+                    observations["http_error_kind"] = _classify_http_oserror(
+                        exc,
+                        connect_succeeded=connect_succeeded,
+                    )
+                finally:
+                    if file_obj is not None:
+                        file_obj.close()
+                    if wrapped is not None:
+                        wrapped.close()
+                    elif sock is not None:
+                        sock.close()
+            except socket.gaierror:
+                observations["http_probe_ok"] = False
+                observations["http_error_kind"] = "dns_resolution_failed"
+            except TimeoutError:
+                observations["http_probe_ok"] = False
+                observations["http_error_kind"] = "connect_timeout"
+            except OSError as exc:
+                observations["http_probe_ok"] = False
+                observations["http_error_kind"] = _classify_http_oserror(
+                    exc,
+                    connect_succeeded=False,
+                )
+            finally:
+                observations["http_total_latency_ms"] = (time.monotonic() - total_start) * 1000.0
 
 
 def apply_records_progress_check(
@@ -350,6 +747,30 @@ def run_checks(target: TargetConfig, now_wall_ts: float | None = None) -> CheckR
     observations: dict[str, Any] = {}
     wall = time.time() if now_wall_ts is None else now_wall_ts
 
+    def _run_dependency_check(
+        command: str | None,
+        use_shell: bool,
+        observation_key: str,
+        check_name: str,
+    ) -> None:
+        if not command:
+            return
+        timeout_sec = target.dependency_check_timeout_sec or 10
+        failure = _command_check(
+            command,
+            timeout_sec,
+            check_name=check_name,
+            use_shell=use_shell,
+        )
+        observations[observation_key] = failure is None
+        if failure:
+            failures.append(failure)
+
+    def _append_dependency_failure(check_name: str, message: str) -> None:
+        if any(f.check == check_name for f in failures):
+            return
+        failures.append(CheckFailure(check_name, message))
+
     if target.heartbeat_file is not None and target.heartbeat_max_age_sec is not None:
         failure = _file_freshness_check(
             target.heartbeat_file,
@@ -381,31 +802,63 @@ def run_checks(target: TargetConfig, now_wall_ts: float | None = None) -> CheckR
         if failure:
             failures.append(failure)
 
-    if target.dns_check_command:
-        timeout_sec = target.dependency_check_timeout_sec or 10
-        failure = _command_check(
-            target.dns_check_command,
-            timeout_sec,
-            check_name="dependency_dns",
-            use_shell=target.dns_check_use_shell,
-        )
-        observations["dns_ok"] = failure is None
-        if failure:
-            failures.append(failure)
-
-    if target.gateway_check_command:
-        timeout_sec = target.dependency_check_timeout_sec or 10
-        failure = _command_check(
-            target.gateway_check_command,
-            timeout_sec,
-            check_name="dependency_gateway",
-            use_shell=target.gateway_check_use_shell,
-        )
-        observations["gateway_ok"] = failure is None
-        if failure:
-            failures.append(failure)
+    _run_dependency_check(
+        command=target.link_check_command,
+        use_shell=target.link_check_use_shell,
+        observation_key="link_ok",
+        check_name="dependency_link",
+    )
+    _run_dependency_check(
+        command=target.default_route_check_command,
+        use_shell=target.default_route_check_use_shell,
+        observation_key="default_route_ok",
+        check_name="dependency_default_route",
+    )
+    _run_dependency_check(
+        command=target.gateway_check_command,
+        use_shell=target.gateway_check_use_shell,
+        observation_key="gateway_ok",
+        check_name="dependency_gateway",
+    )
+    _run_dependency_check(
+        command=target.internet_ip_check_command,
+        use_shell=target.internet_ip_check_use_shell,
+        observation_key="internet_ip_ok",
+        check_name="dependency_internet_ip",
+    )
+    _run_dependency_check(
+        command=target.dns_server_check_command,
+        use_shell=target.dns_server_check_use_shell,
+        observation_key="dns_server_reachable",
+        check_name="dependency_dns_server",
+    )
+    _run_dependency_check(
+        command=target.dns_check_command,
+        use_shell=target.dns_check_use_shell,
+        observation_key="dns_ok",
+        check_name="dependency_dns",
+    )
+    _run_dependency_check(
+        command=target.wan_vs_target_check_command,
+        use_shell=target.wan_vs_target_check_use_shell,
+        observation_key="wan_vs_target_ok",
+        check_name="dependency_wan_target",
+    )
 
     _stats_checks(target=target, failures=failures, observations=observations, now_wall_ts=wall)
+    _probe_network_uplink(target=target, observations=observations)
+
+    dependency_observation_checks = (
+        ("link_ok", "dependency_link"),
+        ("default_route_ok", "dependency_default_route"),
+        ("gateway_ok", "dependency_gateway"),
+        ("internet_ip_ok", "dependency_internet_ip"),
+        ("dns_ok", "dependency_dns"),
+        ("http_probe_ok", "dependency_http_probe"),
+    )
+    for observation_key, check_name in dependency_observation_checks:
+        if observations.get(observation_key) is False:
+            _append_dependency_failure(check_name, f"{observation_key}=false")
 
     if target.service_active:
         for service in target.services:

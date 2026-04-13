@@ -46,8 +46,20 @@ def _enabled_rules(target: TargetConfig) -> list[str]:
         rules.append("semantic_stats")
     if target.dns_check_command is not None:
         rules.append("dns_dependency")
+    if target.dns_server_check_command is not None:
+        rules.append("dns_server_dependency")
     if target.gateway_check_command is not None:
         rules.append("gateway_dependency")
+    if target.link_check_command is not None:
+        rules.append("link_dependency")
+    if target.default_route_check_command is not None:
+        rules.append("default_route_dependency")
+    if target.internet_ip_check_command is not None:
+        rules.append("internet_ip_dependency")
+    if target.wan_vs_target_check_command is not None:
+        rules.append("wan_target_dependency")
+    if target.network_probe_enabled:
+        rules.append("network_probe")
     if target.time_health_enabled:
         rules.append("time_health")
     return rules
@@ -59,8 +71,18 @@ def _shell_commands(target: TargetConfig) -> dict[str, str]:
         commands["command"] = target.command
     if target.dns_check_command is not None:
         commands["dns_check_command"] = target.dns_check_command
+    if target.dns_server_check_command is not None:
+        commands["dns_server_check_command"] = target.dns_server_check_command
     if target.gateway_check_command is not None:
         commands["gateway_check_command"] = target.gateway_check_command
+    if target.link_check_command is not None:
+        commands["link_check_command"] = target.link_check_command
+    if target.default_route_check_command is not None:
+        commands["default_route_check_command"] = target.default_route_check_command
+    if target.internet_ip_check_command is not None:
+        commands["internet_ip_check_command"] = target.internet_ip_check_command
+    if target.wan_vs_target_check_command is not None:
+        commands["wan_vs_target_check_command"] = target.wan_vs_target_check_command
     if target.maintenance_mode_command is not None:
         commands["maintenance_mode_command"] = target.maintenance_mode_command
     return commands
@@ -72,8 +94,18 @@ def _shell_opt_in_checks(target: TargetConfig) -> list[str]:
         checks.append("command")
     if target.dns_check_command is not None and target.dns_check_use_shell:
         checks.append("dns_check_command")
+    if target.dns_server_check_command is not None and target.dns_server_check_use_shell:
+        checks.append("dns_server_check_command")
     if target.gateway_check_command is not None and target.gateway_check_use_shell:
         checks.append("gateway_check_command")
+    if target.link_check_command is not None and target.link_check_use_shell:
+        checks.append("link_check_command")
+    if target.default_route_check_command is not None and target.default_route_check_use_shell:
+        checks.append("default_route_check_command")
+    if target.internet_ip_check_command is not None and target.internet_ip_check_use_shell:
+        checks.append("internet_ip_check_command")
+    if target.wan_vs_target_check_command is not None and target.wan_vs_target_check_use_shell:
+        checks.append("wan_vs_target_check_command")
     if target.maintenance_mode_command is not None and target.maintenance_mode_use_shell:
         checks.append("maintenance_mode_command")
     return checks
@@ -210,6 +242,17 @@ def _target_summary(
             "http_time_probe_timeout_sec": target.http_time_probe_timeout_sec,
             "clock_skew_threshold_sec": target.clock_skew_threshold_sec,
             "clock_anomaly_reboot_consecutive": target.clock_anomaly_reboot_consecutive,
+        },
+        "network_probe": {
+            "enabled": target.network_probe_enabled,
+            "network_interface": target.network_interface,
+            "gateway_probe_timeout_sec": target.gateway_probe_timeout_sec,
+            "internet_ip_targets": target.internet_ip_targets,
+            "dns_query_target": target.dns_query_target,
+            "http_probe_target": target.http_probe_target,
+            "consecutive_failure_thresholds": target.consecutive_failure_thresholds,
+            "latency_thresholds_ms": target.latency_thresholds_ms,
+            "packet_loss_thresholds_pct": target.packet_loss_thresholds_pct,
         },
         "maintenance_mode": {
             "enabled": target.maintenance_mode_command is not None,

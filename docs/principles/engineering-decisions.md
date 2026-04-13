@@ -130,6 +130,85 @@ Locations: [src/raspi_sentinel/checks.py](../../src/raspi_sentinel/checks.py), [
 
 Rationale: DNS failures and path failures have different remediation paths. Mixing them leads to unnecessary reboot behavior.
 
+### 5-5. Layer network_uplink evidence from link to HTTP
+
+Locations: [src/raspi_sentinel/checks.py](../../src/raspi_sentinel/checks.py), [src/raspi_sentinel/policy.py](../../src/raspi_sentinel/policy.py), [src/raspi_sentinel/time_health.py](../../src/raspi_sentinel/time_health.py)
+
+Decision:
+
+- Collect network evidence in fixed order:
+  - `link_ok`
+  - `default_route_ok`
+  - `gateway_ok`
+  - `internet_ip_ok`
+  - `dns_ok`
+  - `http_probe_ok`
+- Keep status as summary and keep per-layer observations as evidence.
+
+Rationale: This ordering separates Wi-Fi/L2, route, LAN gateway, WAN reachability, DNS, and upper-layer failures so incident response can choose the correct remediation path.
+
+Tradeoff: More fields increase payload size and implementation complexity, but they significantly reduce ambiguity in `reason` and improve auditability.
+
+### 5-6. Use consecutive-failure thresholds to suppress single-sample noise
+
+Locations: [src/raspi_sentinel/time_health.py](../../src/raspi_sentinel/time_health.py), [src/raspi_sentinel/policy.py](../../src/raspi_sentinel/policy.py), [src/raspi_sentinel/config.py](../../src/raspi_sentinel/config.py)
+
+Decision:
+
+- Persist per-layer consecutive failure counters in target runtime state.
+- Keep single-cycle failures as `ok` with `transient_network_failure`.
+- Escalate to `degraded`/`failed` only after configured threshold breaches.
+
+Rationale: One-shot probe failures are common on small edge hosts. Threshold-based escalation reduces alert flapping and avoids unnecessary restart/reboot actions.
+
+Tradeoff: Detection latency increases by a few cycles, but stability and action quality improve.
+
+### 5-7. Preserve `null` vs `false` semantics in evidence
+
+Locations: [src/raspi_sentinel/status_events.py](../../src/raspi_sentinel/status_events.py), [docs/facts/data-contracts.md](../facts/data-contracts.md)
+
+Decision:
+
+- Serialize unknown/unavailable observations as `null`.
+- Serialize explicit negative observations as `false`.
+- Do not coerce unknown probe data into failure by default.
+
+Rationale: Operational consumers must distinguish "probe unavailable" from "probe failed". Conflating these states causes false diagnoses and misleading post-incident analysis.
+
+### 5-8. Define HTTP probe success as 2xx only and classify failures explicitly
+
+Locations: [src/raspi_sentinel/checks.py](../../src/raspi_sentinel/checks.py), [src/raspi_sentinel/status_events.py](../../src/raspi_sentinel/status_events.py), [src/raspi_sentinel/monitor_stats.py](../../src/raspi_sentinel/monitor_stats.py)
+
+Decision:
+
+- Treat HTTP probe as healthy only when `200 <= status < 300`.
+- Preserve `http_status_code` even on non-2xx responses.
+- Emit explicit `http_error_kind` values (`dns_resolution_failed`, `connect_timeout`, `read_timeout`, `tls_error`, `connection_refused`, `non_2xx`, `unknown`) for operational triage.
+
+Rationale: Status-line parse success alone is not network/application health. Distinguishing transport and upstream failure classes improves incident routing and avoids misleading "healthy" classification on error pages.
+
+### 5-9. Keep `link_ok` as summary and export link/gateway evidence details
+
+Locations: [src/raspi_sentinel/checks.py](../../src/raspi_sentinel/checks.py), [src/raspi_sentinel/status_events.py](../../src/raspi_sentinel/status_events.py), [src/raspi_sentinel/monitor_stats.py](../../src/raspi_sentinel/monitor_stats.py)
+
+Decision:
+
+- Keep `link_ok` as a compact summary signal.
+- Export raw/derived evidence fields (`iface_up`, `wifi_associated`, `ip_assigned`, `operstate_raw`) and gateway neighbor evidence (`neighbor_resolved`, `arp_gateway_ok`) to both transition events and monitor stats.
+
+Rationale: Summary-only booleans lose root-cause precision. Keeping evidence next to status preserves auditability without changing state-machine simplicity.
+
+### 5-10. Require `policy_status=failed` for reboot escalation
+
+Locations: [src/raspi_sentinel/recovery.py](../../src/raspi_sentinel/recovery.py), [src/raspi_sentinel/policy.py](../../src/raspi_sentinel/policy.py)
+
+Decision:
+
+- Allow restart logic for persistent non-healthy states as before.
+- Gate all reboot paths behind `policy_status == "failed"` in addition to existing safeguards.
+
+Rationale: Reboot is the heaviest action. Binding reboot to explicit policy failure prevents long-lived `degraded` states from escalating to disruptive recovery.
+
 ---
 
 ## 6. Observability and Auditability

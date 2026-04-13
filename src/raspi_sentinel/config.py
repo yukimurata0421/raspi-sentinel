@@ -5,7 +5,7 @@ import stat
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping
 
 LOG = logging.getLogger(__name__)
 
@@ -46,8 +46,27 @@ class TargetConfig:
     command_timeout_sec: int | None
     dns_check_command: str | None
     dns_check_use_shell: bool
+    dns_server_check_command: str | None
+    dns_server_check_use_shell: bool
     gateway_check_command: str | None
     gateway_check_use_shell: bool
+    link_check_command: str | None
+    link_check_use_shell: bool
+    default_route_check_command: str | None
+    default_route_check_use_shell: bool
+    internet_ip_check_command: str | None
+    internet_ip_check_use_shell: bool
+    wan_vs_target_check_command: str | None
+    wan_vs_target_check_use_shell: bool
+    network_probe_enabled: bool
+    network_interface: str | None
+    gateway_probe_timeout_sec: int
+    internet_ip_targets: list[str]
+    dns_query_target: str | None
+    http_probe_target: str | None
+    consecutive_failure_thresholds: dict[str, int]
+    latency_thresholds_ms: dict[str, float]
+    packet_loss_thresholds_pct: dict[str, float]
     dependency_check_timeout_sec: int | None
     stats_file: Path | None
     stats_updated_max_age_sec: int | None
@@ -130,6 +149,24 @@ def _optional_bool(data: Mapping[str, object], key: str, default: bool) -> bool:
     return value
 
 
+def _optional_str_list(data: Mapping[str, object], key: str) -> list[str] | None:
+    value = data.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, list) or any(not isinstance(v, str) or not v.strip() for v in value):
+        raise ValueError(f"'{key}' must be an array of non-empty strings")
+    return [v.strip() for v in value]
+
+
+def _optional_float_from_mapping(data: Mapping[str, Any], key: str) -> float | None:
+    value = data.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"'{key}' must be a number")
+    return float(value)
+
+
 def _validate_target_rules(target: TargetConfig) -> None:
     has_heartbeat = target.heartbeat_file is not None or target.heartbeat_max_age_sec is not None
     if has_heartbeat and (target.heartbeat_file is None or target.heartbeat_max_age_sec is None):
@@ -165,6 +202,66 @@ def _validate_target_rules(target: TargetConfig) -> None:
     if target.gateway_check_use_shell and target.gateway_check_command is None:
         raise ValueError(
             (f"target '{target.name}': gateway_check_use_shell=true requires gateway_check_command")
+        )
+
+    if target.link_check_use_shell and target.link_check_command is None:
+        raise ValueError(
+            f"target '{target.name}': link_check_use_shell=true requires link_check_command"
+        )
+
+    if target.default_route_check_use_shell and target.default_route_check_command is None:
+        raise ValueError(
+            (
+                f"target '{target.name}': default_route_check_use_shell=true requires "
+                "default_route_check_command"
+            )
+        )
+
+    if target.internet_ip_check_use_shell and target.internet_ip_check_command is None:
+        raise ValueError(
+            (
+                f"target '{target.name}': internet_ip_check_use_shell=true requires "
+                "internet_ip_check_command"
+            )
+        )
+
+    if target.dns_server_check_use_shell and target.dns_server_check_command is None:
+        raise ValueError(
+            (
+                f"target '{target.name}': dns_server_check_use_shell=true requires "
+                "dns_server_check_command"
+            )
+        )
+
+    if target.wan_vs_target_check_use_shell and target.wan_vs_target_check_command is None:
+        raise ValueError(
+            (
+                f"target '{target.name}': wan_vs_target_check_use_shell=true requires "
+                "wan_vs_target_check_command"
+            )
+        )
+
+    if target.network_probe_enabled:
+        if target.network_interface is None:
+            raise ValueError(
+                f"target '{target.name}': network_probe_enabled=true requires network_interface"
+            )
+        if target.gateway_probe_timeout_sec <= 0:
+            raise ValueError(f"target '{target.name}': gateway_probe_timeout_sec must be > 0")
+        if not target.internet_ip_targets:
+            raise ValueError(
+                f"target '{target.name}': internet_ip_targets must have at least one target"
+            )
+
+    degraded_threshold = target.consecutive_failure_thresholds.get("degraded", 2)
+    failed_threshold = target.consecutive_failure_thresholds.get("failed", 6)
+    if degraded_threshold <= 0 or failed_threshold <= 0:
+        raise ValueError(
+            f"target '{target.name}': consecutive_failure_thresholds values must be > 0"
+        )
+    if failed_threshold < degraded_threshold:
+        raise ValueError(
+            f"target '{target.name}': consecutive_failure_thresholds.failed must be >= degraded"
         )
 
     if target.dependency_check_timeout_sec is not None and target.dependency_check_timeout_sec <= 0:
@@ -261,7 +358,13 @@ def _validate_target_rules(target: TargetConfig) -> None:
             target.command is not None,
             target.stats_file is not None,
             target.dns_check_command is not None,
+            target.dns_server_check_command is not None,
             target.gateway_check_command is not None,
+            target.link_check_command is not None,
+            target.default_route_check_command is not None,
+            target.internet_ip_check_command is not None,
+            target.wan_vs_target_check_command is not None,
+            target.network_probe_enabled,
             target.time_health_enabled,
         ]
     )
@@ -269,7 +372,9 @@ def _validate_target_rules(target: TargetConfig) -> None:
         raise ValueError(
             f"target '{target.name}': at least one rule is required "
             "(service_active, heartbeat, output, command, stats_file, "
-            "dns_check_command, gateway_check_command, time_health_enabled)"
+            "dns_check_command, dns_server_check_command, gateway_check_command, "
+            "link_check_command, default_route_check_command, internet_ip_check_command, "
+            "wan_vs_target_check_command, network_probe_enabled, time_health_enabled)"
         )
 
 
@@ -410,6 +515,16 @@ def load_config(path: Path) -> AppConfig:
         if not isinstance(service_active, bool):
             raise ValueError(f"target '{name}': service_active must be boolean")
 
+        thresholds_raw = item.get("consecutive_failure_thresholds", {})
+        if not isinstance(thresholds_raw, dict):
+            raise ValueError(f"target '{name}': consecutive_failure_thresholds must be a table")
+        latency_raw = item.get("latency_thresholds_ms", {})
+        if not isinstance(latency_raw, dict):
+            raise ValueError(f"target '{name}': latency_thresholds_ms must be a table")
+        loss_raw = item.get("packet_loss_thresholds_pct", {})
+        if not isinstance(loss_raw, dict):
+            raise ValueError(f"target '{name}': packet_loss_thresholds_pct must be a table")
+
         target = TargetConfig(
             name=name,
             services=services_raw,
@@ -423,8 +538,51 @@ def load_config(path: Path) -> AppConfig:
             command_timeout_sec=_optional_int(item, "command_timeout_sec"),
             dns_check_command=_optional_str(item, "dns_check_command"),
             dns_check_use_shell=_optional_bool(item, "dns_check_use_shell", False),
+            dns_server_check_command=_optional_str(item, "dns_server_check_command"),
+            dns_server_check_use_shell=_optional_bool(item, "dns_server_check_use_shell", False),
             gateway_check_command=_optional_str(item, "gateway_check_command"),
             gateway_check_use_shell=_optional_bool(item, "gateway_check_use_shell", False),
+            link_check_command=_optional_str(item, "link_check_command"),
+            link_check_use_shell=_optional_bool(item, "link_check_use_shell", False),
+            default_route_check_command=_optional_str(item, "default_route_check_command"),
+            default_route_check_use_shell=_optional_bool(
+                item, "default_route_check_use_shell", False
+            ),
+            internet_ip_check_command=_optional_str(item, "internet_ip_check_command"),
+            internet_ip_check_use_shell=_optional_bool(item, "internet_ip_check_use_shell", False),
+            wan_vs_target_check_command=_optional_str(item, "wan_vs_target_check_command"),
+            wan_vs_target_check_use_shell=_optional_bool(
+                item, "wan_vs_target_check_use_shell", False
+            ),
+            network_probe_enabled=_optional_bool(item, "network_probe_enabled", False),
+            network_interface=_optional_str(item, "network_interface"),
+            gateway_probe_timeout_sec=_require_int(item, "gateway_probe_timeout_sec", 2),
+            internet_ip_targets=_optional_str_list(item, "internet_ip_targets")
+            or ["1.1.1.1", "8.8.8.8"],
+            dns_query_target=_optional_str(item, "dns_query_target"),
+            http_probe_target=_optional_str(item, "http_probe_target"),
+            consecutive_failure_thresholds={
+                "degraded": _require_int(thresholds_raw, "degraded", 2),
+                "failed": _require_int(thresholds_raw, "failed", 6),
+            },
+            latency_thresholds_ms={
+                key: value
+                for key, value in (
+                    ("gateway", _optional_float_from_mapping(latency_raw, "gateway")),
+                    ("internet_ip", _optional_float_from_mapping(latency_raw, "internet_ip")),
+                    ("dns", _optional_float_from_mapping(latency_raw, "dns")),
+                    ("http_total", _optional_float_from_mapping(latency_raw, "http_total")),
+                )
+                if value is not None
+            },
+            packet_loss_thresholds_pct={
+                key: value
+                for key, value in (
+                    ("gateway", _optional_float_from_mapping(loss_raw, "gateway")),
+                    ("internet_ip", _optional_float_from_mapping(loss_raw, "internet_ip")),
+                )
+                if value is not None
+            },
             dependency_check_timeout_sec=_optional_int(item, "dependency_check_timeout_sec"),
             stats_file=_optional_path(item, "stats_file"),
             stats_updated_max_age_sec=_optional_int(item, "stats_updated_max_age_sec"),
@@ -467,7 +625,13 @@ def load_config(path: Path) -> AppConfig:
         if target.command_timeout_sec is None and target.command is not None:
             target.command_timeout_sec = global_config.default_command_timeout_sec
         if target.dependency_check_timeout_sec is None and (
-            target.dns_check_command is not None or target.gateway_check_command is not None
+            target.dns_check_command is not None
+            or target.dns_server_check_command is not None
+            or target.gateway_check_command is not None
+            or target.link_check_command is not None
+            or target.default_route_check_command is not None
+            or target.internet_ip_check_command is not None
+            or target.wan_vs_target_check_command is not None
         ):
             target.dependency_check_timeout_sec = global_config.default_command_timeout_sec
         if (

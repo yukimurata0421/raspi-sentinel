@@ -87,19 +87,85 @@ def build_event_evidence(result: CheckResult) -> dict[str, Any]:
         "clock_drift_sec",
         "http_time_skew_sec",
         "stats_age_sec",
+        "dns_latency_ms",
     ):
         value = safe_float(observations.get(field_name))
         if value is not None:
             payload[field_name] = value
 
-    for field_name in ("dns_ok", "gateway_ok", "http_probe_ok", "ntp_sync_ok"):
-        value = safe_bool(observations.get(field_name))
+    for field_name in (
+        "link_ok",
+        "iface_up",
+        "wifi_associated",
+        "ip_assigned",
+        "default_route_ok",
+        "gateway_ok",
+        "neighbor_resolved",
+        "arp_gateway_ok",
+        "internet_ip_ok",
+        "dns_server_reachable",
+        "dns_ok",
+        "wan_vs_target_ok",
+        "http_probe_ok",
+        "ntp_sync_ok",
+    ):
+        if field_name not in observations:
+            continue
+        raw = observations.get(field_name)
+        value = safe_bool(raw)
         if value is not None:
             payload[field_name] = value
+        elif raw is None:
+            payload[field_name] = None
 
     freeze_count = safe_optional_int(observations.get("consecutive_clock_freeze_count"))
     if freeze_count is not None:
         payload["consecutive_clock_freeze_count"] = freeze_count
+
+    nullable_fields = (
+        "network_interface",
+        "operstate_raw",
+        "ssid",
+        "bssid",
+        "rssi_dbm",
+        "tx_bitrate_mbps",
+        "rx_bitrate_mbps",
+        "default_route_iface",
+        "gateway_ip",
+        "route_table_snapshot",
+        "gateway_latency_ms",
+        "gateway_packet_loss_pct",
+        "internet_ip_target",
+        "internet_ip_latency_ms",
+        "internet_ip_packet_loss_pct",
+        "dns_server",
+        "dns_query_target",
+        "dns_error_kind",
+        "http_probe_target",
+        "http_status_code",
+        "http_total_latency_ms",
+        "http_connect_latency_ms",
+        "http_tls_latency_ms",
+        "http_error_kind",
+        "gateway_latency_exceeded",
+        "internet_latency_exceeded",
+        "dns_latency_exceeded",
+        "http_latency_exceeded",
+        "gateway_loss_exceeded",
+        "internet_loss_exceeded",
+        "link_fail_consecutive",
+        "route_fail_consecutive",
+        "gateway_fail_consecutive",
+        "internet_fail_consecutive",
+        "dns_fail_consecutive",
+        "http_fail_consecutive",
+    )
+    for field_name in nullable_fields:
+        if field_name not in observations:
+            continue
+        value = observations.get(field_name)
+        if value is None or isinstance(value, (bool, int, float, str)):
+            payload[field_name] = value
 
     return payload
 

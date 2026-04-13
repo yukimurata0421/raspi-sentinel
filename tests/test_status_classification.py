@@ -8,8 +8,11 @@ import pytest
 from raspi_sentinel.checks import CheckFailure, CheckResult
 from raspi_sentinel.policy import classify_target_policy
 from raspi_sentinel.status_events import (
+    append_event,
     apply_policy_to_result,
+    build_event_evidence,
     classify_target_state,
+    record_notify_failure_event,
     record_status_events,
 )
 
@@ -136,6 +139,120 @@ def test_record_status_events_action_only_on_restart_reboot(tmp_path: Path) -> N
     assert len(lines) == 1
     ev = json.loads(lines[0])
     assert ev.get("action") == "restart"
+
+
+def test_record_status_events_preserves_null_vs_false_evidence(tmp_path: Path) -> None:
+    events = tmp_path / "e.jsonl"
+    target_state: dict = {}
+    result = CheckResult(
+        "network_uplink",
+        False,
+        [],
+        observations={
+            "network_probe_enabled": True,
+            "link_ok": None,
+            "gateway_ok": False,
+            "dns_ok": None,
+            "http_probe_ok": False,
+            "gateway_latency_ms": 123.4,
+            "dns_error_kind": None,
+        },
+    )
+    record_status_events(
+        events_file=events,
+        target_state=target_state,
+        target_name="network_uplink",
+        current_status="degraded",
+        current_reason="gateway_error",
+        result=result,
+        action="warn",
+        now_ts=1_000_000.0,
+        max_file_bytes=0,
+    )
+    line = events.read_text(encoding="utf-8").strip().splitlines()[0]
+    payload = json.loads(line)
+    assert "link_ok" in payload and payload["link_ok"] is None
+    assert "dns_ok" in payload and payload["dns_ok"] is None
+    assert payload["gateway_ok"] is False
+    assert payload["http_probe_ok"] is False
+
+
+def test_events_include_neighbor_and_arp_gateway_evidence(tmp_path: Path) -> None:
+    events = tmp_path / "e.jsonl"
+    target_state: dict = {}
+    result = CheckResult(
+        "network_uplink",
+        False,
+        [],
+        observations={
+            "neighbor_resolved": False,
+            "arp_gateway_ok": False,
+            "gateway_ip": "192.168.1.1",
+            "default_route_iface": "wlan0",
+            "route_table_snapshot": "default via 192.168.1.1 dev wlan0",
+        },
+    )
+    record_status_events(
+        events_file=events,
+        target_state=target_state,
+        target_name="network_uplink",
+        current_status="degraded",
+        current_reason="gateway_error",
+        result=result,
+        action="warn",
+        now_ts=1_000_000.0,
+        max_file_bytes=0,
+    )
+    payload = json.loads(events.read_text(encoding="utf-8").strip())
+    assert payload["neighbor_resolved"] is False
+    assert payload["arp_gateway_ok"] is False
+    assert payload["gateway_ip"] == "192.168.1.1"
+    assert payload["default_route_iface"] == "wlan0"
+    assert "route_table_snapshot" in payload
+
+
+def test_record_notify_failure_event_appends_line(tmp_path: Path) -> None:
+    events = tmp_path / "events.jsonl"
+    record_notify_failure_event(
+        events_file=events,
+        max_file_bytes=0,
+        backup_generations=1,
+        context="discord:webhook",
+        now_ts=1_000_000.0,
+    )
+    payload = json.loads(events.read_text(encoding="utf-8").strip())
+    assert payload["kind"] == "notify_delivery_failed"
+    assert payload["context"] == "discord:webhook"
+
+
+def test_append_event_oserror_is_handled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    events = tmp_path / "events.jsonl"
+
+    class BrokenFile:
+        def __enter__(self) -> "BrokenFile":
+            raise OSError("disk full")
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> bool:
+            return False
+
+    monkeypatch.setattr(Path, "open", lambda self, *args, **kwargs: BrokenFile(), raising=False)
+    append_event(events, {"k": "v"}, max_file_bytes=0, backup_generations=1)
+    assert not events.exists()
+
+
+def test_build_event_evidence_includes_freeze_counter() -> None:
+    result = CheckResult(
+        "clock",
+        False,
+        [],
+        observations={
+            "consecutive_clock_freeze_count": 4,
+            "link_ok": None,
+        },
+    )
+    payload = build_event_evidence(result)
+    assert payload["consecutive_clock_freeze_count"] == 4
+    assert payload["link_ok"] is None
 
 
 def test_service_active_requires_services(tmp_path: Path) -> None:

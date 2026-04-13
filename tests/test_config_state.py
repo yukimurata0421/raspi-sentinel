@@ -124,6 +124,65 @@ def test_load_config_sets_dependency_timeout_from_global_default(
     assert cfg.targets[0].dependency_check_timeout_sec == 7
 
 
+def test_load_config_accepts_network_probe_settings(tmp_path: Path) -> None:
+    conf = tmp_path / "config.toml"
+    _write(
+        conf,
+        """
+        [global]
+        state_file = "/tmp/state.json"
+        restart_threshold = 2
+        reboot_threshold = 3
+        restart_cooldown_sec = 10
+        reboot_cooldown_sec = 20
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 60
+        default_command_timeout_sec = 7
+        loop_interval_sec = 30
+
+        [notify.discord]
+        enabled = false
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "network_uplink"
+        services = []
+        service_active = false
+        network_probe_enabled = true
+        network_interface = "wlan0"
+        gateway_probe_timeout_sec = 2
+        internet_ip_targets = ["1.1.1.1", "8.8.8.8"]
+        dns_query_target = "example.com"
+        http_probe_target = "https://www.google.com/generate_204"
+
+        [targets.consecutive_failure_thresholds]
+        degraded = 2
+        failed = 6
+
+        [targets.latency_thresholds_ms]
+        gateway = 100
+        internet_ip = 300
+        dns = 400
+        http_total = 1200
+
+        [targets.packet_loss_thresholds_pct]
+        gateway = 20
+        internet_ip = 25
+        """,
+    )
+    cfg = load_config(conf)
+    target = cfg.targets[0]
+    assert target.network_probe_enabled is True
+    assert target.network_interface == "wlan0"
+    assert target.internet_ip_targets == ["1.1.1.1", "8.8.8.8"]
+    assert target.consecutive_failure_thresholds["degraded"] == 2
+    assert target.latency_thresholds_ms["gateway"] == 100.0
+
+
 def test_state_store_round_trip_preserves_monitor_stats(tmp_path: Path) -> None:
     state_file = tmp_path / "state.json"
     store = StateStore(state_file)

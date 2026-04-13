@@ -32,7 +32,20 @@ Write policy:
 Common fields:
 
 - required: `ts`, `service`, `from`, `to`, `reason`
-- optional: `action`, `delta_wall_sec`, `delta_monotonic_sec`, `clock_drift_sec`, `http_time_skew_sec`, `dns_ok`, `gateway_ok`, `http_probe_ok`, `ntp_sync_ok`, `consecutive_clock_freeze_count`, `stats_age_sec`
+- optional:
+  - action/time evidence: `action`, `delta_wall_sec`, `delta_monotonic_sec`, `clock_drift_sec`, `http_time_skew_sec`, `ntp_sync_ok`, `consecutive_clock_freeze_count`, `stats_age_sec`
+  - layered network bools: `link_ok`, `iface_up`, `wifi_associated`, `ip_assigned`, `default_route_ok`, `gateway_ok`, `neighbor_resolved`, `arp_gateway_ok`, `internet_ip_ok`, `dns_ok`, `http_probe_ok`, `wan_vs_target_ok`, `dns_server_reachable`
+  - network quality/details: `gateway_latency_ms`, `gateway_packet_loss_pct`, `internet_ip_latency_ms`, `internet_ip_packet_loss_pct`, `dns_latency_ms`, `http_total_latency_ms`, `http_connect_latency_ms`, `http_tls_latency_ms`, `http_status_code`
+  - link/route metadata: `network_interface`, `operstate_raw`, `ssid`, `bssid`, `rssi_dbm`, `tx_bitrate_mbps`, `rx_bitrate_mbps`, `default_route_iface`, `gateway_ip`, `route_table_snapshot`
+  - diagnostic context: `dns_server`, `dns_query_target`, `dns_error_kind`, `http_probe_target`, `http_error_kind`, per-layer consecutive counters
+    - `dns_error_kind`: `nxdomain`, `timeout`, `resolver_config_missing`, `no_server`, `unreachable`, `unknown`
+    - `http_error_kind`: `dns_resolution_failed`, `connect_timeout`, `read_timeout`, `tls_error`, `connection_refused`, `non_2xx`, `unknown`
+
+Null semantics:
+
+- `null` means observation unavailable/unknown for that cycle.
+- `false` means observed negative result.
+- Consumers must not treat `null` and `false` as equivalent.
 
 ## 3. monitor stats snapshot (`monitor_stats_file`)
 

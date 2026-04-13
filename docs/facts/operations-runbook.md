@@ -74,14 +74,40 @@ tail -n 50 /var/lib/raspi-sentinel/events.jsonl
 Typical interpretation order:
 
 1. Check `reason` in events and run-once JSON.
-2. Inspect evidence fields (`dns_ok`, `gateway_ok`, `http_probe_ok`, `http_time_skew_sec`, `delta_*`).
-3. Confirm whether action was `warn`, `restart`, or `reboot`.
-4. Correlate with journald output of monitored services.
+2. Inspect layered network evidence in order:
+   `link_ok` -> `default_route_ok` -> `gateway_ok` -> `internet_ip_ok` -> `dns_ok` -> `http_probe_ok`.
+   For `link_ok`, always check decomposition evidence:
+   `iface_up`, `wifi_associated`, `ip_assigned`, `operstate_raw`.
+   For gateway path diagnosis, also inspect:
+   `neighbor_resolved`, `arp_gateway_ok`, `gateway_ip`, `default_route_iface`.
+3. Inspect quality fields when available (`*_latency_ms`, `*_packet_loss_pct`, `rssi_dbm`).
+4. Inspect clock fields (`http_time_skew_sec`, `delta_*`, `clock_drift_sec`) for time-health context.
+5. Confirm whether action was `warn`, `restart`, or `reboot`.
+6. Correlate with journald output of monitored services.
+
+Reason quick map:
+
+- `link_error`: Wi-Fi/NIC/AP association issue
+- `route_missing`: default route missing or broken
+- `gateway_error`: LAN path to gateway failing
+- `wan_error`: gateway reachable but upstream internet IP path failing
+- `dns_error`: upstream reachable but DNS failing
+- `http_error`: DNS works but HTTP/TLS or upper-layer endpoint fails
+- `target_reachability_error`: specific destination issue while general internet can be healthy
+- `transient_network_failure`: below consecutive threshold; watch for persistence
+
+HTTP probe notes:
+
+- `http_probe_ok=true` only means 2xx response.
+- non-2xx response sets `http_probe_ok=false`, `http_error_kind=non_2xx`.
+- `http_error_kind` may be one of:
+  `dns_resolution_failed`, `connect_timeout`, `read_timeout`, `tls_error`, `connection_refused`, `non_2xx`, `unknown`.
 
 ## 5. Safety Notes
 
 - Do not treat a single external skew observation as reboot evidence.
-- Do not assume `http_probe_failed` means local clock failure.
+- Reboot escalation requires `policy_status=failed`; persistent `degraded` alone should not reboot.
+- Do not assume `http_error` means local clock failure.
 - Keep config file permissions strict (`chmod 600` recommended on production hosts).
 - Treat command fields as trusted admin input only.
 - Use `*_use_shell=true` only where shell syntax is required.

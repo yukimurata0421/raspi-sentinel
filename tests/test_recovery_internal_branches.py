@@ -48,8 +48,27 @@ def _target(**overrides: Any) -> TargetConfig:
         "command_timeout_sec": None,
         "dns_check_command": None,
         "dns_check_use_shell": False,
+        "dns_server_check_command": None,
+        "dns_server_check_use_shell": False,
         "gateway_check_command": None,
         "gateway_check_use_shell": False,
+        "link_check_command": None,
+        "link_check_use_shell": False,
+        "default_route_check_command": None,
+        "default_route_check_use_shell": False,
+        "internet_ip_check_command": None,
+        "internet_ip_check_use_shell": False,
+        "wan_vs_target_check_command": None,
+        "wan_vs_target_check_use_shell": False,
+        "network_probe_enabled": False,
+        "network_interface": None,
+        "gateway_probe_timeout_sec": 2,
+        "internet_ip_targets": ["1.1.1.1", "8.8.8.8"],
+        "dns_query_target": None,
+        "http_probe_target": None,
+        "consecutive_failure_thresholds": {"degraded": 2, "failed": 6},
+        "latency_thresholds_ms": {},
+        "packet_loss_thresholds_pct": {},
         "dependency_check_timeout_sec": None,
         "stats_file": None,
         "stats_updated_max_age_sec": None,
@@ -96,6 +115,14 @@ def test_can_reboot_guard_paths(monkeypatch: Any) -> None:
     ok, reason = recovery._can_reboot(_global(reboot_window_sec=10), state, 100.0)
     assert ok and reason == "allowed"
     assert state["reboots"] == []
+
+
+def test_get_uptime_sec_exception_branch(monkeypatch: Any) -> None:
+    def raise_open(*args: Any, **kwargs: Any) -> Any:
+        raise OSError("no proc")
+
+    monkeypatch.setattr("builtins.open", raise_open)
+    assert recovery._get_uptime_sec() == 0.0
 
 
 def test_can_reboot_guard_boundary_values(monkeypatch: Any) -> None:
@@ -215,6 +242,27 @@ def test_apply_recovery_healthy_path_resets_counter() -> None:
     assert state["targets"]["demo"]["consecutive_failures"] == 0
 
 
+def test_apply_recovery_limited_mode_updates_raw_state() -> None:
+    state: dict[str, Any] = {}
+    outcome = recovery.apply_recovery(
+        target=_target(),
+        check_result=CheckResult(
+            target="demo",
+            healthy=False,
+            failures=[CheckFailure("service_active", "down")],
+            observations={"policy_status": "degraded"},
+        ),
+        global_config=_global(),
+        state=state,
+        dry_run=True,
+        allow_disruptive_actions=False,
+        now_ts=100.0,
+    )
+    assert outcome.action == "warn"
+    assert state["targets"]["demo"]["last_action"] == "warn"
+    assert state["targets"]["demo"]["last_failure_ts"] == 100.0
+
+
 def test_apply_recovery_injected_now_ts_used_for_last_healthy() -> None:
     state: dict[str, Any] = {}
     outcome = recovery.apply_recovery(
@@ -266,6 +314,7 @@ def test_apply_recovery_reboot_failure_falls_back_to_restart(monkeypatch: Any) -
             target="demo",
             healthy=False,
             failures=[CheckFailure("dependency_gateway", "gw")],
+            observations={"policy_status": "failed"},
         ),
         global_config=_global(
             min_uptime_for_reboot_sec=0, restart_cooldown_sec=0, reboot_cooldown_sec=0
@@ -306,7 +355,7 @@ def test_apply_recovery_clock_only_allows_reboot_when_ready(monkeypatch: Any) ->
             target="demo",
             healthy=False,
             failures=[CheckFailure("semantic_clock_frozen", "clock frozen")],
-            observations={"clock_reboot_ready": True},
+            observations={"clock_reboot_ready": True, "policy_status": "failed"},
         ),
         global_config=_global(
             min_uptime_for_reboot_sec=0, reboot_cooldown_sec=0, restart_cooldown_sec=0
@@ -331,6 +380,7 @@ def test_apply_recovery_reboots_on_confirmed_clock_without_failures(
             failures=[],
             observations={
                 "clock_frozen_confirmed": True,
+                "policy_status": "failed",
                 "policy_reason": "clock_frozen_confirmed",
             },
         ),
@@ -342,3 +392,49 @@ def test_apply_recovery_reboots_on_confirmed_clock_without_failures(
     )
     assert outcome.action == "reboot"
     assert outcome.requested_reboot
+
+
+def test_apply_recovery_confirmed_clock_requires_failed_policy(monkeypatch: Any) -> None:
+    monkeypatch.setattr(recovery, "_get_uptime_sec", lambda: 1000.0)
+    state: dict[str, Any] = {}
+    outcome = recovery.apply_recovery(
+        target=_target(restart_threshold=9, reboot_threshold=9),
+        check_result=CheckResult(
+            target="demo",
+            healthy=False,
+            failures=[],
+            observations={
+                "clock_frozen_confirmed": True,
+                "policy_status": "degraded",
+            },
+        ),
+        global_config=_global(
+            min_uptime_for_reboot_sec=0, reboot_cooldown_sec=0, restart_cooldown_sec=0
+        ),
+        state=state,
+        dry_run=True,
+    )
+    assert outcome.action == "warn"
+    assert not outcome.requested_reboot
+
+
+def test_apply_recovery_confirmed_clock_blocked_by_reboot_guard(monkeypatch: Any) -> None:
+    monkeypatch.setattr(recovery, "_get_uptime_sec", lambda: 0.0)
+    state: dict[str, Any] = {}
+    outcome = recovery.apply_recovery(
+        target=_target(restart_threshold=9, reboot_threshold=9),
+        check_result=CheckResult(
+            target="demo",
+            healthy=False,
+            failures=[CheckFailure("semantic_clock_frozen", "clock")],
+            observations={
+                "clock_frozen_confirmed": True,
+                "policy_status": "failed",
+            },
+        ),
+        global_config=_global(min_uptime_for_reboot_sec=60),
+        state=state,
+        dry_run=True,
+    )
+    assert outcome.action == "warn"
+    assert not outcome.requested_reboot
