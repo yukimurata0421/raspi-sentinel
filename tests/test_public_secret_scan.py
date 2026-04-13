@@ -13,7 +13,7 @@ def test_public_secret_scan_rejects_real_discord_webhook(tmp_path: Path) -> None
     p = tmp_path / "sample.toml"
     p.write_text(
         "[notify.discord]\n"
-        'enabled = true\n'
+        "enabled = true\n"
         'webhook_url = "https://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN"\n',
         encoding="utf-8",
     )
@@ -32,9 +32,7 @@ def test_public_secret_scan_rejects_real_discord_webhook(tmp_path: Path) -> None
 def test_public_secret_scan_allows_placeholder_webhook(tmp_path: Path) -> None:
     p = tmp_path / "sample.toml"
     p.write_text(
-        "[notify.discord]\n"
-        'enabled = true\n'
-        'webhook_url = "https://discord.com/api/webhooks/..."\n',
+        '[notify.discord]\nenabled = true\nwebhook_url = "https://discord.com/api/webhooks/..."\n',
         encoding="utf-8",
     )
 
