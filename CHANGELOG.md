@@ -6,6 +6,13 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ## [Unreleased]
 
+### Added
+
+- Public-layer secret guardrails:
+  - new scanner script: `tools/check_public_secrets.py`
+  - CI `secret_scan` job that fails on detected literal secrets
+  - optional local pre-commit hook via `.pre-commit-config.yaml`
+
 ## [0.4.3] - 2026-04-13
 
 ### Added

@@ -489,6 +489,14 @@ python -m coverage report \
 python -m coverage report \
   --include="src/raspi_sentinel/checks.py,src/raspi_sentinel/recovery.py" \
   --fail-under=88
+python tools/check_public_secrets.py
+```
+
+Optional local hook:
+
+```bash
+python -m pip install pre-commit
+pre-commit install
 ```
 
 ## Versioning
