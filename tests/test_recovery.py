@@ -1,96 +1,29 @@
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 from typing import Any
 
+from conftest import make_global_config, make_target
+
 from raspi_sentinel.checks import CheckFailure, CheckResult
-from raspi_sentinel.config import GlobalConfig, TargetConfig
 from raspi_sentinel.recovery import apply_recovery
+from raspi_sentinel.state_models import GlobalState
 
 
-def _global() -> GlobalConfig:
-    return GlobalConfig(
-        state_file=Path("/tmp/raspi-sentinel-test-state.json"),
-        state_max_file_bytes=2_000_000,
-        state_reboots_max_entries=256,
-        state_lock_timeout_sec=5,
-        events_file=Path("/tmp/raspi-sentinel-test-events.jsonl"),
-        events_max_file_bytes=5_000_000,
-        events_backup_generations=3,
-        monitor_stats_file=Path("/tmp/raspi-sentinel-test-monitor-stats.json"),
-        monitor_stats_interval_sec=30,
-        restart_threshold=1,
-        reboot_threshold=1,
-        restart_cooldown_sec=0,
-        reboot_cooldown_sec=0,
-        reboot_window_sec=3600,
-        max_reboots_in_window=2,
-        min_uptime_for_reboot_sec=0,
-        default_command_timeout_sec=5,
-        loop_interval_sec=30,
-    )
-
-
-def _target(**overrides: Any) -> TargetConfig:
-    base = {
-        "name": "demo",
-        "services": [],
-        "service_active": False,
-        "heartbeat_file": None,
-        "heartbeat_max_age_sec": None,
-        "output_file": None,
-        "output_max_age_sec": None,
-        "command": None,
-        "command_use_shell": False,
-        "command_timeout_sec": None,
-        "dns_check_command": None,
-        "dns_check_use_shell": False,
-        "dns_server_check_command": None,
-        "dns_server_check_use_shell": False,
-        "gateway_check_command": None,
-        "gateway_check_use_shell": False,
-        "link_check_command": None,
-        "link_check_use_shell": False,
-        "default_route_check_command": None,
-        "default_route_check_use_shell": False,
-        "internet_ip_check_command": None,
-        "internet_ip_check_use_shell": False,
-        "wan_vs_target_check_command": None,
-        "wan_vs_target_check_use_shell": False,
-        "network_probe_enabled": False,
-        "network_interface": None,
-        "gateway_probe_timeout_sec": 2,
-        "internet_ip_targets": ["1.1.1.1", "8.8.8.8"],
-        "dns_query_target": None,
-        "http_probe_target": None,
-        "consecutive_failure_thresholds": {"degraded": 2, "failed": 6},
-        "latency_thresholds_ms": {},
-        "packet_loss_thresholds_pct": {},
-        "dependency_check_timeout_sec": None,
-        "stats_file": None,
-        "stats_updated_max_age_sec": None,
-        "stats_last_input_max_age_sec": None,
-        "stats_last_success_max_age_sec": None,
-        "stats_records_stall_cycles": None,
-        "time_health_enabled": False,
-        "check_interval_threshold_sec": 30,
-        "wall_clock_freeze_min_monotonic_sec": 25,
-        "wall_clock_freeze_max_wall_advance_sec": 1,
-        "wall_clock_drift_threshold_sec": 30,
-        "http_time_probe_url": None,
-        "http_time_probe_timeout_sec": 5,
-        "clock_skew_threshold_sec": 300,
-        "clock_anomaly_reboot_consecutive": 3,
-        "maintenance_mode_command": None,
-        "maintenance_mode_use_shell": False,
-        "maintenance_mode_timeout_sec": None,
-        "maintenance_grace_sec": None,
+def _global(**overrides: Any) -> Any:
+    defaults = {
         "restart_threshold": 1,
-        "reboot_threshold": 5,
+        "reboot_threshold": 1,
+        "restart_cooldown_sec": 0,
+        "reboot_cooldown_sec": 0,
+        "reboot_window_sec": 3600,
+        "max_reboots_in_window": 2,
+        "min_uptime_for_reboot_sec": 0,
+        "default_command_timeout_sec": 5,
+        "loop_interval_sec": 30,
     }
-    base.update(overrides)
-    return TargetConfig(**base)
+    defaults.update(overrides)
+    return make_global_config(**defaults)
 
 
 def test_systemd_failure_triggers_restart(monkeypatch: Any) -> None:
@@ -107,9 +40,9 @@ def test_systemd_failure_triggers_restart(monkeypatch: Any) -> None:
         healthy=False,
         failures=[CheckFailure("service_active", "service not active")],
     )
-    state: dict[str, Any] = {}
+    state = GlobalState()
     outcome = apply_recovery(
-        target=_target(
+        target=make_target(
             services=["demo.service"],
             service_active=True,
             restart_threshold=1,
@@ -131,9 +64,9 @@ def test_dns_only_failure_does_not_reboot_even_when_threshold_reached() -> None:
         healthy=False,
         failures=[CheckFailure("dependency_dns", "dns check failed")],
     )
-    state: dict[str, Any] = {}
+    state = GlobalState()
     outcome = apply_recovery(
-        target=_target(restart_threshold=1, reboot_threshold=1),
+        target=make_target(restart_threshold=1, reboot_threshold=1),
         check_result=result,
         global_config=_global(),
         state=state,
@@ -141,7 +74,7 @@ def test_dns_only_failure_does_not_reboot_even_when_threshold_reached() -> None:
     )
     assert outcome.action == "warn"
     assert not outcome.requested_reboot
-    assert state.get("reboots") in (None, [])
+    assert state.reboots == []
 
 
 def test_gateway_failure_can_request_reboot(monkeypatch: Any) -> None:
@@ -152,9 +85,9 @@ def test_gateway_failure_can_request_reboot(monkeypatch: Any) -> None:
         failures=[CheckFailure("dependency_gateway", "gateway failed")],
         observations={"policy_status": "failed"},
     )
-    state: dict[str, Any] = {}
+    state = GlobalState()
     outcome = apply_recovery(
-        target=_target(restart_threshold=1, reboot_threshold=1),
+        target=make_target(restart_threshold=1, reboot_threshold=1),
         check_result=result,
         global_config=_global(),
         state=state,
@@ -172,9 +105,9 @@ def test_recovery_reboot_requires_policy_failed_for_network_uplink(monkeypatch: 
         failures=[CheckFailure("dependency_gateway", "gateway failed")],
         observations={"policy_status": "degraded"},
     )
-    state: dict[str, Any] = {}
+    state = GlobalState()
     outcome = apply_recovery(
-        target=_target(name="network_uplink", restart_threshold=1, reboot_threshold=1),
+        target=make_target(name="network_uplink", restart_threshold=1, reboot_threshold=1),
         check_result=result,
         global_config=_global(),
         state=state,
@@ -190,10 +123,10 @@ def test_recovery_reboot_requires_policy_failed_for_network_uplink(monkeypatch: 
         observations={"policy_status": "failed"},
     )
     outcome_failed = apply_recovery(
-        target=_target(name="network_uplink", restart_threshold=1, reboot_threshold=1),
+        target=make_target(name="network_uplink", restart_threshold=1, reboot_threshold=1),
         check_result=failed_result,
         global_config=_global(),
-        state={},
+        state=GlobalState(),
         dry_run=True,
     )
     assert outcome_failed.action == "reboot"
@@ -216,8 +149,8 @@ def test_external_status_failed_integrates_restart_then_reboot(monkeypatch: Any)
         failures=[CheckFailure("semantic_external_internal_state", "failed")],
         observations={"policy_status": "failed"},
     )
-    state: dict[str, Any] = {}
-    target = _target(
+    state = GlobalState()
+    target = make_target(
         services=["demo.service"],
         service_active=True,
         restart_threshold=1,
@@ -254,19 +187,20 @@ def test_reboot_is_suppressed_immediately_after_restart(monkeypatch: Any) -> Non
         failures=[CheckFailure("semantic_external_internal_state", "failed")],
         observations={"policy_status": "failed"},
     )
-    state = {
-        "targets": {
-            "demo": {
-                "consecutive_failures": 1,
-                "last_action": "restart",
-                "last_action_ts": 1000.0,
+    state = GlobalState.from_dict(
+        {
+            "targets": {
+                "demo": {
+                    "consecutive_failures": 1,
+                    "last_action": "restart",
+                    "last_action_ts": 1000.0,
+                }
             }
         }
-    }
-    global_cfg = _global()
-    global_cfg.restart_cooldown_sec = 120
+    )
+    global_cfg = _global(restart_cooldown_sec=120)
     outcome = apply_recovery(
-        target=_target(restart_threshold=1, reboot_threshold=1),
+        target=make_target(restart_threshold=1, reboot_threshold=1),
         check_result=result,
         global_config=global_cfg,
         state=state,

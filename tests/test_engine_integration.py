@@ -1,0 +1,96 @@
+"""Integration tests for the engine module orchestration flow."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from conftest import make_app_config, make_target
+
+from raspi_sentinel.checks import CheckResult
+from raspi_sentinel.engine import (
+    _overall_status,
+    apply_recovery_phase,
+    evaluate_target,
+    persist_cycle_outputs,
+)
+from raspi_sentinel.state import StateStore
+from raspi_sentinel.state_models import GlobalState
+
+
+def test_evaluate_target_runs_checks_and_returns_policy(monkeypatch: Any) -> None:
+    target = make_target(
+        name="svc",
+        command="true",
+        command_timeout_sec=1,
+    )
+    state = GlobalState()
+    monkeypatch.setattr(
+        "raspi_sentinel.engine.run_checks",
+        lambda t, now_wall_ts=None: CheckResult(target=t.name, healthy=True, failures=[]),
+    )
+    pair = evaluate_target(target, state, now_ts=1000.0)
+    assert pair is not None
+    result, policy = pair
+    assert result.healthy
+    assert policy.is_ok
+
+
+def test_evaluate_target_returns_none_when_maintenance_suppressed(
+    monkeypatch: Any,
+) -> None:
+    target = make_target(
+        name="svc",
+        maintenance_mode_command="echo yes",
+        maintenance_mode_timeout_sec=5,
+    )
+    state = GlobalState()
+    monkeypatch.setattr(
+        "raspi_sentinel.engine.is_target_suppressed_by_maintenance",
+        lambda target, target_state, now_ts: (True, "maintenance on"),
+    )
+    assert evaluate_target(target, state, now_ts=1000.0) is None
+
+
+def test_apply_recovery_phase_delegates_to_recovery() -> None:
+    config = make_app_config()
+    state = GlobalState()
+    result = CheckResult(
+        target="demo",
+        healthy=True,
+        failures=[],
+    )
+    outcome = apply_recovery_phase(
+        target=config.targets[0],
+        result=result,
+        config=config,
+        state=state,
+        dry_run=True,
+        now_ts=1000.0,
+    )
+    assert outcome.action == "none"
+    assert not outcome.requested_reboot
+
+
+def test_persist_cycle_outputs_saves_state(tmp_path: Path) -> None:
+    state_file = tmp_path / "state.json"
+    store = StateStore(state_file)
+    state = GlobalState()
+    state.ensure_target("svc").consecutive_failures = 3
+    ok = persist_cycle_outputs(
+        store=store,
+        state=state,
+        max_file_bytes=1_000_000,
+        max_reboots_entries=256,
+    )
+    assert ok
+    saved = json.loads(state_file.read_text())
+    assert saved["targets"]["svc"]["consecutive_failures"] == 3
+
+
+def test_overall_status_logic() -> None:
+    assert _overall_status({}) == "ok"
+    assert _overall_status({"a": {"status": "ok"}}) == "ok"
+    assert _overall_status({"a": {"status": "degraded"}}) == "degraded"
+    assert _overall_status({"a": {"status": "degraded"}, "b": {"status": "failed"}}) == "failed"

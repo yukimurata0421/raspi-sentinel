@@ -12,6 +12,8 @@ from .status_events import classify_target_reason, classify_target_status
 
 LOG = logging.getLogger(__name__)
 
+_MISSING = object()
+
 
 def build_monitor_stats_snapshot(
     config: AppConfig,
@@ -59,7 +61,7 @@ def build_monitor_stats_snapshot(
             "last_failure_reason": str(last_failure_reason),
         }
         if result is not None:
-            missing = object()
+            missing = _MISSING
             clock_reason = result.observations.get("clock_reason")
             if isinstance(clock_reason, str):
                 payload["clock_reason"] = clock_reason

@@ -33,17 +33,7 @@ class GlobalConfig:
 
 
 @dataclass(slots=True)
-class TargetConfig:
-    name: str
-    services: list[str]
-    service_active: bool
-    heartbeat_file: Path | None
-    heartbeat_max_age_sec: int | None
-    output_file: Path | None
-    output_max_age_sec: int | None
-    command: str | None
-    command_use_shell: bool
-    command_timeout_sec: int | None
+class DependencyCheckConfig:
     dns_check_command: str | None
     dns_check_use_shell: bool
     dns_server_check_command: str | None
@@ -58,6 +48,11 @@ class TargetConfig:
     internet_ip_check_use_shell: bool
     wan_vs_target_check_command: str | None
     wan_vs_target_check_use_shell: bool
+    dependency_check_timeout_sec: int | None
+
+
+@dataclass(slots=True)
+class NetworkProbeConfig:
     network_probe_enabled: bool
     network_interface: str | None
     gateway_probe_timeout_sec: int
@@ -67,12 +62,19 @@ class TargetConfig:
     consecutive_failure_thresholds: dict[str, int]
     latency_thresholds_ms: dict[str, float]
     packet_loss_thresholds_pct: dict[str, float]
-    dependency_check_timeout_sec: int | None
+
+
+@dataclass(slots=True)
+class StatsCheckConfig:
     stats_file: Path | None
     stats_updated_max_age_sec: int | None
     stats_last_input_max_age_sec: int | None
     stats_last_success_max_age_sec: int | None
     stats_records_stall_cycles: int | None
+
+
+@dataclass(slots=True)
+class TimeHealthCheckConfig:
     time_health_enabled: bool
     check_interval_threshold_sec: int
     wall_clock_freeze_min_monotonic_sec: int
@@ -82,18 +84,70 @@ class TargetConfig:
     http_time_probe_timeout_sec: int
     clock_skew_threshold_sec: int
     clock_anomaly_reboot_consecutive: int
+
+
+@dataclass(slots=True)
+class MaintenanceCheckConfig:
     maintenance_mode_command: str | None
     maintenance_mode_use_shell: bool
     maintenance_mode_timeout_sec: int | None
     maintenance_grace_sec: int | None
-    restart_threshold: int | None
-    reboot_threshold: int | None
+
+
+@dataclass(slots=True)
+class ExternalStatusCheckConfig:
     external_status_file: Path | None = None
     external_status_updated_max_age_sec: int | None = None
     external_status_last_progress_max_age_sec: int | None = None
     external_status_last_success_max_age_sec: int | None = None
     external_status_startup_grace_sec: int = 120
     external_status_unhealthy_values: tuple[str, ...] = ("failed", "unhealthy")
+
+
+_SUB_CONFIG_ATTRS = ("deps", "network", "stats", "time_health", "maintenance", "external")
+
+
+@dataclass
+class TargetConfig:
+    """Per-target configuration.
+
+    Fields are logically grouped into sub-dataclasses accessible via
+    ``deps``, ``network``, ``stats``, ``time_health``, ``maintenance``,
+    and ``external``.  For backward compatibility every sub-field is also
+    reachable as a flat attribute (e.g. ``target.dns_check_command``
+    delegates to ``target.deps.dns_check_command``).
+    """
+
+    name: str
+    services: list[str]
+    service_active: bool
+    heartbeat_file: Path | None
+    heartbeat_max_age_sec: int | None
+    output_file: Path | None
+    output_max_age_sec: int | None
+    command: str | None
+    command_use_shell: bool
+    command_timeout_sec: int | None
+    restart_threshold: int | None
+    reboot_threshold: int | None
+    deps: DependencyCheckConfig
+    network: NetworkProbeConfig
+    stats: StatsCheckConfig
+    time_health: TimeHealthCheckConfig
+    maintenance: MaintenanceCheckConfig
+    external: ExternalStatusCheckConfig
+
+    def __getattr__(self, name: str) -> Any:
+        for attr in _SUB_CONFIG_ATTRS:
+            try:
+                sub = object.__getattribute__(self, attr)
+            except AttributeError:
+                continue
+            try:
+                return getattr(sub, name)
+            except AttributeError:
+                continue
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
 
 @dataclass(slots=True)
@@ -574,17 +628,7 @@ def load_config(path: Path) -> AppConfig:
         if not isinstance(loss_raw, dict):
             raise ValueError(f"target '{name}': packet_loss_thresholds_pct must be a table")
 
-        target = TargetConfig(
-            name=name,
-            services=services_raw,
-            service_active=service_active,
-            heartbeat_file=_optional_path(item, "heartbeat_file"),
-            heartbeat_max_age_sec=_optional_int(item, "heartbeat_max_age_sec"),
-            output_file=_optional_path(item, "output_file"),
-            output_max_age_sec=_optional_int(item, "output_max_age_sec"),
-            command=_optional_str(item, "command"),
-            command_use_shell=_optional_bool(item, "command_use_shell", False),
-            command_timeout_sec=_optional_int(item, "command_timeout_sec"),
+        deps = DependencyCheckConfig(
             dns_check_command=_optional_str(item, "dns_check_command"),
             dns_check_use_shell=_optional_bool(item, "dns_check_use_shell", False),
             dns_server_check_command=_optional_str(item, "dns_server_check_command"),
@@ -603,6 +647,9 @@ def load_config(path: Path) -> AppConfig:
             wan_vs_target_check_use_shell=_optional_bool(
                 item, "wan_vs_target_check_use_shell", False
             ),
+            dependency_check_timeout_sec=_optional_int(item, "dependency_check_timeout_sec"),
+        )
+        network = NetworkProbeConfig(
             network_probe_enabled=_optional_bool(item, "network_probe_enabled", False),
             network_interface=_optional_str(item, "network_interface"),
             gateway_probe_timeout_sec=_require_int(item, "gateway_probe_timeout_sec", 2),
@@ -632,43 +679,38 @@ def load_config(path: Path) -> AppConfig:
                 )
                 if value is not None
             },
-            dependency_check_timeout_sec=_optional_int(item, "dependency_check_timeout_sec"),
+        )
+        stats_cfg = StatsCheckConfig(
             stats_file=_optional_path(item, "stats_file"),
             stats_updated_max_age_sec=_optional_int(item, "stats_updated_max_age_sec"),
             stats_last_input_max_age_sec=_optional_int(item, "stats_last_input_max_age_sec"),
             stats_last_success_max_age_sec=_optional_int(item, "stats_last_success_max_age_sec"),
             stats_records_stall_cycles=_optional_int(item, "stats_records_stall_cycles"),
+        )
+        th_cfg = TimeHealthCheckConfig(
             time_health_enabled=_optional_bool(item, "time_health_enabled", False),
             check_interval_threshold_sec=_require_int(item, "check_interval_threshold_sec", 30),
             wall_clock_freeze_min_monotonic_sec=_require_int(
-                item,
-                "wall_clock_freeze_min_monotonic_sec",
-                25,
+                item, "wall_clock_freeze_min_monotonic_sec", 25
             ),
             wall_clock_freeze_max_wall_advance_sec=_require_int(
-                item,
-                "wall_clock_freeze_max_wall_advance_sec",
-                1,
+                item, "wall_clock_freeze_max_wall_advance_sec", 1
             ),
-            wall_clock_drift_threshold_sec=_require_int(
-                item,
-                "wall_clock_drift_threshold_sec",
-                30,
-            ),
+            wall_clock_drift_threshold_sec=_require_int(item, "wall_clock_drift_threshold_sec", 30),
             http_time_probe_url=_optional_str(item, "http_time_probe_url"),
             http_time_probe_timeout_sec=_require_int(item, "http_time_probe_timeout_sec", 5),
             clock_skew_threshold_sec=_require_int(item, "clock_skew_threshold_sec", 300),
             clock_anomaly_reboot_consecutive=_require_int(
-                item,
-                "clock_anomaly_reboot_consecutive",
-                3,
+                item, "clock_anomaly_reboot_consecutive", 3
             ),
+        )
+        maint_cfg = MaintenanceCheckConfig(
             maintenance_mode_command=_optional_str(item, "maintenance_mode_command"),
             maintenance_mode_use_shell=_optional_bool(item, "maintenance_mode_use_shell", False),
             maintenance_mode_timeout_sec=_optional_int(item, "maintenance_mode_timeout_sec"),
             maintenance_grace_sec=_optional_int(item, "maintenance_grace_sec"),
-            restart_threshold=_optional_int(item, "restart_threshold"),
-            reboot_threshold=_optional_int(item, "reboot_threshold"),
+        )
+        ext_cfg = ExternalStatusCheckConfig(
             external_status_file=_optional_path(item, "external_status_file"),
             external_status_updated_max_age_sec=_optional_int(
                 item, "external_status_updated_max_age_sec"
@@ -694,23 +736,44 @@ def load_config(path: Path) -> AppConfig:
             or ("failed", "unhealthy"),
         )
 
+        target = TargetConfig(
+            name=name,
+            services=services_raw,
+            service_active=service_active,
+            heartbeat_file=_optional_path(item, "heartbeat_file"),
+            heartbeat_max_age_sec=_optional_int(item, "heartbeat_max_age_sec"),
+            output_file=_optional_path(item, "output_file"),
+            output_max_age_sec=_optional_int(item, "output_max_age_sec"),
+            command=_optional_str(item, "command"),
+            command_use_shell=_optional_bool(item, "command_use_shell", False),
+            command_timeout_sec=_optional_int(item, "command_timeout_sec"),
+            restart_threshold=_optional_int(item, "restart_threshold"),
+            reboot_threshold=_optional_int(item, "reboot_threshold"),
+            deps=deps,
+            network=network,
+            stats=stats_cfg,
+            time_health=th_cfg,
+            maintenance=maint_cfg,
+            external=ext_cfg,
+        )
+
         if target.command_timeout_sec is None and target.command is not None:
             target.command_timeout_sec = global_config.default_command_timeout_sec
-        if target.dependency_check_timeout_sec is None and (
-            target.dns_check_command is not None
-            or target.dns_server_check_command is not None
-            or target.gateway_check_command is not None
-            or target.link_check_command is not None
-            or target.default_route_check_command is not None
-            or target.internet_ip_check_command is not None
-            or target.wan_vs_target_check_command is not None
+        if deps.dependency_check_timeout_sec is None and (
+            deps.dns_check_command is not None
+            or deps.dns_server_check_command is not None
+            or deps.gateway_check_command is not None
+            or deps.link_check_command is not None
+            or deps.default_route_check_command is not None
+            or deps.internet_ip_check_command is not None
+            or deps.wan_vs_target_check_command is not None
         ):
-            target.dependency_check_timeout_sec = global_config.default_command_timeout_sec
+            deps.dependency_check_timeout_sec = global_config.default_command_timeout_sec
         if (
-            target.maintenance_mode_timeout_sec is None
-            and target.maintenance_mode_command is not None
+            maint_cfg.maintenance_mode_timeout_sec is None
+            and maint_cfg.maintenance_mode_command is not None
         ):
-            target.maintenance_mode_timeout_sec = global_config.default_command_timeout_sec
+            maint_cfg.maintenance_mode_timeout_sec = global_config.default_command_timeout_sec
 
         _validate_target_rules(target)
         targets.append(target)

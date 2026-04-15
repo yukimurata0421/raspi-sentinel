@@ -7,69 +7,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from conftest import make_target
+
 from raspi_sentinel import checks
-from raspi_sentinel.config import TargetConfig
 
 
-def _target(**overrides: Any) -> TargetConfig:
-    base = {
-        "name": "demo",
-        "services": [],
-        "service_active": False,
-        "heartbeat_file": None,
-        "heartbeat_max_age_sec": None,
-        "output_file": None,
-        "output_max_age_sec": None,
-        "command": None,
-        "command_use_shell": False,
-        "command_timeout_sec": None,
-        "dns_check_command": None,
-        "dns_check_use_shell": False,
-        "dns_server_check_command": None,
-        "dns_server_check_use_shell": False,
-        "gateway_check_command": None,
-        "gateway_check_use_shell": False,
-        "link_check_command": None,
-        "link_check_use_shell": False,
-        "default_route_check_command": None,
-        "default_route_check_use_shell": False,
-        "internet_ip_check_command": None,
-        "internet_ip_check_use_shell": False,
-        "wan_vs_target_check_command": None,
-        "wan_vs_target_check_use_shell": False,
-        "network_probe_enabled": False,
-        "network_interface": None,
-        "gateway_probe_timeout_sec": 2,
-        "internet_ip_targets": ["1.1.1.1", "8.8.8.8"],
-        "dns_query_target": None,
-        "http_probe_target": None,
-        "consecutive_failure_thresholds": {"degraded": 2, "failed": 6},
-        "latency_thresholds_ms": {},
-        "packet_loss_thresholds_pct": {},
-        "dependency_check_timeout_sec": None,
-        "stats_file": None,
-        "stats_updated_max_age_sec": None,
-        "stats_last_input_max_age_sec": None,
-        "stats_last_success_max_age_sec": None,
-        "stats_records_stall_cycles": None,
-        "time_health_enabled": False,
-        "check_interval_threshold_sec": 30,
-        "wall_clock_freeze_min_monotonic_sec": 25,
-        "wall_clock_freeze_max_wall_advance_sec": 1,
-        "wall_clock_drift_threshold_sec": 30,
-        "http_time_probe_url": None,
-        "http_time_probe_timeout_sec": 5,
-        "clock_skew_threshold_sec": 300,
-        "clock_anomaly_reboot_consecutive": 3,
-        "maintenance_mode_command": None,
-        "maintenance_mode_use_shell": False,
-        "maintenance_mode_timeout_sec": None,
-        "maintenance_grace_sec": None,
-        "restart_threshold": None,
-        "reboot_threshold": None,
-    }
-    base.update(overrides)
-    return TargetConfig(**base)
+def _target(**overrides: Any) -> Any:
+    return make_target(**overrides)
 
 
 def test_file_freshness_missing_and_stale(tmp_path: Path, monkeypatch: Any) -> None:
@@ -948,11 +892,15 @@ def test_stats_checks_handles_none_payload(monkeypatch: Any) -> None:
 
 
 def test_apply_records_progress_check_ignores_missing_records() -> None:
-    state: dict[str, Any] = {
-        "last_records_processed_total": 5,
-        "records_stalled_cycles": 2,
-        "clock_prev_wall_time_epoch": 1234.5,
-    }
+    from raspi_sentinel.state_models import TargetState
+
+    state = TargetState.from_dict(
+        {
+            "last_records_processed_total": 5,
+            "records_stalled_cycles": 2,
+            "clock_prev_wall_time_epoch": 1234.5,
+        }
+    )
     result = checks.CheckResult(target="demo", healthy=True, failures=[], observations={})
 
     checks.apply_records_progress_check(
@@ -963,17 +911,21 @@ def test_apply_records_progress_check_ignores_missing_records() -> None:
 
     assert result.failures == []
     assert result.healthy
-    assert state["last_records_processed_total"] == 5
-    assert state["records_stalled_cycles"] == 2
-    assert state["clock_prev_wall_time_epoch"] == 1234.5
+    assert state.last_records_processed_total == 5
+    assert state.records_stalled_cycles == 2
+    assert state.clock_prev_wall_time_epoch == 1234.5
 
 
 def test_apply_records_progress_check_detects_stall_and_preserves_extra_state() -> None:
-    state: dict[str, Any] = {
-        "last_records_processed_total": 10,
-        "records_stalled_cycles": 1,
-        "clock_prev_wall_time_epoch": 2000.0,
-    }
+    from raspi_sentinel.state_models import TargetState
+
+    state = TargetState.from_dict(
+        {
+            "last_records_processed_total": 10,
+            "records_stalled_cycles": 1,
+            "clock_prev_wall_time_epoch": 2000.0,
+        }
+    )
     result = checks.CheckResult(
         target="demo",
         healthy=True,
@@ -987,19 +939,23 @@ def test_apply_records_progress_check_detects_stall_and_preserves_extra_state() 
         result=result,
     )
 
-    assert state["last_records_processed_total"] == 10
-    assert state["records_stalled_cycles"] == 2
-    assert state["clock_prev_wall_time_epoch"] == 2000.0
+    assert state.last_records_processed_total == 10
+    assert state.records_stalled_cycles == 2
+    assert state.clock_prev_wall_time_epoch == 2000.0
     assert any(f.check == "semantic_records_stalled" for f in result.failures)
     assert not result.healthy
 
 
 def test_apply_records_progress_check_resets_on_counter_drop() -> None:
-    state: dict[str, Any] = {
-        "last_records_processed_total": 10,
-        "records_stalled_cycles": 4,
-        "clock_prev_monotonic_sec": 333.3,
-    }
+    from raspi_sentinel.state_models import TargetState
+
+    state = TargetState.from_dict(
+        {
+            "last_records_processed_total": 10,
+            "records_stalled_cycles": 4,
+            "clock_prev_monotonic_sec": 333.3,
+        }
+    )
     result = checks.CheckResult(
         target="demo",
         healthy=True,
@@ -1013,8 +969,8 @@ def test_apply_records_progress_check_resets_on_counter_drop() -> None:
         result=result,
     )
 
-    assert state["last_records_processed_total"] == 7
-    assert state["records_stalled_cycles"] == 0
-    assert state["clock_prev_monotonic_sec"] == 333.3
+    assert state.last_records_processed_total == 7
+    assert state.records_stalled_cycles == 0
+    assert state.clock_prev_monotonic_sec == 333.3
     assert result.failures == []
     assert result.healthy

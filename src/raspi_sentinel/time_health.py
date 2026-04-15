@@ -4,7 +4,6 @@ import logging
 import subprocess
 import time
 from email.utils import parsedate_to_datetime
-from typing import Any
 from urllib import error, request
 
 from ._version import __version__
@@ -67,9 +66,141 @@ def _query_ntp_sync_ok(timeout_sec: int = 3) -> bool | None:
     return None
 
 
+def _update_network_counters(
+    target: TargetConfig,
+    model: TargetState,
+    result: CheckResult,
+    http_probe_ok: bool | None,
+) -> None:
+    """Update consecutive failure counters and threshold-exceeded flags for network probes."""
+    obs = result.observations
+    if obs.get("network_probe_enabled") is not True:
+        return
+
+    def _update_counter(counter_name: str, current_state: bool | None) -> int:
+        key = f"network_{counter_name}_failures"
+        current = safe_int(model.extra.get(key), 0) or 0
+        if current_state is False:
+            current += 1
+        elif current_state is True:
+            current = 0
+        model.extra[key] = current
+        return current
+
+    dns_ok = safe_bool(obs.get("dns_ok"))
+    dns_server_reachable = safe_bool(obs.get("dns_server_reachable"))
+    link_ok = safe_bool(obs.get("link_ok"))
+    default_route_ok = safe_bool(obs.get("default_route_ok"))
+    gateway_ok = safe_bool(obs.get("gateway_ok"))
+    internet_ip_ok = safe_bool(obs.get("internet_ip_ok"))
+
+    dns_layer_ok: bool | None
+    if dns_ok is False or dns_server_reachable is False:
+        dns_layer_ok = False
+    elif dns_ok is True:
+        dns_layer_ok = True
+    else:
+        dns_layer_ok = None
+
+    obs["link_fail_consecutive"] = _update_counter("link", link_ok)
+    obs["route_fail_consecutive"] = _update_counter("route", default_route_ok)
+    obs["gateway_fail_consecutive"] = _update_counter("gateway", gateway_ok)
+    obs["internet_fail_consecutive"] = _update_counter("internet", internet_ip_ok)
+    obs["dns_fail_consecutive"] = _update_counter("dns", dns_layer_ok)
+    obs["http_fail_consecutive"] = _update_counter("http", http_probe_ok)
+    obs["network_degraded_threshold"] = target.consecutive_failure_thresholds.get("degraded", 2)
+    obs["network_failed_threshold"] = target.consecutive_failure_thresholds.get("failed", 6)
+
+    def _exceeded(value: float | None, threshold: float | None) -> bool:
+        return bool(value is not None and threshold is not None and value > threshold)
+
+    obs["gateway_latency_exceeded"] = _exceeded(
+        safe_float(obs.get("gateway_latency_ms")), target.latency_thresholds_ms.get("gateway")
+    )
+    obs["internet_latency_exceeded"] = _exceeded(
+        safe_float(obs.get("internet_ip_latency_ms")),
+        target.latency_thresholds_ms.get("internet_ip"),
+    )
+    obs["dns_latency_exceeded"] = _exceeded(
+        safe_float(obs.get("dns_latency_ms")), target.latency_thresholds_ms.get("dns")
+    )
+    obs["http_latency_exceeded"] = _exceeded(
+        safe_float(obs.get("http_total_latency_ms")),
+        target.latency_thresholds_ms.get("http_total"),
+    )
+    obs["gateway_loss_exceeded"] = _exceeded(
+        safe_float(obs.get("gateway_packet_loss_pct")),
+        target.packet_loss_thresholds_pct.get("gateway"),
+    )
+    obs["internet_loss_exceeded"] = _exceeded(
+        safe_float(obs.get("internet_ip_packet_loss_pct")),
+        target.packet_loss_thresholds_pct.get("internet_ip"),
+    )
+
+
+def _classify_time_health_reason(
+    *,
+    freeze_detected: bool,
+    jump_detected: bool,
+    skew_detected: bool,
+    insufficient_interval: bool,
+    clock_frozen_confirmed: bool,
+    consecutive_clock_freeze_count: int,
+    ntp_sync_ok: bool | None,
+    http_probe_ok: bool | None,
+    link_ok: bool | None,
+    default_route_ok: bool | None,
+    gateway_ok: bool | None,
+    internet_ip_ok: bool | None,
+    dns_server_reachable: bool | None,
+    dns_ok: bool | None,
+    wan_vs_target_ok: bool | None,
+    skew_abs: float,
+    target: TargetConfig,
+) -> str:
+    """Derive the single clock_reason string from the observation signals."""
+    if freeze_detected:
+        if clock_frozen_confirmed:
+            return "clock_frozen_confirmed"
+        if consecutive_clock_freeze_count >= 2:
+            return "clock_frozen_persistent"
+        return "clock_frozen"
+    if jump_detected:
+        return "clock_jump"
+    if skew_detected:
+        if ntp_sync_ok is False:
+            return "time_sync_broken_skewed"
+        return "clock_skewed"
+    if http_probe_ok is False:
+        return "http_error"
+    if link_ok is False:
+        return "link_error"
+    if default_route_ok is False:
+        return "route_missing"
+    if gateway_ok is False:
+        return "gateway_error"
+    if internet_ip_ok is False and gateway_ok is True:
+        return "wan_error"
+    if dns_server_reachable is False and internet_ip_ok is True:
+        return "dns_server_error"
+    if dns_ok is False and gateway_ok is True:
+        return "dns_error"
+    if wan_vs_target_ok is False:
+        return "target_reachability_error"
+    if (
+        ntp_sync_ok is False
+        and target.http_time_probe_url
+        and skew_abs < target.clock_skew_threshold_sec
+    ):
+        return "time_sync_broken"
+    if insufficient_interval:
+        return "insufficient_interval"
+    return "healthy"
+
+
 def apply_time_health_checks(
     target: TargetConfig,
-    target_state: TargetState | dict[str, Any],
+    target_state: TargetState,
     result: CheckResult,
     now_wall_ts: float | None = None,
     now_mono_ts: float | None = None,
@@ -83,12 +214,7 @@ def apply_time_health_checks(
     result.observations["monotonic_sec"] = mono_now
     result.observations["clock_skew_threshold_sec"] = target.clock_skew_threshold_sec
 
-    if isinstance(target_state, TargetState):
-        model = target_state
-        raw_target_state: dict[str, Any] | None = None
-    else:
-        model = TargetState.from_dict(target_state)
-        raw_target_state = target_state
+    model = target_state
 
     prev_wall = model.clock_prev_wall_time_epoch
     prev_mono = model.clock_prev_monotonic_sec
@@ -159,16 +285,6 @@ def apply_time_health_checks(
     model.clock_anomaly_consecutive = clock_anomaly_consecutive
     result.observations["clock_anomaly_consecutive"] = clock_anomaly_consecutive
 
-    def _update_counter(counter_name: str, current_state: bool | None) -> int:
-        key = f"network_{counter_name}_failures"
-        current = safe_int(model.extra.get(key), 0) or 0
-        if current_state is False:
-            current += 1
-        elif current_state is True:
-            current = 0
-        model.extra[key] = current
-        return current
-
     dns_ok = safe_bool(result.observations.get("dns_ok"))
     dns_server_reachable = safe_bool(result.observations.get("dns_server_reachable"))
     link_ok = safe_bool(result.observations.get("link_ok"))
@@ -180,72 +296,7 @@ def apply_time_health_checks(
         http_probe_ok = safe_bool(result.observations.get("http_probe_ok"))
     skew_abs = abs(safe_float(result.observations.get("http_time_skew_sec")) or 0.0)
 
-    if result.observations.get("network_probe_enabled") is True:
-        dns_layer_ok: bool | None
-        if dns_ok is False or dns_server_reachable is False:
-            dns_layer_ok = False
-        elif dns_ok is True:
-            dns_layer_ok = True
-        else:
-            dns_layer_ok = None
-
-        result.observations["link_fail_consecutive"] = _update_counter("link", link_ok)
-        result.observations["route_fail_consecutive"] = _update_counter("route", default_route_ok)
-        result.observations["gateway_fail_consecutive"] = _update_counter("gateway", gateway_ok)
-        result.observations["internet_fail_consecutive"] = _update_counter(
-            "internet", internet_ip_ok
-        )
-        result.observations["dns_fail_consecutive"] = _update_counter("dns", dns_layer_ok)
-        result.observations["http_fail_consecutive"] = _update_counter("http", http_probe_ok)
-        result.observations["network_degraded_threshold"] = (
-            target.consecutive_failure_thresholds.get("degraded", 2)
-        )
-        result.observations["network_failed_threshold"] = target.consecutive_failure_thresholds.get(
-            "failed", 6
-        )
-
-        gateway_latency = safe_float(result.observations.get("gateway_latency_ms"))
-        internet_latency = safe_float(result.observations.get("internet_ip_latency_ms"))
-        dns_latency = safe_float(result.observations.get("dns_latency_ms"))
-        http_latency = safe_float(result.observations.get("http_total_latency_ms"))
-        gateway_loss = safe_float(result.observations.get("gateway_packet_loss_pct"))
-        internet_loss = safe_float(result.observations.get("internet_ip_packet_loss_pct"))
-        gateway_latency_threshold = target.latency_thresholds_ms.get("gateway")
-        internet_latency_threshold = target.latency_thresholds_ms.get("internet_ip")
-        dns_latency_threshold = target.latency_thresholds_ms.get("dns")
-        http_latency_threshold = target.latency_thresholds_ms.get("http_total")
-        gateway_loss_threshold = target.packet_loss_thresholds_pct.get("gateway")
-        internet_loss_threshold = target.packet_loss_thresholds_pct.get("internet_ip")
-        result.observations["gateway_latency_exceeded"] = bool(
-            gateway_latency is not None
-            and gateway_latency_threshold is not None
-            and gateway_latency > gateway_latency_threshold
-        )
-        result.observations["internet_latency_exceeded"] = bool(
-            internet_latency is not None
-            and internet_latency_threshold is not None
-            and internet_latency > internet_latency_threshold
-        )
-        result.observations["dns_latency_exceeded"] = bool(
-            dns_latency is not None
-            and dns_latency_threshold is not None
-            and dns_latency > dns_latency_threshold
-        )
-        result.observations["http_latency_exceeded"] = bool(
-            http_latency is not None
-            and http_latency_threshold is not None
-            and http_latency > http_latency_threshold
-        )
-        result.observations["gateway_loss_exceeded"] = bool(
-            gateway_loss is not None
-            and gateway_loss_threshold is not None
-            and gateway_loss > gateway_loss_threshold
-        )
-        result.observations["internet_loss_exceeded"] = bool(
-            internet_loss is not None
-            and internet_loss_threshold is not None
-            and internet_loss > internet_loss_threshold
-        )
+    _update_network_counters(target, model, result, http_probe_ok)
 
     clock_frozen_confirmed = (
         consecutive_clock_freeze_count >= target.clock_anomaly_reboot_consecutive
@@ -261,47 +312,25 @@ def apply_time_health_checks(
     result.observations["clock_frozen_confirmed"] = clock_frozen_confirmed
     result.observations["clock_reboot_ready"] = clock_frozen_confirmed
 
-    reason = "healthy"
-    if freeze_detected:
-        if clock_frozen_confirmed:
-            reason = "clock_frozen_confirmed"
-        elif consecutive_clock_freeze_count >= 2:
-            reason = "clock_frozen_persistent"
-        else:
-            reason = "clock_frozen"
-    elif jump_detected:
-        reason = "clock_jump"
-    elif skew_detected:
-        if ntp_sync_ok is False:
-            reason = "time_sync_broken_skewed"
-        else:
-            reason = "clock_skewed"
-    elif http_probe_ok is False:
-        reason = "http_error"
-    elif link_ok is False:
-        reason = "link_error"
-    elif default_route_ok is False:
-        reason = "route_missing"
-    elif gateway_ok is False:
-        reason = "gateway_error"
-    elif internet_ip_ok is False and gateway_ok is True:
-        reason = "wan_error"
-    elif dns_server_reachable is False and internet_ip_ok is True:
-        reason = "dns_server_error"
-    elif dns_ok is False and gateway_ok is True:
-        reason = "dns_error"
-    elif wan_vs_target_ok is False:
-        reason = "target_reachability_error"
-    elif (
-        ntp_sync_ok is False
-        and target.http_time_probe_url
-        and skew_abs < target.clock_skew_threshold_sec
-    ):
-        reason = "time_sync_broken"
-    elif insufficient_interval:
-        reason = "insufficient_interval"
+    reason = _classify_time_health_reason(
+        freeze_detected=freeze_detected,
+        jump_detected=jump_detected,
+        skew_detected=skew_detected,
+        insufficient_interval=insufficient_interval,
+        clock_frozen_confirmed=clock_frozen_confirmed,
+        consecutive_clock_freeze_count=consecutive_clock_freeze_count,
+        ntp_sync_ok=ntp_sync_ok,
+        http_probe_ok=http_probe_ok,
+        link_ok=link_ok,
+        default_route_ok=default_route_ok,
+        gateway_ok=gateway_ok,
+        internet_ip_ok=internet_ip_ok,
+        dns_server_reachable=dns_server_reachable,
+        dns_ok=dns_ok,
+        wan_vs_target_ok=wan_vs_target_ok,
+        skew_abs=skew_abs,
+        target=target,
+    )
 
     model.clock_last_reason = reason
-    if raw_target_state is not None:
-        model.merge_into(raw_target_state)
     result.observations["clock_reason"] = reason

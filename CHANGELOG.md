@@ -8,6 +8,9 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ### Added
 
+- CI test matrix expanded to Python 3.11 + 3.12.
+- `config.py` validation tests (`test_config_validation.py`): 29 new tests covering parsing helpers, `__getattr__` error path, validation rules, and `load_config` edge cases.
+- `engine.py` integration tests (`test_engine_integration.py`): tests for `evaluate_target`, `apply_recovery_phase`, `persist_cycle_outputs`, and `_overall_status`.
 - `mypy --strict` support:
   - `pyproject.toml` now includes strict mypy configuration
   - `dev` dependencies now include `mypy`
@@ -31,6 +34,14 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ### Changed
 
+- `TargetConfig` split into sub-dataclasses (`DependencyCheckConfig`, `NetworkProbeConfig`, `StatsCheckConfig`, `TimeHealthCheckConfig`, `MaintenanceCheckConfig`, `ExternalStatusCheckConfig`) with `__getattr__` backward compatibility on `TargetConfig`.
+- `recovery.py`, `time_health.py`, `checks.py`, `policy.py`, `status_events.py`: removed `dict[str, Any]` union paths from function signatures — all state arguments are now strictly `GlobalState` or `TargetState`.
+- `recovery.py`: simplified `_can_reboot` and `apply_recovery` to operate directly on `GlobalState`; removed intermediate `_sync_back` / `_outcome` helpers.
+- `time_health.py`: split `apply_time_health_checks` into smaller focused functions.
+- `cli.py`: removed dead code paths.
+- `state_helpers.py`: `write_json_atomic` now calls `os.fsync` on the parent directory after rename for stronger crash safety.
+- `monitor_stats.py`: `_MISSING` sentinel moved to module level.
+- Test helpers unified: `conftest.make_target` now builds `TargetConfig` with sub-dataclasses; individual test files delegate to it.
 - Introduced typed top-level runtime state model:
   - `GlobalState`
   - `RebootRecord`

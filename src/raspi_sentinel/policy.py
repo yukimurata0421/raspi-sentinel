@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
 from .checks import CheckResult
 from .state_helpers import safe_bool, safe_float, safe_int
@@ -39,15 +39,13 @@ class PolicySnapshot:
 
 def classify_target_policy(
     result: CheckResult,
-    target_state: TargetState | dict[str, Any] | None = None,
+    target_state: TargetState | None = None,
 ) -> PolicySnapshot:
     checks = {failure.check for failure in result.failures}
     observations = result.observations
     previous_reason = ""
-    if isinstance(target_state, TargetState):
+    if target_state is not None:
         previous_reason = target_state.last_reason or ""
-    elif isinstance(target_state, dict):
-        previous_reason = str(target_state.get("last_reason", "") or "")
 
     dns_ok = safe_bool(observations.get("dns_ok"))
     dns_server_reachable = safe_bool(observations.get("dns_server_reachable"))

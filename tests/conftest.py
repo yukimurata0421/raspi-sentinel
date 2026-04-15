@@ -7,14 +7,27 @@ import pytest
 
 from raspi_sentinel.config import (
     AppConfig,
+    DependencyCheckConfig,
     DiscordNotifyConfig,
+    ExternalStatusCheckConfig,
     GlobalConfig,
+    MaintenanceCheckConfig,
+    NetworkProbeConfig,
     NotifyConfig,
+    StatsCheckConfig,
     TargetConfig,
+    TimeHealthCheckConfig,
 )
 
+_DEPS_FIELDS = {f.name for f in DependencyCheckConfig.__dataclass_fields__.values()}
+_NETWORK_FIELDS = {f.name for f in NetworkProbeConfig.__dataclass_fields__.values()}
+_STATS_FIELDS = {f.name for f in StatsCheckConfig.__dataclass_fields__.values()}
+_TIME_HEALTH_FIELDS = {f.name for f in TimeHealthCheckConfig.__dataclass_fields__.values()}
+_MAINTENANCE_FIELDS = {f.name for f in MaintenanceCheckConfig.__dataclass_fields__.values()}
+_EXTERNAL_FIELDS = {f.name for f in ExternalStatusCheckConfig.__dataclass_fields__.values()}
 
-def _default_target_kwargs() -> dict[str, Any]:
+
+def _default_flat_kwargs() -> dict[str, Any]:
     return {
         "name": "demo",
         "services": [],
@@ -74,9 +87,26 @@ def _default_target_kwargs() -> dict[str, Any]:
 
 
 def make_target(**overrides: Any) -> TargetConfig:
-    base = _default_target_kwargs()
-    base.update(overrides)
-    return TargetConfig(**base)
+    """Build a TargetConfig from flat keyword arguments (backward compatible)."""
+    flat = _default_flat_kwargs()
+    flat.update(overrides)
+
+    deps_kw = {k: flat.pop(k) for k in list(flat) if k in _DEPS_FIELDS}
+    net_kw = {k: flat.pop(k) for k in list(flat) if k in _NETWORK_FIELDS}
+    stats_kw = {k: flat.pop(k) for k in list(flat) if k in _STATS_FIELDS}
+    th_kw = {k: flat.pop(k) for k in list(flat) if k in _TIME_HEALTH_FIELDS}
+    maint_kw = {k: flat.pop(k) for k in list(flat) if k in _MAINTENANCE_FIELDS}
+    ext_kw = {k: flat.pop(k) for k in list(flat) if k in _EXTERNAL_FIELDS}
+
+    return TargetConfig(
+        **flat,
+        deps=DependencyCheckConfig(**deps_kw),
+        network=NetworkProbeConfig(**net_kw),
+        stats=StatsCheckConfig(**stats_kw),
+        time_health=TimeHealthCheckConfig(**th_kw),
+        maintenance=MaintenanceCheckConfig(**maint_kw),
+        external=ExternalStatusCheckConfig(**ext_kw),
+    )
 
 
 def make_global_config(**overrides: Any) -> GlobalConfig:

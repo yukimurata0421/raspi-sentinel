@@ -4,7 +4,6 @@ import logging
 import subprocess
 import time
 from dataclasses import dataclass
-from typing import Any
 
 from .checks import CheckResult
 from .config import GlobalConfig, TargetConfig
@@ -78,14 +77,7 @@ def _policy_failed(result: CheckResult) -> bool:
     return result.observations.get("policy_status") == "failed"
 
 
-def _can_reboot(
-    global_config: GlobalConfig, state: GlobalState | dict[str, Any], now_ts: float
-) -> tuple[bool, str]:
-    if isinstance(state, GlobalState):
-        state_model = state
-    else:
-        state_model = GlobalState.from_dict(state)
-
+def _can_reboot(global_config: GlobalConfig, state: GlobalState, now_ts: float) -> tuple[bool, str]:
     uptime = read_uptime_sec()
     if uptime < global_config.min_uptime_for_reboot_sec:
         return (
@@ -97,14 +89,11 @@ def _can_reboot(
         )
 
     filtered: list[RebootRecord] = []
-    for entry in state_model.reboots:
+    for entry in state.reboots:
         ts_f = entry.ts
         if now_ts - ts_f <= global_config.reboot_window_sec:
             filtered.append(entry)
-    state_model.reboots = filtered
-    if isinstance(state, dict):
-        state.clear()
-        state.update(state_model.to_dict())
+    state.reboots = filtered
 
     if filtered:
         last_ts = filtered[-1].ts
@@ -195,22 +184,19 @@ def apply_recovery(
     target: TargetConfig,
     check_result: CheckResult,
     global_config: GlobalConfig,
-    state: GlobalState | dict[str, Any],
+    state: GlobalState,
     dry_run: bool,
     allow_disruptive_actions: bool = True,
     now_ts: float | None = None,
 ) -> RecoveryOutcome:
-    if isinstance(state, GlobalState):
-        state_model = state
-        raw_state: dict[str, Any] | None = None
-    else:
-        state_model = GlobalState.from_dict(state)
-        raw_state = state
-
-    ts = state_model.ensure_target(target.name)
+    ts = state.ensure_target(target.name)
     effective_now = time.time() if now_ts is None else now_ts
     clock_reboot_confirmed = _clock_reboot_confirmed(check_result)
     policy_failed = _policy_failed(check_result)
+
+    def _return(action: str, *, reboot: bool = False) -> RecoveryOutcome:
+        _record_action_model(ts, action, effective_now)
+        return RecoveryOutcome(action=action, requested_reboot=reboot)
 
     if check_result.healthy and not clock_reboot_confirmed:
         previous = ts.consecutive_failures
@@ -222,11 +208,7 @@ def apply_recovery(
                 target.name,
                 previous,
             )
-        _record_action_model(ts, "none", effective_now)
-        if raw_state is not None:
-            raw_state.clear()
-            raw_state.update(state_model.to_dict())
-        return RecoveryOutcome(action="none", requested_reboot=False)
+        return _return("none")
 
     failures_text = "; ".join(f"{f.check}: {f.message}" for f in check_result.failures).strip()
     if not failures_text:
@@ -242,11 +224,7 @@ def apply_recovery(
             target.name,
             failures_text,
         )
-        _record_action_model(ts, "warn", effective_now)
-        if raw_state is not None:
-            raw_state.clear()
-            raw_state.update(state_model.to_dict())
-        return RecoveryOutcome(action="warn", requested_reboot=False)
+        return _return("warn")
 
     if clock_reboot_confirmed:
         if not policy_failed:
@@ -258,13 +236,9 @@ def apply_recovery(
                 target.name,
                 check_result.observations.get("policy_status"),
             )
-            _record_action_model(ts, "warn", effective_now)
-            if raw_state is not None:
-                raw_state.clear()
-                raw_state.update(state_model.to_dict())
-            return RecoveryOutcome(action="warn", requested_reboot=False)
+            return _return("warn")
 
-        can_reboot, guard_reason = _can_reboot(global_config, state_model, effective_now)
+        can_reboot, guard_reason = _can_reboot(global_config, state, effective_now)
         if can_reboot:
             LOG.error(
                 "target '%s': confirmed clock freeze anomaly; requesting reboot. reason=%s",
@@ -274,16 +248,12 @@ def apply_recovery(
             reboot_ok = _trigger_reboot(dry_run=dry_run, reason=failures_text)
             if reboot_ok:
                 StateStore.append_reboot_record(
-                    state_model,
+                    state,
                     now_ts=effective_now,
                     target=target.name,
                     reason=failures_text,
                 )
-                _record_action_model(ts, "reboot", effective_now)
-                if raw_state is not None:
-                    raw_state.clear()
-                    raw_state.update(state_model.to_dict())
-                return RecoveryOutcome(action="reboot", requested_reboot=True)
+                return _return("reboot", reboot=True)
             LOG.error("target '%s': confirmed clock reboot request failed", target.name)
         else:
             LOG.error(
@@ -291,11 +261,7 @@ def apply_recovery(
                 target.name,
                 guard_reason,
             )
-        _record_action_model(ts, "warn", effective_now)
-        if raw_state is not None:
-            raw_state.clear()
-            raw_state.update(state_model.to_dict())
-        return RecoveryOutcome(action="warn", requested_reboot=False)
+        return _return("warn")
 
     restart_threshold, reboot_threshold = _thresholds(target, global_config)
     LOG.warning(
@@ -322,8 +288,7 @@ def apply_recovery(
             ),
             target.name,
         )
-        _record_action_model(ts, "warn", effective_now)
-        return RecoveryOutcome(action="warn", requested_reboot=False)
+        return _return("warn")
 
     if consecutive >= reboot_threshold:
         if last_action == "restart" and _within_cooldown(
@@ -363,7 +328,7 @@ def apply_recovery(
                 target.name,
             )
         else:
-            can_reboot, guard_reason = _can_reboot(global_config, state_model, effective_now)
+            can_reboot, guard_reason = _can_reboot(global_config, state, effective_now)
             if can_reboot:
                 LOG.error(
                     "target '%s': reboot threshold reached. requesting reboot. reason=%s",
@@ -373,16 +338,12 @@ def apply_recovery(
                 reboot_ok = _trigger_reboot(dry_run=dry_run, reason=failures_text)
                 if reboot_ok:
                     StateStore.append_reboot_record(
-                        state_model,
+                        state,
                         now_ts=effective_now,
                         target=target.name,
                         reason=failures_text,
                     )
-                    _record_action_model(ts, "reboot", effective_now)
-                    if raw_state is not None:
-                        raw_state.clear()
-                        raw_state.update(state_model.to_dict())
-                    return RecoveryOutcome(action="reboot", requested_reboot=True)
+                    return _return("reboot", reboot=True)
                 LOG.error(
                     "target '%s': reboot request failed, falling back to restart path",
                     target.name,
@@ -405,22 +366,10 @@ def apply_recovery(
                 target.name,
                 global_config.restart_cooldown_sec,
             )
-            _record_action_model(ts, "warn", effective_now)
-            if raw_state is not None:
-                raw_state.clear()
-                raw_state.update(state_model.to_dict())
-            return RecoveryOutcome(action="warn", requested_reboot=False)
+            return _return("warn")
 
         restarted = _restart_services(target.services, dry_run=dry_run)
         action = "restart" if restarted else "warn"
-        _record_action_model(ts, action, effective_now)
-        if raw_state is not None:
-            raw_state.clear()
-            raw_state.update(state_model.to_dict())
-        return RecoveryOutcome(action=action, requested_reboot=False)
+        return _return(action)
 
-    _record_action_model(ts, "warn", effective_now)
-    if raw_state is not None:
-        raw_state.clear()
-        raw_state.update(state_model.to_dict())
-    return RecoveryOutcome(action="warn", requested_reboot=False)
+    return _return("warn")

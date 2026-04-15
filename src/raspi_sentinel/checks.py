@@ -868,7 +868,7 @@ def _probe_network_uplink(target: TargetConfig, observations: dict[str, Any]) ->
 
 def apply_records_progress_check(
     target: TargetConfig,
-    target_state: TargetState | dict[str, Any],
+    target_state: TargetState,
     result: CheckResult,
 ) -> None:
     """Detect stalled ``records_processed_total`` in semantic stats (same cycle as other checks)."""
@@ -880,15 +880,8 @@ def apply_records_progress_check(
     if current_records is None:
         return
 
-    if isinstance(target_state, TargetState):
-        model = target_state
-        raw_target_state: dict[str, Any] | None = None
-    else:
-        model = TargetState.from_dict(target_state)
-        raw_target_state = target_state
-
-    previous_records = model.last_records_processed_total
-    stalled_cycles = model.records_stalled_cycles
+    previous_records = target_state.last_records_processed_total
+    stalled_cycles = target_state.records_stalled_cycles
 
     if previous_records is None or current_records < previous_records:
         stalled_cycles = 0
@@ -908,10 +901,8 @@ def apply_records_progress_check(
     else:
         stalled_cycles = 0
 
-    model.last_records_processed_total = current_records
-    model.records_stalled_cycles = stalled_cycles
-    if raw_target_state is not None:
-        model.merge_into(raw_target_state)
+    target_state.last_records_processed_total = current_records
+    target_state.records_stalled_cycles = stalled_cycles
     result.healthy = not result.failures
 
 

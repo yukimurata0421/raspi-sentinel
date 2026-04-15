@@ -7,6 +7,7 @@ import pytest
 
 from raspi_sentinel.checks import CheckFailure, CheckResult
 from raspi_sentinel.policy import classify_target_policy
+from raspi_sentinel.state_models import TargetState
 from raspi_sentinel.status_events import (
     append_event,
     apply_policy_to_result,
@@ -29,10 +30,10 @@ def test_clock_skewed_maps_to_degraded() -> None:
             "clock_skew_threshold_sec": 300.0,
         },
     )
-    status, reason = classify_target_state(result, {})
+    status, reason = classify_target_state(result, TargetState())
     assert status == "degraded"
     assert reason == "clock_skewed"
-    apply_policy_to_result(result, classify_target_policy(result, {}))
+    apply_policy_to_result(result, classify_target_policy(result, TargetState()))
     assert result.healthy is False
     assert result.observations["policy_reason"] == "clock_skewed"
 
@@ -44,7 +45,7 @@ def test_dns_error_degraded_not_failed() -> None:
         [CheckFailure("dependency_dns", "dns check failed")],
         observations={"gateway_ok": True},
     )
-    status, reason = classify_target_state(result, {})
+    status, reason = classify_target_state(result, TargetState())
     assert status == "degraded"
     assert reason == "dns_error"
 
@@ -56,23 +57,23 @@ def test_stats_stale_is_degraded() -> None:
         [CheckFailure("semantic_updated_at", "stale")],
         observations={},
     )
-    status, reason = classify_target_state(result, {})
+    status, reason = classify_target_state(result, TargetState())
     assert status == "degraded"
     assert reason == "stats_stale"
 
 
 def test_apply_policy_marks_ok_healthy() -> None:
     result = CheckResult("t", False, [], observations={})
-    status, reason = classify_target_state(result, {})
+    status, reason = classify_target_state(result, TargetState())
     assert status == "ok"
-    apply_policy_to_result(result, classify_target_policy(result, {}))
+    apply_policy_to_result(result, classify_target_policy(result, TargetState()))
     assert result.healthy is True
 
 
 def test_record_status_events_only_on_transition(tmp_path: Path) -> None:
     events = tmp_path / "e.jsonl"
     ts = 1_000_000.0
-    target_state: dict = {}
+    target_state = TargetState()
     r = CheckResult("svc", False, [CheckFailure("command", "x")], observations={})
     record_status_events(
         events_file=events,
@@ -109,7 +110,7 @@ def test_record_status_events_only_on_transition(tmp_path: Path) -> None:
 def test_record_status_events_action_only_on_restart_reboot(tmp_path: Path) -> None:
     events = tmp_path / "e.jsonl"
     ts = 1_000_000.0
-    target_state: dict = {"last_status": "failed", "last_reason": "process_error"}
+    target_state = TargetState(last_status="failed", last_reason="process_error")
     r = CheckResult("svc", False, [CheckFailure("command", "x")], observations={})
     record_status_events(
         events_file=events,
@@ -143,7 +144,7 @@ def test_record_status_events_action_only_on_restart_reboot(tmp_path: Path) -> N
 
 def test_record_status_events_preserves_null_vs_false_evidence(tmp_path: Path) -> None:
     events = tmp_path / "e.jsonl"
-    target_state: dict = {}
+    target_state = TargetState()
     result = CheckResult(
         "network_uplink",
         False,
@@ -179,7 +180,7 @@ def test_record_status_events_preserves_null_vs_false_evidence(tmp_path: Path) -
 
 def test_events_include_neighbor_and_arp_gateway_evidence(tmp_path: Path) -> None:
     events = tmp_path / "e.jsonl"
-    target_state: dict = {}
+    target_state = TargetState()
     result = CheckResult(
         "network_uplink",
         False,

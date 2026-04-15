@@ -549,7 +549,7 @@ python -m coverage report \
 
 ## Versioning
 
-- **Current release line:** **0.4.0** (see `CHANGELOG.md`).
+- **Current release line:** **0.4.x** (see `CHANGELOG.md`).
 - **Single version string:** `src/raspi_sentinel/_version.py` (`raspi_sentinel.__version__`). `pyproject.toml` reads it at build time (no duplicate number).
 - **Git tags:** use `v0.4.0` (or current `__version__`) for releases. An older **`v0.2.0`** tag may exist as a snapshot — details in [docs/VERSIONING.md](docs/VERSIONING.md).
 

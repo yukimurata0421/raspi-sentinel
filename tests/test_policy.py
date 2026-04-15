@@ -6,6 +6,7 @@ from raspi_sentinel.policy import (
     PolicySnapshot,
     classify_target_policy,
 )
+from raspi_sentinel.state_models import TargetState
 
 
 def test_policy_snapshot_is_ok() -> None:
@@ -27,7 +28,7 @@ def test_classify_target_policy_returns_policy_snapshot() -> None:
         [CheckFailure("dependency_dns", "x")],
         observations={"gateway_ok": True},
     )
-    p = classify_target_policy(r, {})
+    p = classify_target_policy(r, TargetState())
     assert isinstance(p, PolicySnapshot)
     assert p.status == "degraded"
     assert p.reason == "dns_error"
@@ -40,7 +41,7 @@ def test_clock_frozen_confirmed_is_failed() -> None:
         [],
         observations={"clock_frozen_confirmed": True},
     )
-    p = classify_target_policy(r, {})
+    p = classify_target_policy(r, TargetState())
     assert p.status == "failed"
     assert p.reason == "clock_frozen_confirmed"
 
@@ -52,7 +53,7 @@ def test_http_probe_failed_is_degraded() -> None:
         [],
         observations={"http_probe_ok": False},
     )
-    p = classify_target_policy(r, {})
+    p = classify_target_policy(r, TargetState())
     assert p.status == "degraded"
     assert p.reason == "http_error"
 
@@ -69,7 +70,7 @@ def test_time_sync_broken_skewed_when_skew_and_ntp_false() -> None:
             "clock_skew_threshold_sec": 300.0,
         },
     )
-    p = classify_target_policy(r, {})
+    p = classify_target_policy(r, TargetState())
     assert p.status == "degraded"
     assert p.reason == "time_sync_broken_skewed"
 
@@ -85,12 +86,12 @@ def test_recovered_from_clock_skew_requires_previous_reason() -> None:
             "clock_skew_threshold_sec": 300.0,
         },
     )
-    p_no = classify_target_policy(r, {})
+    p_no = classify_target_policy(r, TargetState())
     assert p_no.reason != "recovered_from_clock_skew"
 
     p_yes = classify_target_policy(
         r,
-        {"last_reason": "clock_skewed"},
+        TargetState(last_reason="clock_skewed"),
     )
     assert p_yes.status == "ok"
     assert p_yes.reason == "recovered_from_clock_skew"
@@ -103,7 +104,7 @@ def test_process_error_uses_process_check_names() -> None:
         [CheckFailure("service_active", "inactive")],
         observations={},
     )
-    p = classify_target_policy(r, {})
+    p = classify_target_policy(r, TargetState())
     assert p.status == "failed"
     assert p.reason == "process_error"
 
@@ -115,7 +116,7 @@ def test_link_error_precedes_gateway_dns_errors() -> None:
         [],
         observations={"link_ok": False, "gateway_ok": False, "dns_ok": False},
     )
-    p = classify_target_policy(r, {})
+    p = classify_target_policy(r, TargetState())
     assert p.status == "degraded"
     assert p.reason == "link_error"
 
@@ -127,7 +128,7 @@ def test_dns_server_error_when_dns_server_is_unreachable() -> None:
         [],
         observations={"gateway_ok": True, "internet_ip_ok": True, "dns_server_reachable": False},
     )
-    p = classify_target_policy(r, {})
+    p = classify_target_policy(r, TargetState())
     assert p.status == "degraded"
     assert p.reason == "dns_server_error"
 
@@ -146,7 +147,7 @@ def test_network_probe_transient_failure_stays_ok() -> None:
             "internet_ip_ok": True,
         },
     )
-    p = classify_target_policy(r, {})
+    p = classify_target_policy(r, TargetState())
     assert p.status == "ok"
     assert p.reason == "transient_network_failure"
 
@@ -165,7 +166,7 @@ def test_network_probe_dns_error_after_consecutive_failures() -> None:
             "internet_ip_ok": True,
         },
     )
-    p = classify_target_policy(r, {})
+    p = classify_target_policy(r, TargetState())
     assert p.status == "degraded"
     assert p.reason == "dns_error"
 
@@ -184,7 +185,7 @@ def test_network_probe_wan_error_split_from_gateway() -> None:
             "internet_fail_consecutive": 3,
         },
     )
-    p = classify_target_policy(r, {})
+    p = classify_target_policy(r, TargetState())
     assert p.status == "degraded"
     assert p.reason == "wan_error"
 
@@ -202,7 +203,7 @@ def test_network_probe_link_failure_can_be_failed() -> None:
             "link_fail_consecutive": 5,
         },
     )
-    p = classify_target_policy(r, {})
+    p = classify_target_policy(r, TargetState())
     assert p.status == "failed"
     assert p.reason == "link_error"
 
@@ -221,7 +222,7 @@ def test_network_probe_http_error_after_dns_ok() -> None:
             "http_fail_consecutive": 2,
         },
     )
-    p = classify_target_policy(r, {})
+    p = classify_target_policy(r, TargetState())
     assert p.status == "degraded"
     assert p.reason == "http_error"
 
@@ -245,7 +246,7 @@ def test_network_probe_multi_factor_outage_becomes_failed() -> None:
             "http_fail_consecutive": 4,
         },
     )
-    p = classify_target_policy(r, {})
+    p = classify_target_policy(r, TargetState())
     assert p.status == "failed"
     assert p.reason == "multi_factor_network_outage"
 
@@ -257,7 +258,7 @@ def test_external_internal_state_failed_maps_to_failed() -> None:
         [CheckFailure("semantic_external_internal_state", "failed")],
         observations={"external_internal_state": "failed"},
     )
-    p = classify_target_policy(r, {})
+    p = classify_target_policy(r, TargetState())
     assert p.status == "failed"
     assert p.reason == "external_status_failed"
 
@@ -269,7 +270,7 @@ def test_external_progress_stall_maps_to_degraded() -> None:
         [CheckFailure("semantic_external_last_progress_ts", "stale")],
         observations={},
     )
-    p = classify_target_policy(r, {})
+    p = classify_target_policy(r, TargetState())
     assert p.status == "degraded"
     assert p.reason == "external_progress_stall"
 
@@ -281,7 +282,7 @@ def test_clock_anomaly_takes_precedence_over_external_status_stale() -> None:
         [CheckFailure("semantic_external_updated_at", "stale")],
         observations={"clock_jump_detected": True},
     )
-    p = classify_target_policy(r, {})
+    p = classify_target_policy(r, TargetState())
     assert p.status == "degraded"
     assert p.reason == "clock_jump"
 
@@ -299,7 +300,7 @@ def test_network_status_hysteresis_prevents_degraded_failed_ok_flap() -> None:
             "gateway_fail_consecutive": 1,
         },
     )
-    p_transient = classify_target_policy(transient, {})
+    p_transient = classify_target_policy(transient, TargetState())
     assert p_transient.status == "ok"
     assert p_transient.reason == "transient_network_failure"
 
@@ -316,7 +317,7 @@ def test_network_status_hysteresis_prevents_degraded_failed_ok_flap() -> None:
             "link_ok": True,
         },
     )
-    p_degraded = classify_target_policy(degraded, {})
+    p_degraded = classify_target_policy(degraded, TargetState())
     assert p_degraded.status == "degraded"
     assert p_degraded.reason == "gateway_error"
 
@@ -330,7 +331,7 @@ def test_network_status_hysteresis_prevents_degraded_failed_ok_flap() -> None:
             "gateway_fail_consecutive": 0,
         },
     )
-    p_recovered = classify_target_policy(recovered, {})
+    p_recovered = classify_target_policy(recovered, TargetState())
     assert p_recovered.status == "ok"
     assert p_recovered.reason == "healthy"
 
@@ -347,7 +348,7 @@ def test_network_probe_failed_route_missing_reason() -> None:
             "route_fail_consecutive": 3,
         },
     )
-    p = classify_target_policy(r, {})
+    p = classify_target_policy(r, TargetState())
     assert p.status == "failed"
     assert p.reason == "route_missing"
 
@@ -364,7 +365,7 @@ def test_network_probe_degraded_link_and_route_reasons() -> None:
             "link_fail_consecutive": 2,
         },
     )
-    p_link = classify_target_policy(link, {})
+    p_link = classify_target_policy(link, TargetState())
     assert p_link.status == "degraded"
     assert p_link.reason == "link_error"
 
@@ -379,7 +380,7 @@ def test_network_probe_degraded_link_and_route_reasons() -> None:
             "route_fail_consecutive": 2,
         },
     )
-    p_route = classify_target_policy(route, {})
+    p_route = classify_target_policy(route, TargetState())
     assert p_route.status == "degraded"
     assert p_route.reason == "route_missing"
 
@@ -395,7 +396,7 @@ def test_network_probe_target_and_quality_reasons() -> None:
             "internet_ip_ok": True,
         },
     )
-    p_target = classify_target_policy(target, {})
+    p_target = classify_target_policy(target, TargetState())
     assert p_target.reason == "target_reachability_error"
 
     quality_cases = [
@@ -416,7 +417,7 @@ def test_network_probe_target_and_quality_reasons() -> None:
                 field_name: True,
             },
         )
-        p = classify_target_policy(r, {})
+        p = classify_target_policy(r, TargetState())
         assert p.status == "degraded"
         assert p.reason == expected_reason
 
@@ -428,10 +429,10 @@ def test_clock_and_recovery_reason_branches() -> None:
         [],
         observations={"clock_frozen_detected": True, "consecutive_clock_freeze_count": 2},
     )
-    assert classify_target_policy(frozen, {}).reason == "clock_frozen_persistent"
+    assert classify_target_policy(frozen, TargetState()).reason == "clock_frozen_persistent"
 
     jump = CheckResult("t", False, [], observations={"clock_jump_detected": True})
-    assert classify_target_policy(jump, {}).reason == "clock_jump"
+    assert classify_target_policy(jump, TargetState()).reason == "clock_jump"
 
     sync_broken = CheckResult(
         "t",
@@ -443,7 +444,7 @@ def test_clock_and_recovery_reason_branches() -> None:
             "clock_skew_threshold_sec": 300.0,
         },
     )
-    assert classify_target_policy(sync_broken, {}).reason == "time_sync_broken"
+    assert classify_target_policy(sync_broken, TargetState()).reason == "time_sync_broken"
 
     insufficient = CheckResult(
         "t",
@@ -451,9 +452,9 @@ def test_clock_and_recovery_reason_branches() -> None:
         [],
         observations={"insufficient_interval": True},
     )
-    assert classify_target_policy(insufficient, {}).reason == "insufficient_interval"
+    assert classify_target_policy(insufficient, TargetState()).reason == "insufficient_interval"
 
     recovered_jump = CheckResult("t", True, [], observations={})
-    p_recovered = classify_target_policy(recovered_jump, {"last_reason": "clock_jump"})
+    p_recovered = classify_target_policy(recovered_jump, TargetState(last_reason="clock_jump"))
     assert p_recovered.status == "ok"
     assert p_recovered.reason == "recovered_from_clock_jump"

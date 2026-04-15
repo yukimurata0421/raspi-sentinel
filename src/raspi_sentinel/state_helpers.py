@@ -59,6 +59,11 @@ def write_json_atomic(path: Path, payload: dict[str, Any], indent: int | None = 
         finally:
             os.close(fd)
         tmp_path.replace(path)
+        dir_fd = os.open(str(path.parent), os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
     except OSError as exc:
         LOG.error("failed to write JSON atomically %s: %s", path, exc)
         return False

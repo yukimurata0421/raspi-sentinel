@@ -3,71 +3,16 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
+
+from conftest import make_target
 
 from raspi_sentinel.checks import run_checks
-from raspi_sentinel.config import TargetConfig
 from raspi_sentinel.status_events import classify_target_reason, classify_target_status
 
 
-def _target(**overrides: object) -> TargetConfig:
-    base = {
-        "name": "demo",
-        "services": [],
-        "service_active": False,
-        "heartbeat_file": None,
-        "heartbeat_max_age_sec": None,
-        "output_file": None,
-        "output_max_age_sec": None,
-        "command": None,
-        "command_use_shell": False,
-        "command_timeout_sec": None,
-        "dns_check_command": None,
-        "dns_check_use_shell": False,
-        "dns_server_check_command": None,
-        "dns_server_check_use_shell": False,
-        "gateway_check_command": None,
-        "gateway_check_use_shell": False,
-        "link_check_command": None,
-        "link_check_use_shell": False,
-        "default_route_check_command": None,
-        "default_route_check_use_shell": False,
-        "internet_ip_check_command": None,
-        "internet_ip_check_use_shell": False,
-        "wan_vs_target_check_command": None,
-        "wan_vs_target_check_use_shell": False,
-        "network_probe_enabled": False,
-        "network_interface": None,
-        "gateway_probe_timeout_sec": 2,
-        "internet_ip_targets": ["1.1.1.1", "8.8.8.8"],
-        "dns_query_target": None,
-        "http_probe_target": None,
-        "consecutive_failure_thresholds": {"degraded": 2, "failed": 6},
-        "latency_thresholds_ms": {},
-        "packet_loss_thresholds_pct": {},
-        "dependency_check_timeout_sec": None,
-        "stats_file": None,
-        "stats_updated_max_age_sec": None,
-        "stats_last_input_max_age_sec": None,
-        "stats_last_success_max_age_sec": None,
-        "stats_records_stall_cycles": None,
-        "time_health_enabled": False,
-        "check_interval_threshold_sec": 30,
-        "wall_clock_freeze_min_monotonic_sec": 25,
-        "wall_clock_freeze_max_wall_advance_sec": 1,
-        "wall_clock_drift_threshold_sec": 30,
-        "http_time_probe_url": None,
-        "http_time_probe_timeout_sec": 5,
-        "clock_skew_threshold_sec": 300,
-        "clock_anomaly_reboot_consecutive": 3,
-        "maintenance_mode_command": None,
-        "maintenance_mode_use_shell": False,
-        "maintenance_mode_timeout_sec": None,
-        "maintenance_grace_sec": None,
-        "restart_threshold": None,
-        "reboot_threshold": None,
-    }
-    base.update(overrides)
-    return TargetConfig(**base)
+def _target(**overrides: Any) -> Any:
+    return make_target(**overrides)
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:

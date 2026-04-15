@@ -1,25 +1,17 @@
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 from typing import Any
+
+from conftest import make_global_config, make_target
 
 from raspi_sentinel import recovery
 from raspi_sentinel.checks import CheckFailure, CheckResult
-from raspi_sentinel.config import GlobalConfig, TargetConfig
+from raspi_sentinel.state_models import GlobalState, RebootRecord
 
 
-def _global(**overrides: Any) -> GlobalConfig:
-    base = {
-        "state_file": Path("/tmp/state.json"),
-        "state_max_file_bytes": 2_000_000,
-        "state_reboots_max_entries": 256,
-        "state_lock_timeout_sec": 5,
-        "events_file": Path("/tmp/events.jsonl"),
-        "events_max_file_bytes": 5_000_000,
-        "events_backup_generations": 3,
-        "monitor_stats_file": Path("/tmp/stats.json"),
-        "monitor_stats_interval_sec": 30,
+def _global(**overrides: Any) -> Any:
+    defaults = {
         "restart_threshold": 2,
         "reboot_threshold": 3,
         "restart_cooldown_sec": 30,
@@ -30,91 +22,35 @@ def _global(**overrides: Any) -> GlobalConfig:
         "default_command_timeout_sec": 5,
         "loop_interval_sec": 30,
     }
-    base.update(overrides)
-    return GlobalConfig(**base)
-
-
-def _target(**overrides: Any) -> TargetConfig:
-    base = {
-        "name": "demo",
-        "services": ["demo.service"],
-        "service_active": True,
-        "heartbeat_file": None,
-        "heartbeat_max_age_sec": None,
-        "output_file": None,
-        "output_max_age_sec": None,
-        "command": None,
-        "command_use_shell": False,
-        "command_timeout_sec": None,
-        "dns_check_command": None,
-        "dns_check_use_shell": False,
-        "dns_server_check_command": None,
-        "dns_server_check_use_shell": False,
-        "gateway_check_command": None,
-        "gateway_check_use_shell": False,
-        "link_check_command": None,
-        "link_check_use_shell": False,
-        "default_route_check_command": None,
-        "default_route_check_use_shell": False,
-        "internet_ip_check_command": None,
-        "internet_ip_check_use_shell": False,
-        "wan_vs_target_check_command": None,
-        "wan_vs_target_check_use_shell": False,
-        "network_probe_enabled": False,
-        "network_interface": None,
-        "gateway_probe_timeout_sec": 2,
-        "internet_ip_targets": ["1.1.1.1", "8.8.8.8"],
-        "dns_query_target": None,
-        "http_probe_target": None,
-        "consecutive_failure_thresholds": {"degraded": 2, "failed": 6},
-        "latency_thresholds_ms": {},
-        "packet_loss_thresholds_pct": {},
-        "dependency_check_timeout_sec": None,
-        "stats_file": None,
-        "stats_updated_max_age_sec": None,
-        "stats_last_input_max_age_sec": None,
-        "stats_last_success_max_age_sec": None,
-        "stats_records_stall_cycles": None,
-        "time_health_enabled": False,
-        "check_interval_threshold_sec": 30,
-        "wall_clock_freeze_min_monotonic_sec": 25,
-        "wall_clock_freeze_max_wall_advance_sec": 1,
-        "wall_clock_drift_threshold_sec": 30,
-        "http_time_probe_url": None,
-        "http_time_probe_timeout_sec": 5,
-        "clock_skew_threshold_sec": 300,
-        "clock_anomaly_reboot_consecutive": 3,
-        "maintenance_mode_command": None,
-        "maintenance_mode_use_shell": False,
-        "maintenance_mode_timeout_sec": None,
-        "maintenance_grace_sec": None,
-        "restart_threshold": 2,
-        "reboot_threshold": 3,
-    }
-    base.update(overrides)
-    return TargetConfig(**base)
+    defaults.update(overrides)
+    return make_global_config(**defaults)
 
 
 def test_can_reboot_guard_paths(monkeypatch: Any) -> None:
     monkeypatch.setattr(recovery, "read_uptime_sec", lambda: 10.0)
-    ok, reason = recovery._can_reboot(_global(min_uptime_for_reboot_sec=60), {}, 100.0)
+    ok, reason = recovery._can_reboot(_global(min_uptime_for_reboot_sec=60), GlobalState(), 100.0)
     assert not ok and "uptime guard" in reason
 
     monkeypatch.setattr(recovery, "read_uptime_sec", lambda: 1000.0)
-    state = {"reboots": [{"ts": 95.0}]}
+    state = GlobalState(reboots=[RebootRecord(ts=95.0, target="demo", reason="test")])
     ok, reason = recovery._can_reboot(_global(reboot_cooldown_sec=20), state, 100.0)
     assert not ok and "cooldown" in reason
 
-    state = {"reboots": [{"ts": 80.0}, {"ts": 90.0}]}
+    state = GlobalState(
+        reboots=[
+            RebootRecord(ts=80.0, target="demo", reason="a"),
+            RebootRecord(ts=90.0, target="demo", reason="b"),
+        ]
+    )
     ok, reason = recovery._can_reboot(
         _global(reboot_cooldown_sec=0, max_reboots_in_window=2), state, 100.0
     )
     assert not ok and "window cap" in reason
 
-    state = {"reboots": [{"ts": 0.0}]}
+    state = GlobalState(reboots=[RebootRecord(ts=0.0, target="demo", reason="old")])
     ok, reason = recovery._can_reboot(_global(reboot_window_sec=10), state, 100.0)
     assert ok and reason == "allowed"
-    assert state["reboots"] == []
+    assert state.reboots == []
 
 
 def test_read_uptime_sec_exception_branch(monkeypatch: Any) -> None:
@@ -129,15 +65,7 @@ def test_read_uptime_sec_exception_branch(monkeypatch: Any) -> None:
 
 def test_can_reboot_guard_boundary_values(monkeypatch: Any) -> None:
     monkeypatch.setattr(recovery, "read_uptime_sec", lambda: 60.0)
-    edge_state: dict[str, Any] = {
-        "reboots": [
-            {
-                "ts": 80.0,
-                "target": "demo",
-                "reason": "edge",
-            }
-        ]
-    }
+    edge_state = GlobalState(reboots=[RebootRecord(ts=80.0, target="demo", reason="edge")])
     ok, reason = recovery._can_reboot(
         _global(
             min_uptime_for_reboot_sec=60,
@@ -149,14 +77,14 @@ def test_can_reboot_guard_boundary_values(monkeypatch: Any) -> None:
         100.0,
     )
     assert ok and reason == "allowed"
-    assert edge_state["reboots"][0]["ts"] == 80.0
+    assert edge_state.reboots[0].ts == 80.0
 
-    cap_state: dict[str, Any] = {
-        "reboots": [
-            {"ts": 81.0, "target": "demo", "reason": "a"},
-            {"ts": 99.0, "target": "demo", "reason": "b"},
+    cap_state = GlobalState(
+        reboots=[
+            RebootRecord(ts=81.0, target="demo", reason="a"),
+            RebootRecord(ts=99.0, target="demo", reason="b"),
         ]
-    }
+    )
     ok, reason = recovery._can_reboot(
         _global(
             min_uptime_for_reboot_sec=0,
@@ -232,22 +160,32 @@ def test_trigger_reboot_branches(monkeypatch: Any) -> None:
 
 
 def test_apply_recovery_healthy_path_resets_counter() -> None:
-    state: dict[str, Any] = {"targets": {"demo": {"consecutive_failures": 3}}}
+    state = GlobalState.from_dict({"targets": {"demo": {"consecutive_failures": 3}}})
     outcome = recovery.apply_recovery(
-        target=_target(),
+        target=make_target(
+            services=["demo.service"],
+            service_active=True,
+            restart_threshold=2,
+            reboot_threshold=3,
+        ),
         check_result=CheckResult(target="demo", healthy=True, failures=[]),
         global_config=_global(),
         state=state,
         dry_run=True,
     )
     assert outcome.action == "none"
-    assert state["targets"]["demo"]["consecutive_failures"] == 0
+    assert state.ensure_target("demo").consecutive_failures == 0
 
 
 def test_apply_recovery_limited_mode_updates_raw_state() -> None:
-    state: dict[str, Any] = {}
+    state = GlobalState()
     outcome = recovery.apply_recovery(
-        target=_target(),
+        target=make_target(
+            services=["demo.service"],
+            service_active=True,
+            restart_threshold=2,
+            reboot_threshold=3,
+        ),
         check_result=CheckResult(
             target="demo",
             healthy=False,
@@ -261,14 +199,20 @@ def test_apply_recovery_limited_mode_updates_raw_state() -> None:
         now_ts=100.0,
     )
     assert outcome.action == "warn"
-    assert state["targets"]["demo"]["last_action"] == "warn"
-    assert state["targets"]["demo"]["last_failure_ts"] == 100.0
+    ts = state.ensure_target("demo")
+    assert ts.last_action == "warn"
+    assert ts.last_failure_ts == 100.0
 
 
 def test_apply_recovery_injected_now_ts_used_for_last_healthy() -> None:
-    state: dict[str, Any] = {}
+    state = GlobalState()
     outcome = recovery.apply_recovery(
-        target=_target(),
+        target=make_target(
+            services=["demo.service"],
+            service_active=True,
+            restart_threshold=2,
+            reboot_threshold=3,
+        ),
         check_result=CheckResult(target="demo", healthy=True, failures=[]),
         global_config=_global(),
         state=state,
@@ -276,21 +220,28 @@ def test_apply_recovery_injected_now_ts_used_for_last_healthy() -> None:
         now_ts=42.0,
     )
     assert outcome.action == "none"
-    assert state["targets"]["demo"]["last_healthy_ts"] == 42.0
+    assert state.ensure_target("demo").last_healthy_ts == 42.0
 
 
 def test_apply_recovery_restart_cooldown_suppresses_repeat(monkeypatch: Any) -> None:
-    state: dict[str, Any] = {
-        "targets": {
-            "demo": {
-                "consecutive_failures": 1,
-                "last_action": "restart",
-                "last_action_ts": 95.0,
+    state = GlobalState.from_dict(
+        {
+            "targets": {
+                "demo": {
+                    "consecutive_failures": 1,
+                    "last_action": "restart",
+                    "last_action_ts": 95.0,
+                }
             }
         }
-    }
+    )
     outcome = recovery.apply_recovery(
-        target=_target(restart_threshold=2, reboot_threshold=9),
+        target=make_target(
+            services=["demo.service"],
+            service_active=True,
+            restart_threshold=2,
+            reboot_threshold=9,
+        ),
         check_result=CheckResult(
             target="demo",
             healthy=False,
@@ -309,9 +260,9 @@ def test_apply_recovery_reboot_failure_falls_back_to_restart(monkeypatch: Any) -
     monkeypatch.setattr(recovery, "read_uptime_sec", lambda: 1000.0)
     monkeypatch.setattr(recovery, "_trigger_reboot", lambda dry_run, reason: False)
     monkeypatch.setattr(recovery, "_restart_services", lambda services, dry_run: True)
-    state: dict[str, Any] = {}
+    state = GlobalState()
     outcome = recovery.apply_recovery(
-        target=_target(restart_threshold=1, reboot_threshold=1),
+        target=make_target(restart_threshold=1, reboot_threshold=1),
         check_result=CheckResult(
             target="demo",
             healthy=False,
@@ -329,9 +280,13 @@ def test_apply_recovery_reboot_failure_falls_back_to_restart(monkeypatch: Any) -
 
 
 def test_apply_recovery_clock_only_blocks_reboot_without_ready() -> None:
-    state: dict[str, Any] = {}
+    state = GlobalState()
     outcome = recovery.apply_recovery(
-        target=_target(restart_threshold=1, reboot_threshold=1),
+        target=make_target(
+            services=["demo.service"],
+            restart_threshold=1,
+            reboot_threshold=1,
+        ),
         check_result=CheckResult(
             target="demo",
             healthy=False,
@@ -350,9 +305,9 @@ def test_apply_recovery_clock_only_blocks_reboot_without_ready() -> None:
 
 def test_apply_recovery_clock_only_allows_reboot_when_ready(monkeypatch: Any) -> None:
     monkeypatch.setattr(recovery, "read_uptime_sec", lambda: 1000.0)
-    state: dict[str, Any] = {}
+    state = GlobalState()
     outcome = recovery.apply_recovery(
-        target=_target(restart_threshold=1, reboot_threshold=1),
+        target=make_target(restart_threshold=1, reboot_threshold=1),
         check_result=CheckResult(
             target="demo",
             healthy=False,
@@ -373,9 +328,9 @@ def test_apply_recovery_reboots_on_confirmed_clock_without_failures(
     monkeypatch: Any,
 ) -> None:
     monkeypatch.setattr(recovery, "read_uptime_sec", lambda: 1000.0)
-    state: dict[str, Any] = {}
+    state = GlobalState()
     outcome = recovery.apply_recovery(
-        target=_target(restart_threshold=9, reboot_threshold=9),
+        target=make_target(restart_threshold=9, reboot_threshold=9),
         check_result=CheckResult(
             target="demo",
             healthy=True,
@@ -398,9 +353,9 @@ def test_apply_recovery_reboots_on_confirmed_clock_without_failures(
 
 def test_apply_recovery_confirmed_clock_requires_failed_policy(monkeypatch: Any) -> None:
     monkeypatch.setattr(recovery, "read_uptime_sec", lambda: 1000.0)
-    state: dict[str, Any] = {}
+    state = GlobalState()
     outcome = recovery.apply_recovery(
-        target=_target(restart_threshold=9, reboot_threshold=9),
+        target=make_target(restart_threshold=9, reboot_threshold=9),
         check_result=CheckResult(
             target="demo",
             healthy=False,
@@ -422,9 +377,9 @@ def test_apply_recovery_confirmed_clock_requires_failed_policy(monkeypatch: Any)
 
 def test_apply_recovery_confirmed_clock_blocked_by_reboot_guard(monkeypatch: Any) -> None:
     monkeypatch.setattr(recovery, "read_uptime_sec", lambda: 0.0)
-    state: dict[str, Any] = {}
+    state = GlobalState()
     outcome = recovery.apply_recovery(
-        target=_target(restart_threshold=9, reboot_threshold=9),
+        target=make_target(restart_threshold=9, reboot_threshold=9),
         check_result=CheckResult(
             target="demo",
             healthy=False,

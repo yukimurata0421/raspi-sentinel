@@ -114,17 +114,14 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             time.sleep(interval)
 
-    if args.command == "validate-config":
-        report = build_config_validation_report(config_path=args.config, config=config)
-        if args.json:
-            print(json.dumps(report, indent=2, sort_keys=True))
-        else:
-            print(format_config_validation_report(report))
-        warning_count = safe_int(report.get("warning_count"), 0)
-        if args.strict and warning_count > 0:
-            LOG.error("validate-config strict mode failed: warnings=%s", report["warning_count"])
-            return 15
-        return 0
-
-    parser.print_help()
-    return 12
+    # args.command == "validate-config" (only remaining subcommand)
+    report = build_config_validation_report(config_path=args.config, config=config)
+    if args.json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        print(format_config_validation_report(report))
+    warning_count = safe_int(report.get("warning_count"), 0)
+    if args.strict and warning_count > 0:
+        LOG.error("validate-config strict mode failed: warnings=%s", report["warning_count"])
+        return 15
+    return 0

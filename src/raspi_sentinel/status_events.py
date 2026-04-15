@@ -23,7 +23,7 @@ def apply_policy_to_result(result: CheckResult, policy: PolicySnapshot) -> None:
 
 def classify_target_state(
     result: CheckResult,
-    target_state: TargetState | dict[str, Any] | None = None,
+    target_state: TargetState | None = None,
 ) -> tuple[str, str]:
     p = classify_target_policy(result=result, target_state=target_state)
     return p.status, p.reason
@@ -31,14 +31,14 @@ def classify_target_state(
 
 def classify_target_status(
     result: CheckResult,
-    target_state: TargetState | dict[str, Any] | None = None,
+    target_state: TargetState | None = None,
 ) -> str:
     return classify_target_policy(result=result, target_state=target_state).status
 
 
 def classify_target_reason(
     result: CheckResult,
-    target_state: TargetState | dict[str, Any] | None = None,
+    target_state: TargetState | None = None,
 ) -> str:
     return classify_target_policy(result=result, target_state=target_state).reason
 
@@ -177,7 +177,7 @@ def build_event_evidence(result: CheckResult) -> dict[str, Any]:
 
 def record_status_events(
     events_file: Path,
-    target_state: TargetState | dict[str, Any],
+    target_state: TargetState,
     target_name: str,
     current_status: str,
     current_reason: str,
@@ -187,15 +187,8 @@ def record_status_events(
     max_file_bytes: int = 0,
     backup_generations: int = 1,
 ) -> None:
-    if isinstance(target_state, TargetState):
-        model = target_state
-        raw_target_state: dict[str, Any] | None = None
-    else:
-        model = TargetState.from_dict(target_state)
-        raw_target_state = target_state
-
-    previous_status = model.last_status or "unknown"
-    previous_reason = model.last_reason or "unknown"
+    previous_status = target_state.last_status or "unknown"
+    previous_reason = target_state.last_reason or "unknown"
     ts_text = datetime.fromtimestamp(now_ts).astimezone().isoformat(timespec="seconds")
     evidence = build_event_evidence(result)
 
@@ -230,7 +223,5 @@ def record_status_events(
             backup_generations=backup_generations,
         )
 
-    model.last_status = current_status
-    model.last_reason = current_reason
-    if raw_target_state is not None:
-        model.merge_into(raw_target_state)
+    target_state.last_status = current_status
+    target_state.last_reason = current_reason

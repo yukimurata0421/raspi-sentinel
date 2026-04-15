@@ -4,81 +4,37 @@ import subprocess
 from typing import Any
 from urllib import error
 
+from conftest import make_target
+
 from raspi_sentinel import time_health
 from raspi_sentinel.checks import CheckFailure, CheckResult
-from raspi_sentinel.config import TargetConfig
+from raspi_sentinel.state_models import TargetState
 from raspi_sentinel.time_health import apply_time_health_checks
 
 
-def _target(**overrides: Any) -> TargetConfig:
-    base = {
+def _target(**overrides: Any) -> Any:
+    defaults = {
         "name": "clock_target",
-        "services": [],
-        "service_active": False,
-        "heartbeat_file": None,
-        "heartbeat_max_age_sec": None,
-        "output_file": None,
-        "output_max_age_sec": None,
-        "command": None,
-        "command_use_shell": False,
-        "command_timeout_sec": None,
-        "dns_check_command": None,
-        "dns_check_use_shell": False,
-        "dns_server_check_command": None,
-        "dns_server_check_use_shell": False,
-        "gateway_check_command": None,
-        "gateway_check_use_shell": False,
-        "link_check_command": None,
-        "link_check_use_shell": False,
-        "default_route_check_command": None,
-        "default_route_check_use_shell": False,
-        "internet_ip_check_command": None,
-        "internet_ip_check_use_shell": False,
-        "wan_vs_target_check_command": None,
-        "wan_vs_target_check_use_shell": False,
-        "network_probe_enabled": False,
-        "network_interface": None,
-        "gateway_probe_timeout_sec": 2,
-        "internet_ip_targets": ["1.1.1.1", "8.8.8.8"],
-        "dns_query_target": None,
-        "http_probe_target": None,
-        "consecutive_failure_thresholds": {"degraded": 2, "failed": 6},
-        "latency_thresholds_ms": {},
-        "packet_loss_thresholds_pct": {},
-        "dependency_check_timeout_sec": None,
-        "stats_file": None,
-        "stats_updated_max_age_sec": None,
-        "stats_last_input_max_age_sec": None,
-        "stats_last_success_max_age_sec": None,
-        "stats_records_stall_cycles": None,
         "time_health_enabled": True,
-        "check_interval_threshold_sec": 30,
-        "wall_clock_freeze_min_monotonic_sec": 25,
-        "wall_clock_freeze_max_wall_advance_sec": 1,
-        "wall_clock_drift_threshold_sec": 30,
-        "http_time_probe_url": None,
-        "http_time_probe_timeout_sec": 5,
-        "clock_skew_threshold_sec": 300,
-        "clock_anomaly_reboot_consecutive": 3,
-        "maintenance_mode_command": None,
-        "maintenance_mode_use_shell": False,
-        "maintenance_mode_timeout_sec": None,
-        "maintenance_grace_sec": None,
         "restart_threshold": 1,
         "reboot_threshold": 3,
     }
-    base.update(overrides)
-    return TargetConfig(**base)
+    defaults.update(overrides)
+    return make_target(**defaults)
+
+
+def _make_ts(**overrides: Any) -> TargetState:
+    return TargetState.from_dict(overrides)
 
 
 def test_time_health_detects_frozen_clock(monkeypatch: Any) -> None:
     monkeypatch.setattr("raspi_sentinel.time_health.time.monotonic", lambda: 130.0)
     monkeypatch.setattr("raspi_sentinel.time_health._query_ntp_sync_ok", lambda timeout_sec=3: None)
 
-    state = {
-        "clock_prev_wall_time_epoch": 1000.0,
-        "clock_prev_monotonic_sec": 100.0,
-    }
+    state = _make_ts(
+        clock_prev_wall_time_epoch=1000.0,
+        clock_prev_monotonic_sec=100.0,
+    )
     result = CheckResult(target="clock_target", healthy=True, failures=[])
     apply_time_health_checks(
         target=_target(clock_anomaly_reboot_consecutive=1),
@@ -107,10 +63,10 @@ def test_time_health_detects_http_clock_skew(monkeypatch: Any) -> None:
         "raspi_sentinel.time_health._query_ntp_sync_ok", lambda timeout_sec=3: False
     )
 
-    state = {
-        "clock_prev_wall_time_epoch": 1990.0,
-        "clock_prev_monotonic_sec": 200.0,
-    }
+    state = _make_ts(
+        clock_prev_wall_time_epoch=1990.0,
+        clock_prev_monotonic_sec=200.0,
+    )
     result = CheckResult(target="clock_target", healthy=True, failures=[])
     apply_time_health_checks(
         target=_target(
@@ -135,10 +91,10 @@ def test_time_health_dependency_failure_blocks_clock_reboot(monkeypatch: Any) ->
     monkeypatch.setattr("raspi_sentinel.time_health.time.monotonic", lambda: 150.0)
     monkeypatch.setattr("raspi_sentinel.time_health._query_ntp_sync_ok", lambda timeout_sec=3: None)
 
-    state = {
-        "clock_prev_wall_time_epoch": 1000.0,
-        "clock_prev_monotonic_sec": 100.0,
-    }
+    state = _make_ts(
+        clock_prev_wall_time_epoch=1000.0,
+        clock_prev_monotonic_sec=100.0,
+    )
     result = CheckResult(
         target="clock_target",
         healthy=False,
@@ -275,10 +231,10 @@ def test_time_health_sets_confirmed_reboot_signal(monkeypatch: Any) -> None:
         "raspi_sentinel.time_health._query_ntp_sync_ok", lambda timeout_sec=3: False
     )
 
-    state = {
-        "clock_prev_wall_time_epoch": 1000.0,
-        "clock_prev_monotonic_sec": 100.0,
-    }
+    state = _make_ts(
+        clock_prev_wall_time_epoch=1000.0,
+        clock_prev_monotonic_sec=100.0,
+    )
     result = CheckResult(
         target="clock_target",
         healthy=True,
@@ -304,10 +260,10 @@ def test_time_health_detects_jump_without_freeze(monkeypatch: Any) -> None:
     monkeypatch.setattr("raspi_sentinel.time_health.time.monotonic", lambda: 210.0)
     monkeypatch.setattr("raspi_sentinel.time_health._query_ntp_sync_ok", lambda timeout_sec=3: None)
 
-    state = {
-        "clock_prev_wall_time_epoch": 2000.0,
-        "clock_prev_monotonic_sec": 200.0,
-    }
+    state = _make_ts(
+        clock_prev_wall_time_epoch=2000.0,
+        clock_prev_monotonic_sec=200.0,
+    )
     result = CheckResult(target="clock_target", healthy=True, failures=[])
     apply_time_health_checks(
         target=_target(check_interval_threshold_sec=5),
@@ -328,7 +284,7 @@ def test_time_health_http_probe_failed_reason(monkeypatch: Any) -> None:
     )
     monkeypatch.setattr("raspi_sentinel.time_health._query_ntp_sync_ok", lambda timeout_sec=3: None)
 
-    state: dict[str, Any] = {}
+    state = TargetState()
     result = CheckResult(target="clock_target", healthy=True, failures=[])
     apply_time_health_checks(
         target=_target(http_time_probe_url="https://www.google.com"),
@@ -343,10 +299,10 @@ def test_time_health_http_probe_failed_reason(monkeypatch: Any) -> None:
 def test_time_health_accepts_injected_monotonic_time(monkeypatch: Any) -> None:
     monkeypatch.setattr("raspi_sentinel.time_health._query_ntp_sync_ok", lambda timeout_sec=3: None)
 
-    state = {
-        "clock_prev_wall_time_epoch": 1000.0,
-        "clock_prev_monotonic_sec": 100.0,
-    }
+    state = _make_ts(
+        clock_prev_wall_time_epoch=1000.0,
+        clock_prev_monotonic_sec=100.0,
+    )
     result = CheckResult(target="clock_target", healthy=True, failures=[])
     apply_time_health_checks(
         target=_target(check_interval_threshold_sec=5),
