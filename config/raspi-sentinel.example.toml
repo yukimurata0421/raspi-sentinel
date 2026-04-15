@@ -36,13 +36,14 @@ loop_interval_sec = 30
 
 [notify.discord]
 enabled = true
-webhook_url = "https://discord.com/api/webhooks/..."
-username = "raspi-sentinel"
+webhook_url = "https://discord.com/api/webhooks/REPLACE_WITH_YOUR_WEBHOOK_ID/REPLACE_WITH_YOUR_WEBHOOK_TOKEN"
+username = "raspi-sentinel-v2"
 timeout_sec = 5
 followup_delay_sec = 300
-heartbeat_interval_sec = 300
-# Set to 0 to disable periodic healthy heartbeat notifications.
-# heartbeat_interval_sec = 0
+heartbeat_interval_sec = 0
+notify_on_recovery = false
+# Set heartbeat_interval_sec = 0 to disable periodic healthy heartbeat notifications.
+# Set notify_on_recovery = false to suppress "Recovered" messages.
 
 # readsb target
 [[targets]]
@@ -93,6 +94,26 @@ maintenance_grace_sec = 90
 restart_threshold = 2
 reboot_threshold = 5
 
+# external status JSON watcher (generic contract)
+# monitored top-level keys:
+# - updated_at
+# - internal_state
+# - last_progress_ts
+# - last_success_ts
+[[targets]]
+name = "external_service_status"
+services = ["example.service"]
+service_active = true
+external_status_file = "/run/example/service-status.json"
+external_status_updated_max_age_sec = 180
+external_status_last_progress_max_age_sec = 600
+external_status_last_success_max_age_sec = 1800
+external_status_startup_grace_sec = 120
+# keep shallow: do not embed app-specific reason/components into policy
+external_status_unhealthy_values = ["failed", "unhealthy"]
+restart_threshold = 2
+reboot_threshold = 5
+
 # network_uplink target (detect DNS / outbound connectivity degradation)
 [[targets]]
 name = "network_uplink"
@@ -136,7 +157,6 @@ http_total = 1200
 gateway = 20
 internet_ip = 30
 
-# Optional legacy fallback: command-based checks can be combined if needed,
-# but layered `network_probe_enabled` is the recommended primary path.
+# Optional command-based checks can be combined with built-in probe if needed.
 # dns_check_command = "getent ahostsv4 blender.prod.fr24.io >/dev/null"
 # dns_check_use_shell = true

@@ -32,6 +32,16 @@ def _stats_rules_enabled(target: TargetConfig) -> bool:
     )
 
 
+def _external_status_rules_enabled(target: TargetConfig) -> bool:
+    return any(
+        (
+            target.external_status_updated_max_age_sec is not None,
+            target.external_status_last_progress_max_age_sec is not None,
+            target.external_status_last_success_max_age_sec is not None,
+        )
+    )
+
+
 def _enabled_rules(target: TargetConfig) -> list[str]:
     rules: list[str] = []
     if target.service_active:
@@ -44,6 +54,8 @@ def _enabled_rules(target: TargetConfig) -> list[str]:
         rules.append("command")
     if _stats_rules_enabled(target):
         rules.append("semantic_stats")
+    if _external_status_rules_enabled(target):
+        rules.append("external_status")
     if target.dns_check_command is not None:
         rules.append("dns_dependency")
     if target.dns_server_check_command is not None:
@@ -137,6 +149,7 @@ def _target_paths(target: TargetConfig) -> list[dict[str, Any]]:
         ("heartbeat_file", target.heartbeat_file),
         ("output_file", target.output_file),
         ("stats_file", target.stats_file),
+        ("external_status_file", target.external_status_file),
     ):
         if path is None:
             continue
@@ -162,6 +175,8 @@ def _target_warnings(
 
     if _stats_rules_enabled(target) and target.stats_file is None:
         warnings.append("stats_* rules enabled but stats_file is unset")
+    if _external_status_rules_enabled(target) and target.external_status_file is None:
+        warnings.append("external_status_* rules enabled but external_status_file is unset")
 
     for path_entry in path_entries:
         if not path_entry["exists"]:
@@ -258,6 +273,14 @@ def _target_summary(
             "enabled": target.maintenance_mode_command is not None,
             "timeout_sec": target.maintenance_mode_timeout_sec,
             "grace_sec": target.maintenance_grace_sec,
+        },
+        "external_status": {
+            "file": str(target.external_status_file) if target.external_status_file else None,
+            "updated_max_age_sec": target.external_status_updated_max_age_sec,
+            "last_progress_max_age_sec": target.external_status_last_progress_max_age_sec,
+            "last_success_max_age_sec": target.external_status_last_success_max_age_sec,
+            "startup_grace_sec": target.external_status_startup_grace_sec,
+            "unhealthy_values": list(target.external_status_unhealthy_values),
         },
         "shell_commands": shell_commands,
         "shell_opt_in_checks": shell_opt_in_checks,

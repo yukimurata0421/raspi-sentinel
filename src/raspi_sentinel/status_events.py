@@ -88,6 +88,9 @@ def build_event_evidence(result: CheckResult) -> dict[str, Any]:
         "http_time_skew_sec",
         "stats_age_sec",
         "dns_latency_ms",
+        "external_status_updated_age_sec",
+        "external_last_progress_age_sec",
+        "external_last_success_age_sec",
     ):
         value = safe_float(observations.get(field_name))
         if value is not None:
@@ -159,6 +162,8 @@ def build_event_evidence(result: CheckResult) -> dict[str, Any]:
         "internet_fail_consecutive",
         "dns_fail_consecutive",
         "http_fail_consecutive",
+        "external_internal_state",
+        "external_reason",
     )
     for field_name in nullable_fields:
         if field_name not in observations:

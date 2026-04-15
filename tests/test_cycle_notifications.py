@@ -1,0 +1,368 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock, patch
+
+from conftest import make_discord_config
+
+from raspi_sentinel.checks import CheckFailure, CheckResult
+from raspi_sentinel.cycle_notifications import (
+    schedule_followup,
+    send_due_followups,
+    send_issue_notification,
+    send_periodic_heartbeat,
+    send_recovery_notification,
+)
+from raspi_sentinel.notify import DiscordNotifier
+from raspi_sentinel.state_models import FollowupRecord, GlobalState
+
+
+def _notifier(enabled: bool = True, **overrides: Any) -> DiscordNotifier:
+    return DiscordNotifier(
+        make_discord_config(
+            enabled=enabled,
+            webhook_url="https://discord.com/api/webhooks/test/token" if enabled else None,
+            **overrides,
+        )
+    )
+
+
+def _result(
+    healthy: bool = True,
+    failures: list[CheckFailure] | None = None,
+    observations: dict[str, Any] | None = None,
+) -> CheckResult:
+    r = CheckResult(
+        target="demo",
+        healthy=healthy,
+        failures=failures or [],
+    )
+    if observations:
+        r.observations.update(observations)
+    return r
+
+
+class TestScheduleFollowup:
+    def test_creates_new_followup(self) -> None:
+        state = GlobalState()
+        schedule_followup(
+            state=state,
+            target_name="svc",
+            now_ts=1000.0,
+            delay_sec=300,
+            action="restart",
+            reason="service down",
+            consecutive_failures=3,
+        )
+        assert "svc" in state.followups
+        followup = state.followups["svc"]
+        assert followup.due_ts == 1300.0
+        assert followup.initial_action == "restart"
+        assert followup.initial_consecutive_failures == 3
+
+    def test_escalation_replaces_existing(self) -> None:
+        state = GlobalState()
+        state.followups["svc"] = FollowupRecord(
+            due_ts=1100.0,
+            created_ts=800.0,
+            initial_action="warn",
+            initial_reason="degraded",
+            initial_consecutive_failures=1,
+        )
+        schedule_followup(
+            state=state,
+            target_name="svc",
+            now_ts=1000.0,
+            delay_sec=300,
+            action="restart",
+            reason="service down",
+            consecutive_failures=5,
+        )
+        assert state.followups["svc"].initial_action == "restart"
+
+    def test_warn_does_not_replace_existing(self) -> None:
+        state = GlobalState()
+        state.followups["svc"] = FollowupRecord(
+            due_ts=1100.0,
+            created_ts=800.0,
+            initial_action="restart",
+            initial_reason="service down",
+            initial_consecutive_failures=3,
+        )
+        schedule_followup(
+            state=state,
+            target_name="svc",
+            now_ts=1000.0,
+            delay_sec=300,
+            action="warn",
+            reason="still down",
+            consecutive_failures=4,
+        )
+        assert state.followups["svc"].initial_action == "restart"
+
+
+class TestSendIssueNotification:
+    @patch.object(DiscordNotifier, "send_lines", return_value=True)
+    def test_sends_notification(self, mock_send: MagicMock, tmp_path: Path) -> None:
+        n = _notifier()
+        events_file = tmp_path / "events.jsonl"
+        send_issue_notification(
+            notifier=n,
+            target_name="svc",
+            result=_result(healthy=False, failures=[CheckFailure("cmd", "exit 1")]),
+            action="restart",
+            consecutive_failures=3,
+            services=["svc.service"],
+            dry_run=False,
+            events_file=events_file,
+            events_max_bytes=5_000_000,
+            events_backup_generations=1,
+            now_ts=1000.0,
+        )
+        mock_send.assert_called_once()
+        call_kwargs = mock_send.call_args
+        assert call_kwargs[1]["severity"] == "WARN"
+
+    @patch.object(DiscordNotifier, "send_lines", return_value=True)
+    def test_reboot_severity_is_error(self, mock_send: MagicMock, tmp_path: Path) -> None:
+        n = _notifier()
+        send_issue_notification(
+            notifier=n,
+            target_name="svc",
+            result=_result(healthy=False, failures=[CheckFailure("cmd", "exit 1")]),
+            action="reboot",
+            consecutive_failures=6,
+            services=["svc.service"],
+            dry_run=False,
+            events_file=tmp_path / "events.jsonl",
+            now_ts=1000.0,
+        )
+        assert mock_send.call_args[1]["severity"] == "ERROR"
+
+    @patch.object(DiscordNotifier, "send_lines", return_value=False)
+    def test_records_failure_event_on_send_failure(
+        self, mock_send: MagicMock, tmp_path: Path
+    ) -> None:
+        n = _notifier()
+        events_file = tmp_path / "events.jsonl"
+        send_issue_notification(
+            notifier=n,
+            target_name="svc",
+            result=_result(healthy=False, failures=[CheckFailure("cmd", "exit 1")]),
+            action="restart",
+            consecutive_failures=3,
+            services=[],
+            dry_run=False,
+            events_file=events_file,
+            events_max_bytes=5_000_000,
+            events_backup_generations=1,
+            now_ts=1000.0,
+        )
+        assert events_file.exists()
+        event = json.loads(events_file.read_text().strip())
+        assert event["kind"] == "notify_delivery_failed"
+        assert "issue_notification:svc" in event["context"]
+
+
+class TestSendRecoveryNotification:
+    @patch.object(DiscordNotifier, "send_lines", return_value=True)
+    def test_sends_recovery(self, mock_send: MagicMock) -> None:
+        n = _notifier()
+        send_recovery_notification(
+            notifier=n,
+            target_name="svc",
+            previous_failures=5,
+        )
+        mock_send.assert_called_once()
+        call_args = mock_send.call_args
+        assert call_args[1]["severity"] == "INFO"
+        lines = call_args[1]["lines"]
+        assert any("previous_consecutive_failures=5" in line for line in lines)
+
+    @patch.object(DiscordNotifier, "send_lines", return_value=False)
+    def test_records_failure_event(self, mock_send: MagicMock, tmp_path: Path) -> None:
+        n = _notifier()
+        events_file = tmp_path / "events.jsonl"
+        send_recovery_notification(
+            notifier=n,
+            target_name="svc",
+            previous_failures=3,
+            events_file=events_file,
+            events_max_bytes=5_000_000,
+            events_backup_generations=1,
+            now_ts=2000.0,
+        )
+        assert events_file.exists()
+        event = json.loads(events_file.read_text().strip())
+        assert event["kind"] == "notify_delivery_failed"
+
+
+class TestSendDueFollowups:
+    @patch.object(DiscordNotifier, "send_lines", return_value=True)
+    def test_due_followup_sent_and_removed(self, mock_send: MagicMock) -> None:
+        n = _notifier()
+        state = GlobalState()
+        state.followups["svc"] = FollowupRecord(
+            due_ts=900.0,
+            created_ts=600.0,
+            initial_action="restart",
+            initial_reason="service down",
+            initial_consecutive_failures=3,
+        )
+        result = _result(healthy=True)
+        send_due_followups(
+            notifier=n,
+            state=state,
+            target_results={"svc": result},
+            now_ts=1000.0,
+        )
+        mock_send.assert_called_once()
+        assert "svc" not in state.followups
+
+    @patch.object(DiscordNotifier, "send_lines", return_value=True)
+    def test_not_yet_due_followup_kept(self, mock_send: MagicMock) -> None:
+        n = _notifier()
+        state = GlobalState()
+        state.followups["svc"] = FollowupRecord(
+            due_ts=2000.0,
+            created_ts=1000.0,
+            initial_action="restart",
+            initial_reason="service down",
+            initial_consecutive_failures=3,
+        )
+        send_due_followups(
+            notifier=n,
+            state=state,
+            target_results={},
+            now_ts=1500.0,
+        )
+        mock_send.assert_not_called()
+        assert "svc" in state.followups
+
+    @patch.object(DiscordNotifier, "send_lines", return_value=True)
+    def test_due_followup_without_result_uses_state(self, mock_send: MagicMock) -> None:
+        n = _notifier()
+        state = GlobalState()
+        ts = state.ensure_target("svc")
+        ts.consecutive_failures = 0
+        ts.last_failure_reason = "service was down"
+        state.followups["svc"] = FollowupRecord(
+            due_ts=900.0,
+            created_ts=600.0,
+            initial_action="warn",
+            initial_reason="degraded",
+            initial_consecutive_failures=1,
+        )
+        send_due_followups(
+            notifier=n,
+            state=state,
+            target_results={},
+            now_ts=1000.0,
+        )
+        mock_send.assert_called_once()
+        lines = mock_send.call_args[1]["lines"]
+        assert any("current_status=healthy" in line for line in lines)
+
+    @patch.object(DiscordNotifier, "send_lines", return_value=False)
+    def test_failed_send_keeps_followup_and_records_event(
+        self, mock_send: MagicMock, tmp_path: Path
+    ) -> None:
+        n = _notifier()
+        state = GlobalState()
+        state.followups["svc"] = FollowupRecord(
+            due_ts=900.0,
+            created_ts=600.0,
+            initial_action="restart",
+            initial_reason="down",
+            initial_consecutive_failures=3,
+        )
+        events_file = tmp_path / "events.jsonl"
+        send_due_followups(
+            notifier=n,
+            state=state,
+            target_results={"svc": _result(healthy=False)},
+            now_ts=1000.0,
+            events_file=events_file,
+            events_max_bytes=5_000_000,
+            events_backup_generations=1,
+        )
+        assert "svc" in state.followups
+        assert events_file.exists()
+
+
+class TestSendPeriodicHeartbeat:
+    @patch.object(DiscordNotifier, "send_lines", return_value=True)
+    @patch("raspi_sentinel.cycle_notifications.collect_system_snapshot")
+    def test_heartbeat_sent_and_marked(self, mock_snap: MagicMock, mock_send: MagicMock) -> None:
+        from raspi_sentinel.notify import SystemSnapshot
+
+        mock_snap.return_value = SystemSnapshot(
+            uptime_sec=60000.0,
+            load1=0.5,
+            load5=0.6,
+            load15=0.7,
+            disk_used_pct=42.0,
+        )
+        n = _notifier(heartbeat_interval_sec=300)
+        state = GlobalState()
+        send_periodic_heartbeat(
+            notifier=n,
+            state=state,
+            target_results={"svc": _result(healthy=True)},
+            now_ts=1000.0,
+        )
+        mock_send.assert_called_once()
+        assert state.notify.last_heartbeat_ts == 1000.0
+
+    @patch.object(DiscordNotifier, "send_lines", return_value=True)
+    def test_heartbeat_not_sent_within_interval(self, mock_send: MagicMock) -> None:
+        n = _notifier(heartbeat_interval_sec=300)
+        state = GlobalState()
+        state.notify.last_heartbeat_ts = 900.0
+        send_periodic_heartbeat(
+            notifier=n,
+            state=state,
+            target_results={},
+            now_ts=1100.0,
+        )
+        mock_send.assert_not_called()
+
+    def test_heartbeat_disabled_when_interval_zero(self) -> None:
+        n = _notifier(heartbeat_interval_sec=0)
+        state = GlobalState()
+        send_periodic_heartbeat(
+            notifier=n,
+            state=state,
+            target_results={},
+            now_ts=1000.0,
+        )
+        assert state.notify.last_heartbeat_ts is None
+
+    @patch.object(DiscordNotifier, "send_lines", return_value=False)
+    @patch("raspi_sentinel.cycle_notifications.collect_system_snapshot")
+    def test_failed_heartbeat_records_event(
+        self, mock_snap: MagicMock, mock_send: MagicMock, tmp_path: Path
+    ) -> None:
+        from raspi_sentinel.notify import SystemSnapshot
+
+        mock_snap.return_value = SystemSnapshot(
+            uptime_sec=100.0, load1=0.0, load5=0.0, load15=0.0, disk_used_pct=0.0
+        )
+        n = _notifier(heartbeat_interval_sec=300)
+        state = GlobalState()
+        events_file = tmp_path / "events.jsonl"
+        send_periodic_heartbeat(
+            notifier=n,
+            state=state,
+            target_results={},
+            now_ts=1000.0,
+            events_file=events_file,
+            events_max_bytes=5_000_000,
+            events_backup_generations=1,
+        )
+        assert events_file.exists()
+        event = json.loads(events_file.read_text().strip())
+        assert event["kind"] == "notify_delivery_failed"
+        assert event["context"] == "periodic_heartbeat"

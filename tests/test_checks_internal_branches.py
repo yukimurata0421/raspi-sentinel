@@ -239,6 +239,33 @@ def test_stats_timestamp_format_branches(tmp_path: Path) -> None:
     assert result.healthy
 
 
+def test_external_status_internal_state_type_error_branch(tmp_path: Path) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    p = tmp_path / "external-status.json"
+    p.write_text(
+        json.dumps(
+            {
+                "updated_at": now,
+                "internal_state": 1,
+                "last_progress_ts": now,
+                "last_success_ts": now,
+                "reason": {"raw": "ignored"},
+                "components": {"pubsub": {"status": "failed"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = checks.run_checks(
+        _target(
+            external_status_file=p,
+            external_status_updated_max_age_sec=60,
+            external_status_last_progress_max_age_sec=60,
+            external_status_last_success_max_age_sec=60,
+        )
+    )
+    assert any(f.check == "semantic_external_internal_state" for f in result.failures)
+
+
 def test_stats_last_input_stale_branch(tmp_path: Path) -> None:
     now = datetime.now(timezone.utc)
     p = tmp_path / "stats.json"

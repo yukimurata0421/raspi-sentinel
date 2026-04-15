@@ -250,6 +250,42 @@ def test_network_probe_multi_factor_outage_becomes_failed() -> None:
     assert p.reason == "multi_factor_network_outage"
 
 
+def test_external_internal_state_failed_maps_to_failed() -> None:
+    r = CheckResult(
+        "t",
+        False,
+        [CheckFailure("semantic_external_internal_state", "failed")],
+        observations={"external_internal_state": "failed"},
+    )
+    p = classify_target_policy(r, {})
+    assert p.status == "failed"
+    assert p.reason == "external_status_failed"
+
+
+def test_external_progress_stall_maps_to_degraded() -> None:
+    r = CheckResult(
+        "t",
+        False,
+        [CheckFailure("semantic_external_last_progress_ts", "stale")],
+        observations={},
+    )
+    p = classify_target_policy(r, {})
+    assert p.status == "degraded"
+    assert p.reason == "external_progress_stall"
+
+
+def test_clock_anomaly_takes_precedence_over_external_status_stale() -> None:
+    r = CheckResult(
+        "t",
+        False,
+        [CheckFailure("semantic_external_updated_at", "stale")],
+        observations={"clock_jump_detected": True},
+    )
+    p = classify_target_policy(r, {})
+    assert p.status == "degraded"
+    assert p.reason == "clock_jump"
+
+
 def test_network_status_hysteresis_prevents_degraded_failed_ok_flap() -> None:
     transient = CheckResult(
         "t",

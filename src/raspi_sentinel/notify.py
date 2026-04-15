@@ -14,6 +14,7 @@ from typing import Any
 from ._version import __version__
 from .checks import CheckResult
 from .config import DiscordNotifyConfig
+from .state_helpers import read_uptime_sec
 from .state_models import GlobalState
 
 LOG = logging.getLogger(__name__)
@@ -26,14 +27,6 @@ class SystemSnapshot:
     load5: float
     load15: float
     disk_used_pct: float
-
-
-def read_uptime_sec() -> float:
-    try:
-        with open("/proc/uptime", "r", encoding="utf-8") as fh:
-            return float(fh.read().split()[0])
-    except Exception:
-        return 0.0
 
 
 def collect_system_snapshot() -> SystemSnapshot:

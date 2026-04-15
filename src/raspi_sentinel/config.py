@@ -88,6 +88,12 @@ class TargetConfig:
     maintenance_grace_sec: int | None
     restart_threshold: int | None
     reboot_threshold: int | None
+    external_status_file: Path | None = None
+    external_status_updated_max_age_sec: int | None = None
+    external_status_last_progress_max_age_sec: int | None = None
+    external_status_last_success_max_age_sec: int | None = None
+    external_status_startup_grace_sec: int = 120
+    external_status_unhealthy_values: tuple[str, ...] = ("failed", "unhealthy")
 
 
 @dataclass(slots=True)
@@ -105,6 +111,7 @@ class DiscordNotifyConfig:
     timeout_sec: int
     followup_delay_sec: int
     heartbeat_interval_sec: int
+    notify_on_recovery: bool
 
 
 @dataclass(slots=True)
@@ -308,6 +315,43 @@ def _validate_target_rules(target: TargetConfig) -> None:
     if target.stats_records_stall_cycles is not None and target.stats_records_stall_cycles <= 0:
         raise ValueError(f"target '{target.name}': stats_records_stall_cycles must be > 0")
 
+    if (
+        target.external_status_updated_max_age_sec is not None
+        and target.external_status_updated_max_age_sec <= 0
+    ):
+        raise ValueError(f"target '{target.name}': external_status_updated_max_age_sec must be > 0")
+    if (
+        target.external_status_last_progress_max_age_sec is not None
+        and target.external_status_last_progress_max_age_sec <= 0
+    ):
+        raise ValueError(
+            f"target '{target.name}': external_status_last_progress_max_age_sec must be > 0"
+        )
+    if (
+        target.external_status_last_success_max_age_sec is not None
+        and target.external_status_last_success_max_age_sec <= 0
+    ):
+        raise ValueError(
+            f"target '{target.name}': external_status_last_success_max_age_sec must be > 0"
+        )
+    if target.external_status_startup_grace_sec < 0:
+        raise ValueError(f"target '{target.name}': external_status_startup_grace_sec must be >= 0")
+
+    has_external_status_rule = any(
+        [
+            target.external_status_updated_max_age_sec is not None,
+            target.external_status_last_progress_max_age_sec is not None,
+            target.external_status_last_success_max_age_sec is not None,
+        ]
+    )
+    if has_external_status_rule and target.external_status_file is None:
+        raise ValueError(
+            (
+                f"target '{target.name}': external_status_file is required when "
+                "external_status_* checks are configured"
+            )
+        )
+
     if target.service_active and not target.services:
         raise ValueError(
             f"target '{target.name}': when service_active=true, "
@@ -357,6 +401,7 @@ def _validate_target_rules(target: TargetConfig) -> None:
             target.output_file is not None,
             target.command is not None,
             target.stats_file is not None,
+            target.external_status_file is not None,
             target.dns_check_command is not None,
             target.dns_server_check_command is not None,
             target.gateway_check_command is not None,
@@ -371,7 +416,7 @@ def _validate_target_rules(target: TargetConfig) -> None:
     if not has_rule:
         raise ValueError(
             f"target '{target.name}': at least one rule is required "
-            "(service_active, heartbeat, output, command, stats_file, "
+            "(service_active, heartbeat, output, command, stats_file, external_status_file, "
             "dns_check_command, dns_server_check_command, gateway_check_command, "
             "link_check_command, default_route_check_command, internet_ip_check_command, "
             "wan_vs_target_check_command, network_probe_enabled, time_health_enabled)"
@@ -471,6 +516,9 @@ def load_config(path: Path) -> AppConfig:
     discord_username = discord_raw.get("username", "raspi-sentinel")
     if not isinstance(discord_username, str) or not discord_username.strip():
         raise ValueError("[notify.discord].username must be a non-empty string")
+    notify_on_recovery = discord_raw.get("notify_on_recovery", True)
+    if not isinstance(notify_on_recovery, bool):
+        raise ValueError("[notify.discord].notify_on_recovery must be boolean")
 
     discord_config = DiscordNotifyConfig(
         enabled=discord_enabled,
@@ -479,6 +527,7 @@ def load_config(path: Path) -> AppConfig:
         timeout_sec=_require_int(discord_raw, "timeout_sec", 5),
         followup_delay_sec=_require_int(discord_raw, "followup_delay_sec", 300),
         heartbeat_interval_sec=_require_int(discord_raw, "heartbeat_interval_sec", 300),
+        notify_on_recovery=notify_on_recovery,
     )
 
     if discord_config.timeout_sec <= 0:
@@ -620,6 +669,29 @@ def load_config(path: Path) -> AppConfig:
             maintenance_grace_sec=_optional_int(item, "maintenance_grace_sec"),
             restart_threshold=_optional_int(item, "restart_threshold"),
             reboot_threshold=_optional_int(item, "reboot_threshold"),
+            external_status_file=_optional_path(item, "external_status_file"),
+            external_status_updated_max_age_sec=_optional_int(
+                item, "external_status_updated_max_age_sec"
+            ),
+            external_status_last_progress_max_age_sec=_optional_int(
+                item, "external_status_last_progress_max_age_sec"
+            ),
+            external_status_last_success_max_age_sec=_optional_int(
+                item, "external_status_last_success_max_age_sec"
+            ),
+            external_status_startup_grace_sec=_require_int(
+                item, "external_status_startup_grace_sec", 120
+            ),
+            external_status_unhealthy_values=tuple(
+                [
+                    value.strip().lower()
+                    for value in (
+                        _optional_str_list(item, "external_status_unhealthy_values") or []
+                    )
+                    if value.strip()
+                ]
+            )
+            or ("failed", "unhealthy"),
         )
 
         if target.command_timeout_sec is None and target.command is not None:

@@ -108,7 +108,7 @@ def emit_target_notifications(
     if not notifier.enabled:
         return
 
-    if result.healthy and previous_failures > 0:
+    if notifier.config.notify_on_recovery and result.healthy and previous_failures > 0:
         send_recovery_notification(
             notifier=notifier,
             target_name=target.name,

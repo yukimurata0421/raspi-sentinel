@@ -144,6 +144,21 @@ def build_monitor_stats_snapshot(
             if isinstance(http_status, int):
                 payload["http_status_code"] = http_status
 
+            external_internal_state = result.observations.get("external_internal_state")
+            if isinstance(external_internal_state, str):
+                payload["external_internal_state"] = external_internal_state
+            external_reason = result.observations.get("external_reason")
+            if isinstance(external_reason, str):
+                payload["external_reason"] = external_reason
+            for field_name in (
+                "external_status_updated_age_sec",
+                "external_last_progress_age_sec",
+                "external_last_success_age_sec",
+            ):
+                value = result.observations.get(field_name)
+                if isinstance(value, (int, float)):
+                    payload[field_name] = float(value)
+
         targets_payload[target.name] = payload
 
     if counts.get("failed", 0) > 0:

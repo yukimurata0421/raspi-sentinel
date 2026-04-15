@@ -145,7 +145,7 @@ def test_dns_only_failure_does_not_reboot_even_when_threshold_reached() -> None:
 
 
 def test_gateway_failure_can_request_reboot(monkeypatch: Any) -> None:
-    monkeypatch.setattr("raspi_sentinel.recovery._get_uptime_sec", lambda: 999999.0)
+    monkeypatch.setattr("raspi_sentinel.recovery.read_uptime_sec", lambda: 999999.0)
     result = CheckResult(
         target="demo",
         healthy=False,
@@ -165,7 +165,7 @@ def test_gateway_failure_can_request_reboot(monkeypatch: Any) -> None:
 
 
 def test_recovery_reboot_requires_policy_failed_for_network_uplink(monkeypatch: Any) -> None:
-    monkeypatch.setattr("raspi_sentinel.recovery._get_uptime_sec", lambda: 999999.0)
+    monkeypatch.setattr("raspi_sentinel.recovery.read_uptime_sec", lambda: 999999.0)
     result = CheckResult(
         target="network_uplink",
         healthy=False,
@@ -198,3 +198,80 @@ def test_recovery_reboot_requires_policy_failed_for_network_uplink(monkeypatch: 
     )
     assert outcome_failed.action == "reboot"
     assert outcome_failed.requested_reboot
+
+
+def test_external_status_failed_integrates_restart_then_reboot(monkeypatch: Any) -> None:
+    monkeypatch.setattr("raspi_sentinel.recovery.read_uptime_sec", lambda: 999999.0)
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_: Any) -> Any:
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr("raspi_sentinel.recovery.subprocess.run", fake_run)
+
+    result = CheckResult(
+        target="demo",
+        healthy=False,
+        failures=[CheckFailure("semantic_external_internal_state", "failed")],
+        observations={"policy_status": "failed"},
+    )
+    state: dict[str, Any] = {}
+    target = _target(
+        services=["demo.service"],
+        service_active=True,
+        restart_threshold=1,
+        reboot_threshold=2,
+    )
+
+    first = apply_recovery(
+        target=target,
+        check_result=result,
+        global_config=_global(),
+        state=state,
+        dry_run=False,
+    )
+    assert first.action == "restart"
+    assert not first.requested_reboot
+    assert calls and calls[0] == ["systemctl", "restart", "demo.service"]
+
+    second = apply_recovery(
+        target=target,
+        check_result=result,
+        global_config=_global(),
+        state=state,
+        dry_run=False,
+    )
+    assert second.action == "reboot"
+    assert second.requested_reboot
+
+
+def test_reboot_is_suppressed_immediately_after_restart(monkeypatch: Any) -> None:
+    monkeypatch.setattr("raspi_sentinel.recovery.read_uptime_sec", lambda: 999999.0)
+    result = CheckResult(
+        target="demo",
+        healthy=False,
+        failures=[CheckFailure("semantic_external_internal_state", "failed")],
+        observations={"policy_status": "failed"},
+    )
+    state = {
+        "targets": {
+            "demo": {
+                "consecutive_failures": 1,
+                "last_action": "restart",
+                "last_action_ts": 1000.0,
+            }
+        }
+    }
+    global_cfg = _global()
+    global_cfg.restart_cooldown_sec = 120
+    outcome = apply_recovery(
+        target=_target(restart_threshold=1, reboot_threshold=1),
+        check_result=result,
+        global_config=global_cfg,
+        state=state,
+        dry_run=True,
+        now_ts=1060.0,
+    )
+    assert outcome.action == "warn"
+    assert not outcome.requested_reboot

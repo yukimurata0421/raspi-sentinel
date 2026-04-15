@@ -215,7 +215,7 @@ def test_fetch_http_date_epoch_http_error_branches(monkeypatch: Any) -> None:
     monkeypatch.setattr(
         time_health.request,
         "urlopen",
-        lambda req, timeout: (_ for _ in ()).throw(Exception("boom")),
+        lambda req, timeout: (_ for _ in ()).throw(OSError("boom")),
     )
     epoch, err = time_health._fetch_http_date_epoch("https://example.com", 2)
     assert epoch is None and err == "boom"

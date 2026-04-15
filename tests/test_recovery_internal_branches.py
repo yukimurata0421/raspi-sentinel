@@ -96,11 +96,11 @@ def _target(**overrides: Any) -> TargetConfig:
 
 
 def test_can_reboot_guard_paths(monkeypatch: Any) -> None:
-    monkeypatch.setattr(recovery, "_get_uptime_sec", lambda: 10.0)
+    monkeypatch.setattr(recovery, "read_uptime_sec", lambda: 10.0)
     ok, reason = recovery._can_reboot(_global(min_uptime_for_reboot_sec=60), {}, 100.0)
     assert not ok and "uptime guard" in reason
 
-    monkeypatch.setattr(recovery, "_get_uptime_sec", lambda: 1000.0)
+    monkeypatch.setattr(recovery, "read_uptime_sec", lambda: 1000.0)
     state = {"reboots": [{"ts": 95.0}]}
     ok, reason = recovery._can_reboot(_global(reboot_cooldown_sec=20), state, 100.0)
     assert not ok and "cooldown" in reason
@@ -117,16 +117,18 @@ def test_can_reboot_guard_paths(monkeypatch: Any) -> None:
     assert state["reboots"] == []
 
 
-def test_get_uptime_sec_exception_branch(monkeypatch: Any) -> None:
+def test_read_uptime_sec_exception_branch(monkeypatch: Any) -> None:
     def raise_open(*args: Any, **kwargs: Any) -> Any:
         raise OSError("no proc")
 
     monkeypatch.setattr("builtins.open", raise_open)
-    assert recovery._get_uptime_sec() == 0.0
+    from raspi_sentinel.state_helpers import read_uptime_sec
+
+    assert read_uptime_sec() == 0.0
 
 
 def test_can_reboot_guard_boundary_values(monkeypatch: Any) -> None:
-    monkeypatch.setattr(recovery, "_get_uptime_sec", lambda: 60.0)
+    monkeypatch.setattr(recovery, "read_uptime_sec", lambda: 60.0)
     edge_state: dict[str, Any] = {
         "reboots": [
             {
@@ -304,7 +306,7 @@ def test_apply_recovery_restart_cooldown_suppresses_repeat(monkeypatch: Any) -> 
 
 
 def test_apply_recovery_reboot_failure_falls_back_to_restart(monkeypatch: Any) -> None:
-    monkeypatch.setattr(recovery, "_get_uptime_sec", lambda: 1000.0)
+    monkeypatch.setattr(recovery, "read_uptime_sec", lambda: 1000.0)
     monkeypatch.setattr(recovery, "_trigger_reboot", lambda dry_run, reason: False)
     monkeypatch.setattr(recovery, "_restart_services", lambda services, dry_run: True)
     state: dict[str, Any] = {}
@@ -347,7 +349,7 @@ def test_apply_recovery_clock_only_blocks_reboot_without_ready() -> None:
 
 
 def test_apply_recovery_clock_only_allows_reboot_when_ready(monkeypatch: Any) -> None:
-    monkeypatch.setattr(recovery, "_get_uptime_sec", lambda: 1000.0)
+    monkeypatch.setattr(recovery, "read_uptime_sec", lambda: 1000.0)
     state: dict[str, Any] = {}
     outcome = recovery.apply_recovery(
         target=_target(restart_threshold=1, reboot_threshold=1),
@@ -370,7 +372,7 @@ def test_apply_recovery_clock_only_allows_reboot_when_ready(monkeypatch: Any) ->
 def test_apply_recovery_reboots_on_confirmed_clock_without_failures(
     monkeypatch: Any,
 ) -> None:
-    monkeypatch.setattr(recovery, "_get_uptime_sec", lambda: 1000.0)
+    monkeypatch.setattr(recovery, "read_uptime_sec", lambda: 1000.0)
     state: dict[str, Any] = {}
     outcome = recovery.apply_recovery(
         target=_target(restart_threshold=9, reboot_threshold=9),
@@ -395,7 +397,7 @@ def test_apply_recovery_reboots_on_confirmed_clock_without_failures(
 
 
 def test_apply_recovery_confirmed_clock_requires_failed_policy(monkeypatch: Any) -> None:
-    monkeypatch.setattr(recovery, "_get_uptime_sec", lambda: 1000.0)
+    monkeypatch.setattr(recovery, "read_uptime_sec", lambda: 1000.0)
     state: dict[str, Any] = {}
     outcome = recovery.apply_recovery(
         target=_target(restart_threshold=9, reboot_threshold=9),
@@ -419,7 +421,7 @@ def test_apply_recovery_confirmed_clock_requires_failed_policy(monkeypatch: Any)
 
 
 def test_apply_recovery_confirmed_clock_blocked_by_reboot_guard(monkeypatch: Any) -> None:
-    monkeypatch.setattr(recovery, "_get_uptime_sec", lambda: 0.0)
+    monkeypatch.setattr(recovery, "read_uptime_sec", lambda: 0.0)
     state: dict[str, Any] = {}
     outcome = recovery.apply_recovery(
         target=_target(restart_threshold=9, reboot_threshold=9),

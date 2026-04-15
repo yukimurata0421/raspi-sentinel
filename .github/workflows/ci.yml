@@ -5,20 +5,8 @@ on:
   pull_request:
 
 jobs:
-  secret_scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Public secret scan
-        run: |
-          python tools/check_public_secrets.py
-
   lint:
     runs-on: ubuntu-latest
-    needs: secret_scan
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

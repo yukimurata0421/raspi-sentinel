@@ -18,9 +18,7 @@
 ## Core (this project)
 
 - logical health monitoring while the OS is alive
-- layered network reachability classification for `network_uplink`:
-  - `link_ok -> default_route_ok -> gateway_ok -> internet_ip_ok -> dns_ok -> http_probe_ok`
-  - explicit reason split (`link_error`, `route_missing`, `gateway_error`, `wan_error`, `dns_error`, `http_error`)
+- external status JSON supervision (generic, shallow interpretation)
 - staged recovery policy:
   1. warn
   2. restart target services
@@ -53,8 +51,8 @@ Many Raspberry Pi failures are logical stalls, not full kernel hangs:
   - command exit status
   - service active status
   - semantic `stats.json` checks (`updated_at`, `last_input_ts`, `last_success_ts`, `records_processed_total`)
-  - layered network probe path from link to HTTP (`network_probe_enabled`)
-  - optional command-based dependency checks (legacy/fallback integration)
+  - generic external status JSON checks (`updated_at`, `internal_state`, `last_progress_ts`, `last_success_ts`)
+  - dependency checks split into DNS and gateway path
   - optional clock anomaly checks (`time.time` vs `time.monotonic`, optional HTTP `Date` skew)
 - **State file** (`/var/lib/raspi-sentinel/state.json` by default):
   - consecutive failure counters
@@ -97,6 +95,58 @@ Status model:
 
 Reason is tracked separately (`healthy`, `clock_frozen`, `clock_jump`, `clock_skewed`, `dns_error`, `gateway_error`, `stats_stale`, ...).
 `dns_error` alone does not trigger reboot.
+
+## External Status JSON Watcher (Generic Contract)
+
+`raspi-sentinel` can supervise an external service status file without importing service-specific semantics.
+
+Configured fields (per target):
+- `external_status_file`
+- `external_status_updated_max_age_sec`
+- `external_status_last_progress_max_age_sec`
+- `external_status_last_success_max_age_sec`
+- `external_status_startup_grace_sec` (default `120`)
+- `external_status_unhealthy_values` (default: `["failed", "unhealthy"]`)
+
+Shallow policy inputs:
+- `updated_at` stale -> degraded candidate
+- `internal_state` in unhealthy set -> unhealthy candidate
+- `last_progress_ts` stale -> progress stall candidate
+- `last_success_ts` stale -> success stall candidate
+
+Out of policy scope (kept as optional evidence only):
+- `reason`
+- `recovery`
+- `components.*`
+
+Startup behavior:
+- When `updated_at` is fresh and startup grace is active, null/empty `last_progress_ts` and `last_success_ts` do not immediately fail the target.
+
+Example contract:
+
+```json
+{
+  "updated_at": "2026-04-15T12:00:00+00:00",
+  "internal_state": "healthy",
+  "last_progress_ts": "2026-04-15T11:59:50+00:00",
+  "last_success_ts": "2026-04-15T11:59:12+00:00",
+  "reason": "optional service-specific detail",
+  "recovery": {},
+  "components": {}
+}
+```
+
+## Boundary With App Self-Heal
+
+- Application (for example `amazon-notify`): in-process semantic self-heal (reconnect/backoff/circuit breaker) and status emission.
+- `raspi-sentinel`: external supervisor with staged recovery (`warn -> restart -> reboot`) based on generic signals.
+- `raspi-sentinel` does not interpret app-specific keys such as Pub/Sub/Gmail/Discord component semantics.
+
+## Escalation Layering
+
+- Prefer short-loop process restart to `systemd` first.
+- `raspi-sentinel` uses threshold/cooldown-based escalation on top of that.
+- Reboot is additionally guarded and is suppressed immediately after a recent restart (`restart_cooldown_sec`) to avoid restart/reboot storms.
 
 Reboot loop guards:
 
@@ -184,10 +234,12 @@ webhook_url = "https://discord.com/api/webhooks/..."
 username = "raspi-sentinel"
 timeout_sec = 5
 followup_delay_sec = 300
-heartbeat_interval_sec = 300
+heartbeat_interval_sec = 0
+notify_on_recovery = false
 ```
 
 Set `heartbeat_interval_sec = 0` to disable periodic healthy-state notifications.
+Set `notify_on_recovery = false` to suppress "Recovered" messages.
 
 ## Global Snapshot Config
 
@@ -289,8 +341,7 @@ http_total = 1200
 gateway = 20
 internet_ip = 30
 
-# Optional legacy fallback: command-based checks can coexist, but
-# layered `network_probe_enabled` is the recommended primary path.
+# optional command-based dependency checks can coexist
 # dns_check_command = "getent ahostsv4 blender.prod.fr24.io >/dev/null"
 # dns_check_use_shell = true
 ```
@@ -494,21 +545,13 @@ python -m coverage report \
 python -m coverage report \
   --include="src/raspi_sentinel/checks.py,src/raspi_sentinel/recovery.py" \
   --fail-under=88
-python tools/check_public_secrets.py
-```
-
-Optional local hook:
-
-```bash
-python -m pip install pre-commit
-pre-commit install
 ```
 
 ## Versioning
 
-- **Current release line:** **0.4.4** (see `CHANGELOG.md`).
+- **Current release line:** **0.4.0** (see `CHANGELOG.md`).
 - **Single version string:** `src/raspi_sentinel/_version.py` (`raspi_sentinel.__version__`). `pyproject.toml` reads it at build time (no duplicate number).
-- **Git tags:** use `v0.4.4` (or current `__version__`) for releases. An older **`v0.2.0`** tag may exist as a snapshot — details in [docs/VERSIONING.md](docs/VERSIONING.md).
+- **Git tags:** use `v0.4.0` (or current `__version__`) for releases. An older **`v0.2.0`** tag may exist as a snapshot — details in [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ## License
 

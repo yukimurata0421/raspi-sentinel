@@ -135,3 +135,29 @@ def test_command_use_shell_requires_command(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="command_use_shell=true requires command"):
         load_config(conf)
+
+
+def test_external_status_thresholds_require_status_file(tmp_path: Path) -> None:
+    conf = tmp_path / "config.toml"
+    _write(
+        conf,
+        _base_config(extra_target="external_status_updated_max_age_sec = 120"),
+    )
+    with pytest.raises(ValueError, match="external_status_file is required"):
+        load_config(conf)
+
+
+def test_external_status_startup_grace_must_be_non_negative(tmp_path: Path) -> None:
+    conf = tmp_path / "config.toml"
+    _write(
+        conf,
+        _base_config(
+            extra_target=(
+                'external_status_file = "/tmp/s.json"\n'
+                "    external_status_updated_max_age_sec = 120\n"
+                "    external_status_startup_grace_sec = -1"
+            )
+        ),
+    )
+    with pytest.raises(ValueError, match="external_status_startup_grace_sec must be >= 0"):
+        load_config(conf)

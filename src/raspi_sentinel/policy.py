@@ -83,6 +83,33 @@ def classify_target_policy(
     if clock_frozen_confirmed:
         return PolicySnapshot("failed", "clock_frozen_confirmed")
 
+    # Prioritize clock anomaly interpretation over stale external-status signals.
+    if clock_frozen_detected:
+        if consecutive_freeze_count >= 2:
+            return PolicySnapshot("degraded", "clock_frozen_persistent")
+        return PolicySnapshot("degraded", "clock_frozen")
+    if clock_jump_detected:
+        return PolicySnapshot("degraded", "clock_jump")
+    if clock_skew_detected:
+        if ntp_sync_ok is False:
+            return PolicySnapshot("degraded", "time_sync_broken_skewed")
+        return PolicySnapshot("degraded", "clock_skewed")
+
+    if "semantic_external_internal_state" in checks:
+        internal_state = str(observations.get("external_internal_state") or "").lower()
+        if internal_state == "failed":
+            return PolicySnapshot("failed", "external_status_failed")
+        return PolicySnapshot("degraded", "external_status_unhealthy")
+
+    if "semantic_external_status_file" in checks or "semantic_external_updated_at" in checks:
+        return PolicySnapshot("degraded", "external_status_stale")
+
+    if "semantic_external_last_progress_ts" in checks:
+        return PolicySnapshot("degraded", "external_progress_stall")
+
+    if "semantic_external_last_success_ts" in checks:
+        return PolicySnapshot("degraded", "external_success_stale")
+
     if "semantic_updated_at" in checks or "semantic_stats_file" in checks:
         return PolicySnapshot("degraded", "stats_stale")
 
@@ -167,17 +194,6 @@ def classify_target_policy(
             return PolicySnapshot("degraded", "dns_error")
         if "dependency_wan_target" in checks or wan_vs_target_ok is False:
             return PolicySnapshot("degraded", "target_reachability_error")
-
-    if clock_frozen_detected:
-        if consecutive_freeze_count >= 2:
-            return PolicySnapshot("degraded", "clock_frozen_persistent")
-        return PolicySnapshot("degraded", "clock_frozen")
-    if clock_jump_detected:
-        return PolicySnapshot("degraded", "clock_jump")
-    if clock_skew_detected:
-        if ntp_sync_ok is False:
-            return PolicySnapshot("degraded", "time_sync_broken_skewed")
-        return PolicySnapshot("degraded", "clock_skewed")
 
     if http_probe_ok is False:
         return PolicySnapshot("degraded", "http_error")

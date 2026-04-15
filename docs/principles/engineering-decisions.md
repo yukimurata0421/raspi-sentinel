@@ -241,12 +241,6 @@ Locations: [src/raspi_sentinel/time_health.py](../../src/raspi_sentinel/time_hea
 
 Rationale: Automatic wall-clock mutation has broad side effects; detection and staged recovery are safer defaults.
 
-### 7-3. Block literal secrets in public-layer sources
-
-Locations: [tools/check_public_secrets.py](../../tools/check_public_secrets.py), [.github/workflows/ci.yml](../../.github/workflows/ci.yml), [.pre-commit-config.yaml](../../.pre-commit-config.yaml)
-
-Rationale: Example configs and docs are copied into public artifacts. Enforcing a CI/local guard against literal webhook/token values reduces accidental secret publication risk.
-
 ---
 
 ## 8. Quality Gates

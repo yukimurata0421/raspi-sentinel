@@ -6,23 +6,6 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ## [Unreleased]
 
-## [0.4.4] - 2026-04-13
-
-### Added
-
-- Public-layer secret guardrails:
-  - new scanner script: `tools/check_public_secrets.py`
-  - CI `secret_scan` job that fails on detected literal secrets
-  - optional local pre-commit hook via `.pre-commit-config.yaml`
-
-### Changed
-
-- README and `config/raspi-sentinel.example.toml` were aligned to present
-  `network_probe_enabled` layered probing as the primary `network_uplink` pattern,
-  with command-based dependency checks explicitly documented as legacy fallback.
-
-## [0.4.3] - 2026-04-13
-
 ### Added
 
 - `mypy --strict` support:

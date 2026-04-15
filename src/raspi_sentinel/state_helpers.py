@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,14 @@ def safe_float(value: Any) -> float | None:
         return None
 
 
+def read_uptime_sec() -> float:
+    try:
+        with open("/proc/uptime", "r", encoding="utf-8") as fh:
+            return float(fh.read().split()[0])
+    except (OSError, ValueError, IndexError):
+        return 0.0
+
+
 def write_json_atomic(path: Path, payload: dict[str, Any], indent: int | None = 2) -> bool:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -43,7 +52,12 @@ def write_json_atomic(path: Path, payload: dict[str, Any], indent: int | None = 
         if indent is not None:
             kwargs["indent"] = indent
         text = json.dumps(payload, **kwargs)
-        tmp_path.write_text(text + "\n", encoding="utf-8")
+        fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+        try:
+            os.write(fd, (text + "\n").encode("utf-8"))
+            os.fsync(fd)
+        finally:
+            os.close(fd)
         tmp_path.replace(path)
     except OSError as exc:
         LOG.error("failed to write JSON atomically %s: %s", path, exc)

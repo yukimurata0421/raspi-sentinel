@@ -9,6 +9,7 @@ from typing import Any
 from .checks import CheckResult
 from .config import GlobalConfig, TargetConfig
 from .state import StateStore
+from .state_helpers import read_uptime_sec
 from .state_models import GlobalState, RebootRecord, TargetState
 
 LOG = logging.getLogger(__name__)
@@ -26,15 +27,6 @@ CLOCK_FAILURE_CHECKS = frozenset(
 class RecoveryOutcome:
     action: str
     requested_reboot: bool
-
-
-def _get_uptime_sec() -> float:
-    try:
-        with open("/proc/uptime", "r", encoding="utf-8") as fh:
-            first = fh.read().split()[0]
-        return float(first)
-    except Exception:
-        return 0.0
 
 
 def _thresholds(target: TargetConfig, global_config: GlobalConfig) -> tuple[int, int]:
@@ -94,7 +86,7 @@ def _can_reboot(
     else:
         state_model = GlobalState.from_dict(state)
 
-    uptime = _get_uptime_sec()
+    uptime = read_uptime_sec()
     if uptime < global_config.min_uptime_for_reboot_sec:
         return (
             False,
@@ -334,7 +326,20 @@ def apply_recovery(
         return RecoveryOutcome(action="warn", requested_reboot=False)
 
     if consecutive >= reboot_threshold:
-        if not policy_failed:
+        if last_action == "restart" and _within_cooldown(
+            last_action_ts,
+            global_config.restart_cooldown_sec,
+            effective_now,
+        ):
+            LOG.warning(
+                (
+                    "target '%s': reboot suppressed right after restart by "
+                    "restart_cooldown_sec (%ss)"
+                ),
+                target.name,
+                global_config.restart_cooldown_sec,
+            )
+        elif not policy_failed:
             LOG.warning(
                 "target '%s': reboot blocked because policy_status is not failed (status=%s)",
                 target.name,

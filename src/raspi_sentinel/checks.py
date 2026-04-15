@@ -313,6 +313,179 @@ def _stats_checks(
                 )
 
 
+def _external_status_checks(
+    target: TargetConfig,
+    failures: list[CheckFailure],
+    observations: dict[str, Any],
+    now_wall_ts: float,
+) -> None:
+    if target.external_status_file is None:
+        return
+
+    try:
+        raw = target.external_status_file.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        failures.append(
+            CheckFailure(
+                "semantic_external_status_file",
+                f"external status file missing: {target.external_status_file}",
+            )
+        )
+        return
+    except OSError as exc:
+        failures.append(
+            CheckFailure(
+                "semantic_external_status_file",
+                f"cannot read external status file {target.external_status_file}: {exc}",
+            )
+        )
+        return
+
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        failures.append(
+            CheckFailure(
+                "semantic_external_status_file",
+                f"invalid JSON in external status file {target.external_status_file}: {exc}",
+            )
+        )
+        return
+
+    if not isinstance(payload, dict):
+        failures.append(
+            CheckFailure(
+                "semantic_external_status_file",
+                f"external status file root must be JSON object: {target.external_status_file}",
+            )
+        )
+        return
+
+    updated_raw = payload.get("updated_at")
+    updated_ts, updated_err = _parse_ts(updated_raw, "updated_at")
+    updated_age: float | None = None
+    if updated_ts is not None:
+        updated_age = now_wall_ts - updated_ts
+        observations["external_status_updated_age_sec"] = updated_age
+    startup_grace_active = updated_age is not None and updated_age <= float(
+        target.external_status_startup_grace_sec
+    )
+    observations["external_status_startup_grace_active"] = startup_grace_active
+    if target.external_status_updated_max_age_sec is not None:
+        if updated_err is not None:
+            failures.append(CheckFailure("semantic_external_updated_at", updated_err))
+        elif updated_ts is None:
+            failures.append(
+                CheckFailure("semantic_external_updated_at", "updated_at missing timestamp")
+            )
+        else:
+            age = now_wall_ts - updated_ts
+            if age > target.external_status_updated_max_age_sec:
+                failures.append(
+                    CheckFailure(
+                        "semantic_external_updated_at",
+                        (
+                            "updated_at stale: "
+                            f"age={age:.1f}s max={target.external_status_updated_max_age_sec}s"
+                        ),
+                    )
+                )
+
+    if target.external_status_last_progress_max_age_sec is not None:
+        progress_raw = payload.get("last_progress_ts")
+        if (
+            progress_raw is None or (isinstance(progress_raw, str) and not progress_raw.strip())
+        ) and startup_grace_active:
+            pass
+        else:
+            progress_ts, progress_err = _parse_ts(progress_raw, "last_progress_ts")
+            if progress_err is not None:
+                failures.append(CheckFailure("semantic_external_last_progress_ts", progress_err))
+            elif progress_ts is None:
+                failures.append(
+                    CheckFailure(
+                        "semantic_external_last_progress_ts",
+                        "last_progress_ts missing timestamp",
+                    )
+                )
+            else:
+                progress_age = now_wall_ts - progress_ts
+                observations["external_last_progress_age_sec"] = progress_age
+                if (
+                    progress_age > target.external_status_last_progress_max_age_sec
+                    and not startup_grace_active
+                ):
+                    failures.append(
+                        CheckFailure(
+                            "semantic_external_last_progress_ts",
+                            (
+                                "last_progress_ts stale: "
+                                f"age={progress_age:.1f}s "
+                                f"max={target.external_status_last_progress_max_age_sec}s"
+                            ),
+                        )
+                    )
+
+    if target.external_status_last_success_max_age_sec is not None:
+        success_raw = payload.get("last_success_ts")
+        if (
+            success_raw is None or (isinstance(success_raw, str) and not success_raw.strip())
+        ) and startup_grace_active:
+            pass
+        else:
+            success_ts, success_err = _parse_ts(success_raw, "last_success_ts")
+            if success_err is not None:
+                failures.append(CheckFailure("semantic_external_last_success_ts", success_err))
+            elif success_ts is None:
+                failures.append(
+                    CheckFailure(
+                        "semantic_external_last_success_ts",
+                        "last_success_ts missing timestamp",
+                    )
+                )
+            else:
+                success_age = now_wall_ts - success_ts
+                observations["external_last_success_age_sec"] = success_age
+                if (
+                    success_age > target.external_status_last_success_max_age_sec
+                    and not startup_grace_active
+                ):
+                    failures.append(
+                        CheckFailure(
+                            "semantic_external_last_success_ts",
+                            (
+                                "last_success_ts stale: "
+                                f"age={success_age:.1f}s "
+                                f"max={target.external_status_last_success_max_age_sec}s"
+                            ),
+                        )
+                    )
+
+    internal_state_raw = payload.get("internal_state")
+    if internal_state_raw is not None and not isinstance(internal_state_raw, str):
+        failures.append(
+            CheckFailure(
+                "semantic_external_internal_state",
+                "internal_state must be string when set",
+            )
+        )
+    elif isinstance(internal_state_raw, str):
+        normalized_state = internal_state_raw.strip().lower()
+        observations["external_internal_state"] = normalized_state
+        unhealthy_values = {v.strip().lower() for v in target.external_status_unhealthy_values}
+        if normalized_state in unhealthy_values:
+            failures.append(
+                CheckFailure(
+                    "semantic_external_internal_state",
+                    f"internal_state is unhealthy: {internal_state_raw}",
+                )
+            )
+
+    reason_raw = payload.get("reason")
+    if isinstance(reason_raw, str):
+        observations["external_reason"] = reason_raw
+
+
 def _run_command_capture(
     args: list[str],
     timeout_sec: int,
@@ -846,6 +1019,12 @@ def run_checks(target: TargetConfig, now_wall_ts: float | None = None) -> CheckR
     )
 
     _stats_checks(target=target, failures=failures, observations=observations, now_wall_ts=wall)
+    _external_status_checks(
+        target=target,
+        failures=failures,
+        observations=observations,
+        now_wall_ts=wall,
+    )
     _probe_network_uplink(target=target, observations=observations)
 
     dependency_observation_checks = (

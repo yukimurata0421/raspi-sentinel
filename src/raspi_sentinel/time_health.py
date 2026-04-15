@@ -29,7 +29,7 @@ def _fetch_http_date_epoch(url: str, timeout_sec: int) -> tuple[float | None, st
         date_raw = exc.headers.get("Date") if exc.headers else None
         if date_raw is None:
             return None, f"http error status={exc.code}"
-    except Exception as exc:
+    except (error.URLError, TimeoutError, OSError) as exc:
         return None, str(exc)
 
     if not date_raw:
@@ -37,7 +37,7 @@ def _fetch_http_date_epoch(url: str, timeout_sec: int) -> tuple[float | None, st
 
     try:
         dt = parsedate_to_datetime(date_raw)
-    except Exception:
+    except (ValueError, TypeError):
         return None, "date header parse failed"
     if dt.tzinfo is None:
         return None, "date header timezone missing"
@@ -53,7 +53,7 @@ def _query_ntp_sync_ok(timeout_sec: int = 3) -> bool | None:
             capture_output=True,
             text=True,
         )
-    except Exception:
+    except (subprocess.TimeoutExpired, OSError):
         return None
 
     if result.returncode != 0:
