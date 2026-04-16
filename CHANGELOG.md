@@ -73,6 +73,11 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - `iface_up`, `wifi_associated`, `ip_assigned`, `operstate_raw`
 - Gateway neighbor evidence is now exported consistently to observability outputs:
   - `neighbor_resolved`, `arp_gateway_ok` are emitted in both events and monitor stats.
+- Added middle-layer network subreason decomposition without expanding top-level `reason`:
+  - `route_error_kind`: `no_default_route`, `iface_mismatch`, `gateway_ip_missing`
+  - `gateway_error_kind`: `neighbor_unresolved`, `high_loss`, `high_latency`, `probe_timeout`
+  - `wan_error_kind`: `all_targets_failed`, `partial_targets_failed`, `high_loss`, `high_latency`
+  - `policy.subreason` is now propagated to cycle JSON output, `events.jsonl`, and monitor stats.
 - Reboot escalation now requires `policy_status=failed` on all reboot paths (including confirmed clock anomaly).
 
 ### Testing
@@ -92,6 +97,7 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - HTTP error kind split (DNS/timeout/connect/refused/TLS)
   - DNS error kind split (`resolver_config_missing`, `no_server`, `unreachable`, etc.)
   - link evidence emission (`iface_up`, `wifi_associated`, `ip_assigned`, `operstate_raw`)
+  - route/gateway/wan subreason classifications and propagation (`policy_subreason`, events, monitor stats)
   - reboot guard enforcement requiring `policy_status=failed`
 
 ## [0.4.0] - 2026-04-11

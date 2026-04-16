@@ -597,6 +597,9 @@ def _probe_network_uplink(target: TargetConfig, observations: dict[str, Any]) ->
         "dns_query_target",
         "dns_latency_ms",
         "dns_error_kind",
+        "route_error_kind",
+        "gateway_error_kind",
+        "wan_error_kind",
         "http_probe_target",
         "http_status_code",
         "http_total_latency_ms",
@@ -662,21 +665,45 @@ def _probe_network_uplink(target: TargetConfig, observations: dict[str, Any]) ->
         route_text = route_result.stdout.strip()
         if route_text:
             observations["route_table_snapshot"] = route_text[:500]
+            has_default_route = False
+            iface_matched = False
             for line in route_text.splitlines():
+                m_no_gateway = re.search(r"default dev (\S+)", line)
                 m = re.search(r"default via (\S+) dev (\S+)", line)
+                if m_no_gateway:
+                    has_default_route = True
+                    cand_iface = m_no_gateway.group(1)
+                    if cand_iface == iface:
+                        iface_matched = True
+                        route_iface = cand_iface
+                    continue
                 if not m:
                     continue
+                has_default_route = True
                 cand_gateway, cand_iface = m.group(1), m.group(2)
                 if cand_iface == iface:
+                    iface_matched = True
                     gateway_ip = cand_gateway
                     route_iface = cand_iface
                     break
                 if gateway_ip is None:
                     gateway_ip = cand_gateway
                     route_iface = cand_iface
-            observations["default_route_ok"] = gateway_ip is not None
+
+            if not has_default_route:
+                observations["default_route_ok"] = False
+                observations["route_error_kind"] = "no_default_route"
+            elif not iface_matched:
+                observations["default_route_ok"] = False
+                observations["route_error_kind"] = "iface_mismatch"
+            elif gateway_ip is None:
+                observations["default_route_ok"] = False
+                observations["route_error_kind"] = "gateway_ip_missing"
+            else:
+                observations["default_route_ok"] = True
         else:
             observations["default_route_ok"] = False
+            observations["route_error_kind"] = "no_default_route"
 
     if route_iface is not None:
         observations["default_route_iface"] = route_iface
@@ -684,6 +711,8 @@ def _probe_network_uplink(target: TargetConfig, observations: dict[str, Any]) ->
         observations["gateway_ip"] = gateway_ip
 
     if gateway_ip is not None:
+        gateway_latency_threshold = target.latency_thresholds_ms.get("gateway")
+        gateway_loss_threshold = target.packet_loss_thresholds_pct.get("gateway")
         neigh_result, _ = _run_command_capture(
             ["ip", "neigh", "show", gateway_ip, "dev", route_iface or iface], timeout_sec
         )
@@ -705,11 +734,32 @@ def _probe_network_uplink(target: TargetConfig, observations: dict[str, Any]) ->
             observations["gateway_latency_ms"] = latency_ms
             observations["gateway_packet_loss_pct"] = loss_pct
             observations["gateway_ok"] = ping_result.returncode == 0
+            if ping_result.returncode != 0:
+                if observations.get("neighbor_resolved") is False:
+                    observations["gateway_error_kind"] = "neighbor_unresolved"
+                elif (
+                    loss_pct is not None
+                    and gateway_loss_threshold is not None
+                    and loss_pct >= gateway_loss_threshold
+                ):
+                    observations["gateway_error_kind"] = "high_loss"
+                elif (
+                    latency_ms is not None
+                    and gateway_latency_threshold is not None
+                    and latency_ms >= gateway_latency_threshold
+                ):
+                    observations["gateway_error_kind"] = "high_latency"
         elif ping_error == "timeout":
             observations["gateway_ok"] = False
+            observations["gateway_error_kind"] = "probe_timeout"
 
     internet_targets = target.internet_ip_targets or ["1.1.1.1", "8.8.8.8"]
     internet_attempted = False
+    internet_attempt_count = 0
+    internet_failed_count = 0
+    internet_total_targets = len(internet_targets)
+    internet_latency_threshold = target.latency_thresholds_ms.get("internet_ip")
+    internet_loss_threshold = target.packet_loss_thresholds_pct.get("internet_ip")
     for ip_target in internet_targets:
         ping_result, ping_error = _run_command_capture(
             ["ping", "-n", "-c", "3", "-W", str(timeout_sec), ip_target],
@@ -718,8 +768,11 @@ def _probe_network_uplink(target: TargetConfig, observations: dict[str, Any]) ->
         if ping_result is None:
             if ping_error == "timeout":
                 internet_attempted = True
+                internet_attempt_count += 1
+                internet_failed_count += 1
             continue
         internet_attempted = True
+        internet_attempt_count += 1
         latency_ms, loss_pct = _parse_ping_stats((ping_result.stdout or "") + "\n")
         if ping_result.returncode == 0:
             observations["internet_ip_ok"] = True
@@ -727,6 +780,7 @@ def _probe_network_uplink(target: TargetConfig, observations: dict[str, Any]) ->
             observations["internet_ip_latency_ms"] = latency_ms
             observations["internet_ip_packet_loss_pct"] = loss_pct
             break
+        internet_failed_count += 1
         if observations.get("internet_ip_ok") is not True:
             observations["internet_ip_target"] = ip_target
             observations["internet_ip_latency_ms"] = latency_ms
@@ -734,6 +788,25 @@ def _probe_network_uplink(target: TargetConfig, observations: dict[str, Any]) ->
             observations["internet_ip_ok"] = False
     if observations.get("internet_ip_ok") is None and internet_attempted:
         observations["internet_ip_ok"] = False
+    if observations.get("internet_ip_ok") is False:
+        wan_latency = observations.get("internet_ip_latency_ms")
+        wan_loss = observations.get("internet_ip_packet_loss_pct")
+        if (
+            isinstance(wan_loss, (int, float))
+            and internet_loss_threshold is not None
+            and float(wan_loss) >= internet_loss_threshold
+        ):
+            observations["wan_error_kind"] = "high_loss"
+        elif (
+            isinstance(wan_latency, (int, float))
+            and internet_latency_threshold is not None
+            and float(wan_latency) >= internet_latency_threshold
+        ):
+            observations["wan_error_kind"] = "high_latency"
+        elif internet_attempt_count > 0 and internet_failed_count >= internet_total_targets:
+            observations["wan_error_kind"] = "all_targets_failed"
+        else:
+            observations["wan_error_kind"] = "partial_targets_failed"
 
     dns_target = target.dns_query_target or "example.com"
     observations["dns_query_target"] = dns_target

@@ -31,6 +31,7 @@ class PolicySnapshot:
 
     status: PolicyStatus
     reason: str
+    subreason: str | None = None
 
     @property
     def is_ok(self) -> bool:
@@ -74,6 +75,9 @@ def classify_target_policy(
     dns_failures = safe_int(observations.get("dns_fail_consecutive"), 0) or 0
     http_failures = safe_int(observations.get("http_fail_consecutive"), 0) or 0
     network_checks_remaining = checks - NETWORK_DEPENDENCY_CHECK_NAMES
+    route_error_kind = observations.get("route_error_kind")
+    gateway_error_kind = observations.get("gateway_error_kind")
+    wan_error_kind = observations.get("wan_error_kind")
 
     def _persistent_fail(observation_value: bool | None, counter: int) -> bool:
         return observation_value is False and counter >= degraded_threshold
@@ -115,7 +119,11 @@ def classify_target_policy(
         if link_ok is False and link_failures >= failed_threshold:
             return PolicySnapshot("failed", "link_error")
         if default_route_ok is False and route_failures >= failed_threshold:
-            return PolicySnapshot("failed", "route_missing")
+            return PolicySnapshot(
+                "failed",
+                "route_missing",
+                route_error_kind if isinstance(route_error_kind, str) else None,
+            )
         if (
             gateway_ok is False
             and internet_ip_ok is False
@@ -131,11 +139,23 @@ def classify_target_policy(
         if _persistent_fail(link_ok, link_failures):
             return PolicySnapshot("degraded", "link_error")
         if _persistent_fail(default_route_ok, route_failures):
-            return PolicySnapshot("degraded", "route_missing")
+            return PolicySnapshot(
+                "degraded",
+                "route_missing",
+                route_error_kind if isinstance(route_error_kind, str) else None,
+            )
         if _persistent_fail(gateway_ok, gateway_failures) and link_ok is True:
-            return PolicySnapshot("degraded", "gateway_error")
+            return PolicySnapshot(
+                "degraded",
+                "gateway_error",
+                gateway_error_kind if isinstance(gateway_error_kind, str) else None,
+            )
         if _persistent_fail(internet_ip_ok, internet_failures) and gateway_ok is True:
-            return PolicySnapshot("degraded", "wan_error")
+            return PolicySnapshot(
+                "degraded",
+                "wan_error",
+                wan_error_kind if isinstance(wan_error_kind, str) else None,
+            )
         has_dns_persistent_failure = _persistent_fail(
             dns_server_reachable, dns_failures
         ) or _persistent_fail(dns_ok, dns_failures)

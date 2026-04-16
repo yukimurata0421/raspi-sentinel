@@ -57,6 +57,7 @@ def test_monitor_stats_preserves_unknown_vs_false_for_network_layers() -> None:
         failures=[],
         observations={
             "network_probe_enabled": True,
+            "policy_subreason": "all_targets_failed",
             "link_ok": None,
             "iface_up": None,
             "wifi_associated": None,
@@ -76,6 +77,7 @@ def test_monitor_stats_preserves_unknown_vs_false_for_network_layers() -> None:
         now_ts=1_000_000.0,
     )
     payload = snapshot["targets"]["network_uplink"]
+    assert payload["subreason"] == "all_targets_failed"
     assert payload["link_ok"] is None
     assert payload["iface_up"] is None
     assert payload["wifi_associated"] is None

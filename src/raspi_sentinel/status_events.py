@@ -18,6 +18,7 @@ def apply_policy_to_result(result: CheckResult, policy: PolicySnapshot) -> None:
     """Set policy_status / policy_reason; align ``result.healthy`` with ``policy.is_ok``."""
     result.observations["policy_status"] = policy.status
     result.observations["policy_reason"] = policy.reason
+    result.observations["policy_subreason"] = policy.subreason
     result.healthy = policy.is_ok
 
 
@@ -144,6 +145,9 @@ def build_event_evidence(result: CheckResult) -> dict[str, Any]:
         "dns_server",
         "dns_query_target",
         "dns_error_kind",
+        "route_error_kind",
+        "gateway_error_kind",
+        "wan_error_kind",
         "http_probe_target",
         "http_status_code",
         "http_total_latency_ms",
@@ -186,6 +190,7 @@ def record_status_events(
     now_ts: float,
     max_file_bytes: int = 0,
     backup_generations: int = 1,
+    current_subreason: str | None = None,
 ) -> None:
     previous_status = target_state.last_status or "unknown"
     previous_reason = target_state.last_reason or "unknown"
@@ -201,6 +206,7 @@ def record_status_events(
                 "from": previous_status,
                 "to": current_status,
                 "reason": current_reason,
+                **({"subreason": current_subreason} if current_subreason else {}),
                 **evidence,
             },
             max_file_bytes=max_file_bytes,
@@ -217,6 +223,7 @@ def record_status_events(
                 "to": current_status,
                 "reason": current_reason,
                 "action": action,
+                **({"subreason": current_subreason} if current_subreason else {}),
                 **evidence,
             },
             max_file_bytes=max_file_bytes,

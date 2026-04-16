@@ -36,6 +36,7 @@ def test_clock_skewed_maps_to_degraded() -> None:
     apply_policy_to_result(result, classify_target_policy(result, TargetState()))
     assert result.healthy is False
     assert result.observations["policy_reason"] == "clock_skewed"
+    assert result.observations["policy_subreason"] is None
 
 
 def test_dns_error_degraded_not_failed() -> None:
@@ -81,6 +82,7 @@ def test_record_status_events_only_on_transition(tmp_path: Path) -> None:
         target_name="svc",
         current_status="failed",
         current_reason="process_error",
+        current_subreason="all_targets_failed",
         result=r,
         action="warn",
         now_ts=ts,
@@ -91,6 +93,7 @@ def test_record_status_events_only_on_transition(tmp_path: Path) -> None:
     first = json.loads(lines[0])
     assert first["from"] == "unknown"
     assert first["to"] == "failed"
+    assert first["subreason"] == "all_targets_failed"
 
     record_status_events(
         events_file=events,
@@ -98,6 +101,7 @@ def test_record_status_events_only_on_transition(tmp_path: Path) -> None:
         target_name="svc",
         current_status="failed",
         current_reason="process_error",
+        current_subreason="all_targets_failed",
         result=r,
         action="warn",
         now_ts=ts + 1,

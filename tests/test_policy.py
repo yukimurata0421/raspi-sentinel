@@ -188,6 +188,66 @@ def test_network_probe_wan_error_split_from_gateway() -> None:
     p = classify_target_policy(r, TargetState())
     assert p.status == "degraded"
     assert p.reason == "wan_error"
+    assert p.subreason is None
+
+
+def test_network_probe_route_subreason_is_exposed() -> None:
+    r = CheckResult(
+        "t",
+        False,
+        [],
+        observations={
+            "network_probe_enabled": True,
+            "network_degraded_threshold": 2,
+            "default_route_ok": False,
+            "route_fail_consecutive": 2,
+            "route_error_kind": "iface_mismatch",
+        },
+    )
+    p = classify_target_policy(r, TargetState())
+    assert p.status == "degraded"
+    assert p.reason == "route_missing"
+    assert p.subreason == "iface_mismatch"
+
+
+def test_network_probe_gateway_subreason_is_exposed() -> None:
+    r = CheckResult(
+        "t",
+        False,
+        [],
+        observations={
+            "network_probe_enabled": True,
+            "network_degraded_threshold": 2,
+            "link_ok": True,
+            "gateway_ok": False,
+            "gateway_fail_consecutive": 2,
+            "gateway_error_kind": "neighbor_unresolved",
+        },
+    )
+    p = classify_target_policy(r, TargetState())
+    assert p.status == "degraded"
+    assert p.reason == "gateway_error"
+    assert p.subreason == "neighbor_unresolved"
+
+
+def test_network_probe_wan_subreason_is_exposed() -> None:
+    r = CheckResult(
+        "t",
+        False,
+        [],
+        observations={
+            "network_probe_enabled": True,
+            "network_degraded_threshold": 2,
+            "gateway_ok": True,
+            "internet_ip_ok": False,
+            "internet_fail_consecutive": 2,
+            "wan_error_kind": "all_targets_failed",
+        },
+    )
+    p = classify_target_policy(r, TargetState())
+    assert p.status == "degraded"
+    assert p.reason == "wan_error"
+    assert p.subreason == "all_targets_failed"
 
 
 def test_network_probe_link_failure_can_be_failed() -> None:

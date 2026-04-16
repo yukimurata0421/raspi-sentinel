@@ -874,8 +874,70 @@ def test_network_probe_handles_empty_route_and_gateway_timeout(monkeypatch: Any)
     )
     obs = result.observations
     assert obs["default_route_ok"] is False
+    assert obs["route_error_kind"] == "no_default_route"
     assert obs["gateway_ok"] is None
     assert obs["internet_ip_ok"] is False
+    assert obs["wan_error_kind"] == "all_targets_failed"
+
+
+def test_network_probe_sets_route_and_gateway_error_kinds(monkeypatch: Any) -> None:
+    class Result:
+        def __init__(self, stdout: str, returncode: int = 0) -> None:
+            self.stdout = stdout
+            self.stderr = ""
+            self.returncode = returncode
+
+    def fake_read_text(self: Path, encoding: str = "utf-8") -> str:
+        if str(self).endswith("/operstate"):
+            return "up\n"
+        if str(self) == "/etc/resolv.conf":
+            return "nameserver 1.1.1.1\n"
+        raise OSError("unavailable")
+
+    def fake_run_command_capture(args: list[str], timeout_sec: int) -> tuple[Any, Any]:
+        if args[:4] == ["ip", "-4", "-o", "addr"]:
+            return Result("2: wlan0    inet 192.168.1.2/24"), None
+        if args[:3] == ["iw", "dev", "wlan0"]:
+            return Result("Connected to aa:bb:cc:dd:ee:ff\nSSID: test\n"), None
+        if args[:5] == ["ip", "-4", "route", "show", "default"]:
+            return Result("default via 192.168.1.1 dev eth0\n"), None
+        if args[:3] == ["ip", "neigh", "show"]:
+            return Result("192.168.1.1 dev eth0 lladdr 00:11:22:33:44:55 INCOMPLETE"), None
+        if args[:5] == ["ping", "-n", "-c", "3", "-W"] and args[-1] == "192.168.1.1":
+            return Result(
+                "3 packets transmitted, 0 received, 100% packet loss\n",
+                returncode=1,
+            ), None
+        if args[:5] == ["ping", "-n", "-c", "3", "-W"]:
+            return Result(
+                "3 packets transmitted, 0 received, 100% packet loss\n",
+                returncode=1,
+            ), None
+        return None, "unavailable"
+
+    monkeypatch.setattr(checks.Path, "read_text", fake_read_text, raising=False)
+    monkeypatch.setattr(checks, "_run_command_capture", fake_run_command_capture)
+    monkeypatch.setattr(
+        checks.socket,
+        "getaddrinfo",
+        lambda host, port, type=0: [
+            (checks.socket.AF_INET, checks.socket.SOCK_STREAM, 6, "", ("127.0.0.1", port))
+        ],
+    )
+
+    result = checks.run_checks(
+        _target(
+            network_probe_enabled=True,
+            network_interface="wlan0",
+            http_probe_target=None,
+            internet_ip_targets=["1.1.1.1", "8.8.8.8"],
+        )
+    )
+    obs = result.observations
+    assert obs["default_route_ok"] is False
+    assert obs["route_error_kind"] == "iface_mismatch"
+    assert obs["gateway_error_kind"] == "neighbor_unresolved"
+    assert obs["wan_error_kind"] == "all_targets_failed"
 
 
 def test_stats_checks_handles_none_payload(monkeypatch: Any) -> None:

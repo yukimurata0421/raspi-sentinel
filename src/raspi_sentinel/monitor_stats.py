@@ -62,6 +62,9 @@ def build_monitor_stats_snapshot(
         }
         if result is not None:
             missing = _MISSING
+            policy_subreason = result.observations.get("policy_subreason")
+            if isinstance(policy_subreason, str):
+                payload["subreason"] = policy_subreason
             clock_reason = result.observations.get("clock_reason")
             if isinstance(clock_reason, str):
                 payload["clock_reason"] = clock_reason

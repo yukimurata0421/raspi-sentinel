@@ -276,6 +276,7 @@ def _run_cycle_collect_locked(
             now_ts=now_ts,
             max_file_bytes=events_max,
             backup_generations=events_backups,
+            current_subreason=policy.subreason,
         )
 
         emit_target_notifications(
@@ -300,6 +301,8 @@ def _run_cycle_collect_locked(
             "healthy": result.healthy,
             "evidence": build_event_evidence(result),
         }
+        if policy.subreason is not None:
+            report_payload["subreason"] = policy.subreason
         if result.failures:
             report_payload["failures"] = [
                 {"check": failure.check, "message": failure.message} for failure in result.failures
