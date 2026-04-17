@@ -89,4 +89,3 @@ def test_global_state_mapping_helpers_and_edge_parsing() -> None:
     assert isinstance(state["notify"], dict)
     assert isinstance(state["monitor_stats"], dict)
     assert state.get("unknown", "fallback") == "fallback"
-
