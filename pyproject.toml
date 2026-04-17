@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Standalone staged self-healing layer for Raspberry Pi systemd services"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "MIT"
 authors = [
   { name = "raspi-sentinel maintainers" }
 ]

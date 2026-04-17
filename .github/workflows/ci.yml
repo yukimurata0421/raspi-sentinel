@@ -59,6 +59,10 @@ jobs:
             --cov=raspi_sentinel.cli \
             --cov=raspi_sentinel.config \
             --cov=raspi_sentinel.config_summary \
+            --cov=raspi_sentinel.engine \
+            --cov=raspi_sentinel.cycle_notifications \
+            --cov=raspi_sentinel.notify \
+            --cov=raspi_sentinel.state_models \
             --cov=raspi_sentinel.recovery \
             --cov=raspi_sentinel.policy \
             --cov=raspi_sentinel.status_events \
@@ -70,10 +74,33 @@ jobs:
       - name: Policy + status_events gate
         run: |
           python -m coverage report \
-            --include="src/raspi_sentinel/policy.py,src/raspi_sentinel/status_events.py" \
+            --include="*/raspi_sentinel/policy.py,*/raspi_sentinel/status_events.py" \
             --fail-under=85
       - name: Core checks + recovery gate
         run: |
           python -m coverage report \
-            --include="src/raspi_sentinel/checks.py,src/raspi_sentinel/recovery.py" \
+            --include="*/raspi_sentinel/checks.py,*/raspi_sentinel/recovery.py" \
             --fail-under=88
+      - name: Notification pipeline gate
+        run: |
+          python -m coverage report \
+            --include="*/raspi_sentinel/engine.py,*/raspi_sentinel/cycle_notifications.py,*/raspi_sentinel/notify.py,*/raspi_sentinel/state_models.py" \
+            --fail-under=90
+
+  package:
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build distributions
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build
+          python -m build --sdist --wheel
+      - name: Install wheel and smoke test CLI
+        run: |
+          python -m pip install dist/*.whl
+          raspi-sentinel --help

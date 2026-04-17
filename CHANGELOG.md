@@ -10,6 +10,9 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ### Added
 
+- CI `package` job:
+  - builds sdist/wheel (`python -m build`)
+  - installs built wheel and runs CLI smoke test (`raspi-sentinel --help`)
 - CI test matrix expanded to Python 3.11 + 3.12.
 - `config.py` validation tests (`test_config_validation.py`): 29 new tests covering parsing helpers, `__getattr__` error path, validation rules, and `load_config` edge cases.
 - `engine.py` integration tests (`test_engine_integration.py`): tests for `evaluate_target`, `apply_recovery_phase`, `persist_cycle_outputs`, and `_overall_status`.
@@ -89,6 +92,9 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ### Testing
 
+- Added `tests/test_public_secret_scan.py`:
+  - scans git-tracked files for secret-like tokens (Discord webhook, GitHub PAT, Slack token, AWS/Google keys)
+  - prevents accidental credential leaks in public repository layer
 - Verified full local gate:
   - `ruff check`
   - `ruff format --check`
@@ -106,6 +112,7 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - link evidence emission (`iface_up`, `wifi_associated`, `ip_assigned`, `operstate_raw`)
   - route/gateway/wan subreason classifications and propagation (`policy_subreason`, events, monitor stats)
   - reboot guard enforcement requiring `policy_status=failed`
+  - notification pipeline coverage gate (`engine`, `cycle_notifications`, `notify`, `state_models`) with `--fail-under=90`
 
 ## [0.4.0] - 2026-04-11
 
