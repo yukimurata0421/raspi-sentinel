@@ -6,6 +6,8 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-04-17
+
 ### Added
 
 - CI test matrix expanded to Python 3.11 + 3.12.
