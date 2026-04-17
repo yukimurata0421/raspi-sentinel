@@ -9,6 +9,7 @@ from conftest import make_discord_config
 
 from raspi_sentinel.checks import CheckFailure, CheckResult
 from raspi_sentinel.cycle_notifications import (
+    DeliveryBacklogManager,
     schedule_followup,
     send_delivery_backlog_summary,
     send_due_followups,
@@ -17,7 +18,7 @@ from raspi_sentinel.cycle_notifications import (
     send_recovery_notification,
 )
 from raspi_sentinel.notify import DiscordNotifier
-from raspi_sentinel.state_models import FollowupRecord, GlobalState
+from raspi_sentinel.state_models import FollowupRecord, GlobalState, NotifyDeliveryBacklog
 
 
 def _notifier(enabled: bool = True, **overrides: Any) -> DiscordNotifier:
@@ -496,3 +497,55 @@ class TestDeferredNotificationSummary:
         )
         assert state.notify.delivery_backlog is not None
         assert state.notify.delivery_backlog.last_failed_ts == 1060.0
+
+    def test_delivery_backlog_manager_internal_paths(self) -> None:
+        state = GlobalState()
+        manager = DeliveryBacklogManager(state=state, retry_interval_sec=60)
+
+        # No backlog -> should_send_summary=False
+        assert manager.should_send_summary(now_ts=1000.0) is False
+
+        # No backlog branch in mark_summary_network_failure still sets retry_due_ts.
+        manager.mark_summary_network_failure(now_ts=1010.0)
+        assert state.notify.retry_due_ts == 1070.0
+
+        # Explicit defer branch.
+        manager.defer_summary_retry(now_ts=1020.0)
+        assert state.notify.retry_due_ts == 1080.0
+
+    @patch.object(DiscordNotifier, "send_lines", return_value=False)
+    def test_summary_non_network_failure_records_event_and_defers_retry(
+        self, mock_send: MagicMock, tmp_path: Path
+    ) -> None:
+        n = _notifier(retry_interval_sec=60)
+        n.last_failure_kind = "http"
+        state = GlobalState()
+
+        state.notify.delivery_backlog = NotifyDeliveryBacklog(
+            first_failed_ts=1000.0,
+            last_failed_ts=1010.0,
+            total_failures=6,
+            contexts={
+                "c1": 1,
+                "c2": 1,
+                "c3": 1,
+                "c4": 1,
+                "c5": 1,
+                "c6": 1,
+            },
+        )
+        state.notify.retry_due_ts = 1060.0
+
+        events_file = tmp_path / "events.jsonl"
+        send_delivery_backlog_summary(
+            notifier=n,
+            state=state,
+            now_ts=1061.0,
+            events_file=events_file,
+            events_max_bytes=5_000_000,
+            events_backup_generations=1,
+        )
+        assert mock_send.called
+        assert events_file.exists()
+        assert state.notify.delivery_backlog is not None
+        assert state.notify.retry_due_ts == 1121.0
