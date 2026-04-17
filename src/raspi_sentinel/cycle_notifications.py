@@ -23,33 +23,53 @@ class NotificationSendResult:
     network_failed: bool
 
 
+@dataclass(slots=True)
+class DeliveryBacklogManager:
+    state: GlobalState
+    retry_interval_sec: int
+
+    def record_network_failure(self, *, context: str, now_ts: float) -> None:
+        notify_state = self.state.notify
+        backlog = notify_state.delivery_backlog
+        if backlog is None:
+            backlog = NotifyDeliveryBacklog(
+                first_failed_ts=now_ts,
+                last_failed_ts=now_ts,
+                total_failures=1,
+                contexts={context: 1},
+            )
+            notify_state.delivery_backlog = backlog
+        else:
+            backlog.last_failed_ts = max(backlog.last_failed_ts, now_ts)
+            backlog.total_failures += 1
+            backlog.contexts[context] = backlog.contexts.get(context, 0) + 1
+
+        if notify_state.retry_due_ts is None or notify_state.retry_due_ts <= now_ts:
+            notify_state.retry_due_ts = now_ts + self.retry_interval_sec
+
+    def should_send_summary(self, *, now_ts: float) -> bool:
+        backlog = self.state.notify.delivery_backlog
+        if backlog is None:
+            return False
+        retry_due_ts = self.state.notify.retry_due_ts
+        return retry_due_ts is None or now_ts >= retry_due_ts
+
+    def mark_summary_sent(self) -> None:
+        self.state.notify.delivery_backlog = None
+        self.state.notify.retry_due_ts = None
+
+    def mark_summary_network_failure(self, *, now_ts: float) -> None:
+        backlog = self.state.notify.delivery_backlog
+        if backlog is not None:
+            backlog.last_failed_ts = max(backlog.last_failed_ts, now_ts)
+        self.state.notify.retry_due_ts = now_ts + self.retry_interval_sec
+
+    def defer_summary_retry(self, *, now_ts: float) -> None:
+        self.state.notify.retry_due_ts = now_ts + self.retry_interval_sec
+
+
 def _iso_ts(ts: float) -> str:
     return datetime.fromtimestamp(ts).astimezone().isoformat(timespec="seconds")
-
-
-def _record_network_delivery_backlog(
-    state: GlobalState,
-    context: str,
-    now_ts: float,
-    retry_interval_sec: int,
-) -> None:
-    notify_state = state.notify
-    backlog = notify_state.delivery_backlog
-    if backlog is None:
-        backlog = NotifyDeliveryBacklog(
-            first_failed_ts=now_ts,
-            last_failed_ts=now_ts,
-            total_failures=1,
-            contexts={context: 1},
-        )
-        notify_state.delivery_backlog = backlog
-    else:
-        backlog.last_failed_ts = max(backlog.last_failed_ts, now_ts)
-        backlog.total_failures += 1
-        backlog.contexts[context] = backlog.contexts.get(context, 0) + 1
-
-    if notify_state.retry_due_ts is None or notify_state.retry_due_ts <= now_ts:
-        notify_state.retry_due_ts = now_ts + retry_interval_sec
 
 
 def _send_with_tracking(
@@ -81,12 +101,8 @@ def _send_with_tracking(
             now_ts,
         )
     if network_failed and state is not None and now_ts is not None:
-        _record_network_delivery_backlog(
-            state=state,
-            context=context,
-            now_ts=now_ts,
-            retry_interval_sec=retry_interval_sec,
-        )
+        manager = DeliveryBacklogManager(state=state, retry_interval_sec=retry_interval_sec)
+        manager.record_network_failure(context=context, now_ts=now_ts)
     return NotificationSendResult(sent=sent, network_failed=network_failed)
 
 
@@ -288,11 +304,11 @@ def send_delivery_backlog_summary(
     events_max_bytes: int = 0,
     events_backup_generations: int = 1,
 ) -> None:
+    manager = DeliveryBacklogManager(
+        state=state, retry_interval_sec=notifier.config.retry_interval_sec
+    )
     backlog = state.notify.delivery_backlog
-    if backlog is None:
-        return
-    retry_due_ts = state.notify.retry_due_ts
-    if retry_due_ts is not None and now_ts < retry_due_ts:
+    if backlog is None or not manager.should_send_summary(now_ts=now_ts):
         return
 
     top_contexts = sorted(
@@ -316,8 +332,7 @@ def send_delivery_backlog_summary(
         lines=lines,
     )
     if sent:
-        state.notify.delivery_backlog = None
-        state.notify.retry_due_ts = None
+        manager.mark_summary_sent()
         return
 
     if events_file is not None:
@@ -329,5 +344,6 @@ def send_delivery_backlog_summary(
             now_ts,
         )
     if notifier.last_failure_kind == "network":
-        backlog.last_failed_ts = max(backlog.last_failed_ts, now_ts)
-    state.notify.retry_due_ts = now_ts + notifier.config.retry_interval_sec
+        manager.mark_summary_network_failure(now_ts=now_ts)
+        return
+    manager.defer_summary_retry(now_ts=now_ts)

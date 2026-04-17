@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import inspect
 import logging
 import stat
 import tomllib
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -105,6 +107,7 @@ class ExternalStatusCheckConfig:
 
 
 _SUB_CONFIG_ATTRS = ("deps", "network", "stats", "time_health", "maintenance", "external")
+_DEPRECATED_ATTR_WARNED: set[str] = set()
 
 
 @dataclass
@@ -144,7 +147,22 @@ class TargetConfig:
             except AttributeError:
                 continue
             try:
-                return getattr(sub, name)
+                value = getattr(sub, name)
+                current = inspect.currentframe()
+                caller = current.f_back if current is not None else None
+                caller_mod = caller.f_globals.get("__name__", "") if caller is not None else ""
+                should_warn = not str(caller_mod).startswith("raspi_sentinel.")
+                if should_warn and name not in _DEPRECATED_ATTR_WARNED:
+                    warnings.warn(
+                        (
+                            f"TargetConfig.{name} is deprecated; "
+                            f"use TargetConfig.{attr}.{name} instead"
+                        ),
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
+                    _DEPRECATED_ATTR_WARNED.add(name)
+                return value
             except AttributeError:
                 continue
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")

@@ -21,7 +21,7 @@ def apply_records_progress_check(
     result: CheckResult,
 ) -> None:
     """Detect stalled ``records_processed_total`` in semantic stats (same cycle as other checks)."""
-    stall_cycles_threshold = target.stats_records_stall_cycles
+    stall_cycles_threshold = target.stats.stats_records_stall_cycles
     if stall_cycles_threshold is None:
         return
 
@@ -72,7 +72,7 @@ def run_checks(target: TargetConfig, now_wall_ts: float | None = None) -> CheckR
     ) -> None:
         if not command:
             return
-        timeout_sec = _effective_timeout(target.dependency_check_timeout_sec)
+        timeout_sec = _effective_timeout(target.deps.dependency_check_timeout_sec)
         failure = command_check(
             command,
             timeout_sec,
@@ -120,44 +120,44 @@ def run_checks(target: TargetConfig, now_wall_ts: float | None = None) -> CheckR
             failures.append(failure)
 
     _run_dependency_check(
-        command=target.link_check_command,
-        use_shell=target.link_check_use_shell,
+        command=target.deps.link_check_command,
+        use_shell=target.deps.link_check_use_shell,
         observation_key="link_ok",
         check_name="dependency_link",
     )
     _run_dependency_check(
-        command=target.default_route_check_command,
-        use_shell=target.default_route_check_use_shell,
+        command=target.deps.default_route_check_command,
+        use_shell=target.deps.default_route_check_use_shell,
         observation_key="default_route_ok",
         check_name="dependency_default_route",
     )
     _run_dependency_check(
-        command=target.gateway_check_command,
-        use_shell=target.gateway_check_use_shell,
+        command=target.deps.gateway_check_command,
+        use_shell=target.deps.gateway_check_use_shell,
         observation_key="gateway_ok",
         check_name="dependency_gateway",
     )
     _run_dependency_check(
-        command=target.internet_ip_check_command,
-        use_shell=target.internet_ip_check_use_shell,
+        command=target.deps.internet_ip_check_command,
+        use_shell=target.deps.internet_ip_check_use_shell,
         observation_key="internet_ip_ok",
         check_name="dependency_internet_ip",
     )
     _run_dependency_check(
-        command=target.dns_server_check_command,
-        use_shell=target.dns_server_check_use_shell,
+        command=target.deps.dns_server_check_command,
+        use_shell=target.deps.dns_server_check_use_shell,
         observation_key="dns_server_reachable",
         check_name="dependency_dns_server",
     )
     _run_dependency_check(
-        command=target.dns_check_command,
-        use_shell=target.dns_check_use_shell,
+        command=target.deps.dns_check_command,
+        use_shell=target.deps.dns_check_use_shell,
         observation_key="dns_ok",
         check_name="dependency_dns",
     )
     _run_dependency_check(
-        command=target.wan_vs_target_check_command,
-        use_shell=target.wan_vs_target_check_use_shell,
+        command=target.deps.wan_vs_target_check_command,
+        use_shell=target.deps.wan_vs_target_check_use_shell,
         observation_key="wan_vs_target_ok",
         check_name="dependency_wan_target",
     )

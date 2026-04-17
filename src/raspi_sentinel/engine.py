@@ -71,6 +71,14 @@ class TargetEvaluationArtifacts:
     reboot_requested: bool
 
 
+@dataclass(slots=True)
+class ProcessTargetResult:
+    report: TargetReport
+    result: CheckResult | None
+    policy_status: str
+    reboot_requested: bool
+
+
 def evaluate_target(
     target: TargetConfig,
     state: GlobalState,
@@ -270,6 +278,87 @@ def _result_report(
     return report_payload
 
 
+def _process_single_target(
+    *,
+    target: TargetConfig,
+    config: AppConfig,
+    state: GlobalState,
+    dry_run: bool,
+    now_ts: float,
+    mono_provider: Callable[[], float],
+    limited_mode: bool,
+    notifier: DiscordNotifier,
+    events_file: Path,
+    events_max: int,
+    events_backups: int,
+) -> ProcessTargetResult:
+    before = state.ensure_target(target.name)
+    previous_failures = before.consecutive_failures
+
+    evaluated = evaluate_target(
+        target=target,
+        state=state,
+        now_ts=now_ts,
+        now_mono_ts=mono_provider(),
+    )
+    if evaluated is None:
+        return ProcessTargetResult(
+            report=_maintenance_suppressed_report(),
+            result=None,
+            policy_status="ok",
+            reboot_requested=False,
+        )
+
+    result, policy = evaluated
+    outcome = apply_recovery_phase(
+        target=target,
+        result=result,
+        config=config,
+        state=state,
+        dry_run=dry_run,
+        now_ts=now_ts,
+        allow_disruptive_actions=not limited_mode,
+    )
+
+    after = state.ensure_target(target.name)
+    current_failures = after.consecutive_failures
+    record_status_events(
+        events_file=events_file,
+        target_state=after,
+        target_name=target.name,
+        current_status=policy.status,
+        current_reason=policy.reason,
+        result=result,
+        action=outcome.action,
+        now_ts=now_ts,
+        max_file_bytes=events_max,
+        backup_generations=events_backups,
+        current_subreason=policy.subreason,
+    )
+
+    emit_target_notifications(
+        notifier=notifier,
+        state=state,
+        target=target,
+        result=result,
+        outcome=outcome,
+        previous_failures=previous_failures,
+        current_failures=current_failures,
+        dry_run=dry_run,
+        events_file=events_file,
+        events_max_bytes=events_max,
+        events_backup_generations=events_backups,
+        now_ts=now_ts,
+    )
+
+    return ProcessTargetResult(
+        report=_result_report(policy=policy, outcome=outcome, result=result),
+        result=result,
+        policy_status=policy.status,
+        reboot_requested=outcome.requested_reboot,
+    )
+
+
 def _evaluate_targets_phase(
     config: AppConfig,
     state: GlobalState,
@@ -288,69 +377,28 @@ def _evaluate_targets_phase(
     target_reports: dict[str, TargetReport] = {}
 
     for target in config.targets:
-        before = state.ensure_target(target.name)
-        previous_failures = before.consecutive_failures
-
-        evaluated = evaluate_target(
+        processed = _process_single_target(
             target=target,
-            state=state,
-            now_ts=now_ts,
-            now_mono_ts=mono_provider(),
-        )
-        if evaluated is None:
-            target_reports[target.name] = _maintenance_suppressed_report()
-            continue
-
-        result, policy = evaluated
-        target_results[target.name] = result
-
-        if policy.status != "ok":
-            unhealthy_count += 1
-
-        outcome = apply_recovery_phase(
-            target=target,
-            result=result,
             config=config,
             state=state,
             dry_run=dry_run,
             now_ts=now_ts,
-            allow_disruptive_actions=not limited_mode,
-        )
-
-        after = state.ensure_target(target.name)
-        current_failures = after.consecutive_failures
-        record_status_events(
-            events_file=events_file,
-            target_state=after,
-            target_name=target.name,
-            current_status=policy.status,
-            current_reason=policy.reason,
-            result=result,
-            action=outcome.action,
-            now_ts=now_ts,
-            max_file_bytes=events_max,
-            backup_generations=events_backups,
-            current_subreason=policy.subreason,
-        )
-
-        emit_target_notifications(
+            mono_provider=mono_provider,
+            limited_mode=limited_mode,
             notifier=notifier,
-            state=state,
-            target=target,
-            result=result,
-            outcome=outcome,
-            previous_failures=previous_failures,
-            current_failures=current_failures,
-            dry_run=dry_run,
             events_file=events_file,
-            events_max_bytes=events_max,
-            events_backup_generations=events_backups,
-            now_ts=now_ts,
+            events_max=events_max,
+            events_backups=events_backups,
         )
+        target_reports[target.name] = processed.report
 
-        target_reports[target.name] = _result_report(policy=policy, outcome=outcome, result=result)
+        if processed.result is not None:
+            target_results[target.name] = processed.result
 
-        if outcome.requested_reboot:
+        if processed.policy_status != "ok":
+            unhealthy_count += 1
+
+        if processed.reboot_requested:
             reboot_requested = True
             LOG.error("reboot requested after evaluating target '%s'", target.name)
             break

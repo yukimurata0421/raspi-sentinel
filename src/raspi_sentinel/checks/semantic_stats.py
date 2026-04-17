@@ -75,10 +75,11 @@ def stats_checks(
     observations: ObservationMap,
     now_wall_ts: float,
 ) -> None:
-    if target.stats_file is None:
+    stats_cfg = target.stats
+    if stats_cfg.stats_file is None:
         return
 
-    stats, failure = load_stats(target.stats_file)
+    stats, failure = load_stats(stats_cfg.stats_file)
     if failure is not None:
         failures.append(failure)
         return
@@ -90,7 +91,7 @@ def stats_checks(
     updated_ts, updated_ts_err = parse_ts(updated_ts_raw, "updated_at")
     if updated_ts is not None:
         observations["stats_age_sec"] = now_ts - updated_ts
-    if target.stats_updated_max_age_sec is not None:
+    if stats_cfg.stats_updated_max_age_sec is not None:
         if updated_ts_err is not None:
             failures.append(CheckFailure("semantic_updated_at", updated_ts_err))
         else:
@@ -98,30 +99,33 @@ def stats_checks(
                 failures.append(CheckFailure("semantic_updated_at", "updated_at missing timestamp"))
                 return
             age = now_ts - updated_ts
-            if age > target.stats_updated_max_age_sec:
+            if age > stats_cfg.stats_updated_max_age_sec:
                 failures.append(
                     CheckFailure(
                         "semantic_updated_at",
-                        f"updated_at stale: age={age:.1f}s max={target.stats_updated_max_age_sec}s",
+                        (
+                            "updated_at stale: "
+                            f"age={age:.1f}s max={stats_cfg.stats_updated_max_age_sec}s"
+                        ),
                     )
                 )
 
-    if target.stats_last_input_max_age_sec is not None:
+    if stats_cfg.stats_last_input_max_age_sec is not None:
         failure = age_check_from_stats(
             stats=stats,
             key="last_input_ts",
-            max_age_sec=target.stats_last_input_max_age_sec,
+            max_age_sec=stats_cfg.stats_last_input_max_age_sec,
             now_ts=now_ts,
             check_name="semantic_last_input_ts",
         )
         if failure:
             failures.append(failure)
 
-    if target.stats_last_success_max_age_sec is not None:
+    if stats_cfg.stats_last_success_max_age_sec is not None:
         failure = age_check_from_stats(
             stats=stats,
             key="last_success_ts",
-            max_age_sec=target.stats_last_success_max_age_sec,
+            max_age_sec=stats_cfg.stats_last_success_max_age_sec,
             now_ts=now_ts,
             check_name="semantic_last_success_ts",
         )
@@ -204,16 +208,17 @@ def external_status_checks(
     observations: ObservationMap,
     now_wall_ts: float,
 ) -> None:
-    if target.external_status_file is None:
+    ext_cfg = target.external
+    if ext_cfg.external_status_file is None:
         return
 
     try:
-        raw = target.external_status_file.read_text(encoding="utf-8")
+        raw = ext_cfg.external_status_file.read_text(encoding="utf-8")
     except FileNotFoundError:
         failures.append(
             CheckFailure(
                 "semantic_external_status_file",
-                f"external status file missing: {target.external_status_file}",
+                f"external status file missing: {ext_cfg.external_status_file}",
             )
         )
         return
@@ -221,7 +226,7 @@ def external_status_checks(
         failures.append(
             CheckFailure(
                 "semantic_external_status_file",
-                f"cannot read external status file {target.external_status_file}: {exc}",
+                f"cannot read external status file {ext_cfg.external_status_file}: {exc}",
             )
         )
         return
@@ -232,7 +237,7 @@ def external_status_checks(
         failures.append(
             CheckFailure(
                 "semantic_external_status_file",
-                f"invalid JSON in external status file {target.external_status_file}: {exc}",
+                f"invalid JSON in external status file {ext_cfg.external_status_file}: {exc}",
             )
         )
         return
@@ -241,7 +246,7 @@ def external_status_checks(
         failures.append(
             CheckFailure(
                 "semantic_external_status_file",
-                f"external status file root must be JSON object: {target.external_status_file}",
+                f"external status file root must be JSON object: {ext_cfg.external_status_file}",
             )
         )
         return
@@ -253,10 +258,10 @@ def external_status_checks(
         updated_age = now_wall_ts - updated_ts
         observations["external_status_updated_age_sec"] = updated_age
     startup_grace_active = updated_age is not None and updated_age <= float(
-        target.external_status_startup_grace_sec
+        ext_cfg.external_status_startup_grace_sec
     )
     observations["external_status_startup_grace_active"] = startup_grace_active
-    if target.external_status_updated_max_age_sec is not None:
+    if ext_cfg.external_status_updated_max_age_sec is not None:
         if updated_err is not None:
             failures.append(CheckFailure("semantic_external_updated_at", updated_err))
         elif updated_ts is None:
@@ -265,18 +270,18 @@ def external_status_checks(
             )
         else:
             age = now_wall_ts - updated_ts
-            if age > target.external_status_updated_max_age_sec:
+            if age > ext_cfg.external_status_updated_max_age_sec:
                 failures.append(
                     CheckFailure(
                         "semantic_external_updated_at",
                         (
                             "updated_at stale: "
-                            f"age={age:.1f}s max={target.external_status_updated_max_age_sec}s"
+                            f"age={age:.1f}s max={ext_cfg.external_status_updated_max_age_sec}s"
                         ),
                     )
                 )
 
-    if target.external_status_last_progress_max_age_sec is not None:
+    if ext_cfg.external_status_last_progress_max_age_sec is not None:
         progress_raw = payload.get("last_progress_ts")
         if (
             progress_raw is None or (isinstance(progress_raw, str) and not progress_raw.strip())
@@ -297,7 +302,7 @@ def external_status_checks(
                 progress_age = now_wall_ts - progress_ts
                 observations["external_last_progress_age_sec"] = progress_age
                 if (
-                    progress_age > target.external_status_last_progress_max_age_sec
+                    progress_age > ext_cfg.external_status_last_progress_max_age_sec
                     and not startup_grace_active
                 ):
                     failures.append(
@@ -306,12 +311,12 @@ def external_status_checks(
                             (
                                 "last_progress_ts stale: "
                                 f"age={progress_age:.1f}s "
-                                f"max={target.external_status_last_progress_max_age_sec}s"
+                                f"max={ext_cfg.external_status_last_progress_max_age_sec}s"
                             ),
                         )
                     )
 
-    if target.external_status_last_success_max_age_sec is not None:
+    if ext_cfg.external_status_last_success_max_age_sec is not None:
         success_raw = payload.get("last_success_ts")
         if (
             success_raw is None or (isinstance(success_raw, str) and not success_raw.strip())
@@ -332,7 +337,7 @@ def external_status_checks(
                 success_age = now_wall_ts - success_ts
                 observations["external_last_success_age_sec"] = success_age
                 if (
-                    success_age > target.external_status_last_success_max_age_sec
+                    success_age > ext_cfg.external_status_last_success_max_age_sec
                     and not startup_grace_active
                 ):
                     failures.append(
@@ -341,7 +346,7 @@ def external_status_checks(
                             (
                                 "last_success_ts stale: "
                                 f"age={success_age:.1f}s "
-                                f"max={target.external_status_last_success_max_age_sec}s"
+                                f"max={ext_cfg.external_status_last_success_max_age_sec}s"
                             ),
                         )
                     )
@@ -357,7 +362,7 @@ def external_status_checks(
     elif isinstance(internal_state_raw, str):
         normalized_state = internal_state_raw.strip().lower()
         observations["external_internal_state"] = normalized_state
-        unhealthy_values = {v.strip().lower() for v in target.external_status_unhealthy_values}
+        unhealthy_values = {v.strip().lower() for v in ext_cfg.external_status_unhealthy_values}
         if normalized_state in unhealthy_values:
             failures.append(
                 CheckFailure(

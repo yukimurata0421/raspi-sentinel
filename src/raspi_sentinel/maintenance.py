@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import shlex
 import subprocess
-from typing import Any
 
+from .config import TargetConfig
 from .state_models import TargetState
 
 
@@ -35,7 +35,7 @@ def run_command_success(command: str, timeout_sec: int, use_shell: bool) -> bool
 
 
 def is_target_suppressed_by_maintenance(
-    target: Any,
+    target: TargetConfig,
     target_state: TargetState,
     now_ts: float,
 ) -> tuple[bool, str]:
@@ -45,20 +45,20 @@ def is_target_suppressed_by_maintenance(
         remain = int(suppress_until - now_ts)
         return True, f"grace active ({remain}s remaining)"
 
-    command = target.maintenance_mode_command
+    command = target.maintenance.maintenance_mode_command
     if not command:
         return False, ""
 
-    timeout = target.maintenance_mode_timeout_sec or 10
+    timeout = target.maintenance.maintenance_mode_timeout_sec or 10
     matched = run_command_success(
         command=command,
         timeout_sec=timeout,
-        use_shell=bool(target.maintenance_mode_use_shell),
+        use_shell=bool(target.maintenance.maintenance_mode_use_shell),
     )
     if not matched:
         return False, ""
 
-    grace_sec = target.maintenance_grace_sec or 0
+    grace_sec = target.maintenance.maintenance_grace_sec or 0
     if grace_sec > 0:
         target_state.maintenance_suppress_until_ts = now_ts + grace_sec
     return True, "maintenance mode command matched"

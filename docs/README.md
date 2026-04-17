@@ -12,6 +12,7 @@ This index is the entry point for operational and design documentation of `raspi
 - [Operations Runbook](facts/operations-runbook.md)
 - [Data Contracts](facts/data-contracts.md)
 - [改善提案対応状況](facts/improvement-status.md)
+- [レビュー対応メモ (2026-04-18)](facts/review-followup-2026-04-18.md)
 - [Exit Codes](facts/exit-codes.md)
 - [Time Health Decision Table](time-health-decision-table.md)
 
