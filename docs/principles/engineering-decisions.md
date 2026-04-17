@@ -70,7 +70,7 @@ Rationale: Config carries shell commands and optional webhook secrets. Group/wor
 
 ### 3-1. Use `TargetState` as mutation boundary
 
-Locations: [src/raspi_sentinel/state_models.py](../../src/raspi_sentinel/state_models.py), [src/raspi_sentinel/recovery.py](../../src/raspi_sentinel/recovery.py), [src/raspi_sentinel/checks.py](../../src/raspi_sentinel/checks.py), [src/raspi_sentinel/time_health.py](../../src/raspi_sentinel/time_health.py)
+Locations: [src/raspi_sentinel/state_models.py](../../src/raspi_sentinel/state_models.py), [src/raspi_sentinel/recovery.py](../../src/raspi_sentinel/recovery.py), [src/raspi_sentinel/checks/__init__.py](../../src/raspi_sentinel/checks/__init__.py), [src/raspi_sentinel/time_health.py](../../src/raspi_sentinel/time_health.py)
 
 Rationale: Centralizing mutable per-target fields in a model prevents drift from ad-hoc dict writes and improves maintainability.
 
@@ -126,13 +126,13 @@ Rationale: Reboot is destructive. The system requires repeated freeze evidence a
 
 ### 5-4. Separate DNS vs gateway failure classes
 
-Locations: [src/raspi_sentinel/checks.py](../../src/raspi_sentinel/checks.py), [src/raspi_sentinel/policy.py](../../src/raspi_sentinel/policy.py)
+Locations: [src/raspi_sentinel/checks/__init__.py](../../src/raspi_sentinel/checks/__init__.py), [src/raspi_sentinel/policy.py](../../src/raspi_sentinel/policy.py)
 
 Rationale: DNS failures and path failures have different remediation paths. Mixing them leads to unnecessary reboot behavior.
 
 ### 5-5. Layer network_uplink evidence from link to HTTP
 
-Locations: [src/raspi_sentinel/checks.py](../../src/raspi_sentinel/checks.py), [src/raspi_sentinel/policy.py](../../src/raspi_sentinel/policy.py), [src/raspi_sentinel/time_health.py](../../src/raspi_sentinel/time_health.py)
+Locations: [src/raspi_sentinel/checks/__init__.py](../../src/raspi_sentinel/checks/__init__.py), [src/raspi_sentinel/policy.py](../../src/raspi_sentinel/policy.py), [src/raspi_sentinel/time_health.py](../../src/raspi_sentinel/time_health.py)
 
 Decision:
 
@@ -177,7 +177,7 @@ Rationale: Operational consumers must distinguish "probe unavailable" from "prob
 
 ### 5-8. Define HTTP probe success as 2xx only and classify failures explicitly
 
-Locations: [src/raspi_sentinel/checks.py](../../src/raspi_sentinel/checks.py), [src/raspi_sentinel/status_events.py](../../src/raspi_sentinel/status_events.py), [src/raspi_sentinel/monitor_stats.py](../../src/raspi_sentinel/monitor_stats.py)
+Locations: [src/raspi_sentinel/checks/__init__.py](../../src/raspi_sentinel/checks/__init__.py), [src/raspi_sentinel/status_events.py](../../src/raspi_sentinel/status_events.py), [src/raspi_sentinel/monitor_stats.py](../../src/raspi_sentinel/monitor_stats.py)
 
 Decision:
 
@@ -189,7 +189,7 @@ Rationale: Status-line parse success alone is not network/application health. Di
 
 ### 5-9. Keep `link_ok` as summary and export link/gateway evidence details
 
-Locations: [src/raspi_sentinel/checks.py](../../src/raspi_sentinel/checks.py), [src/raspi_sentinel/status_events.py](../../src/raspi_sentinel/status_events.py), [src/raspi_sentinel/monitor_stats.py](../../src/raspi_sentinel/monitor_stats.py)
+Locations: [src/raspi_sentinel/checks/__init__.py](../../src/raspi_sentinel/checks/__init__.py), [src/raspi_sentinel/status_events.py](../../src/raspi_sentinel/status_events.py), [src/raspi_sentinel/monitor_stats.py](../../src/raspi_sentinel/monitor_stats.py)
 
 Decision:
 
@@ -231,7 +231,7 @@ Rationale: Snapshot and history serve different query patterns. Split surfaces k
 
 ### 7-1. Treat shell commands as trusted admin input only
 
-Locations: [README.md](../../README.md), [src/raspi_sentinel/checks.py](../../src/raspi_sentinel/checks.py)
+Locations: [README.md](../../README.md), [src/raspi_sentinel/checks/__init__.py](../../src/raspi_sentinel/checks/__init__.py)
 
 Rationale: Command checks run via shell execution. The trust boundary is local admin ownership, not untrusted multi-tenant input.
 

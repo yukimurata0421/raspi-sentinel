@@ -172,9 +172,9 @@ def build_event_evidence(result: CheckResult) -> dict[str, Any]:
     for field_name in nullable_fields:
         if field_name not in observations:
             continue
-        value = observations.get(field_name)
-        if value is None or isinstance(value, (bool, int, float, str)):
-            payload[field_name] = value
+        raw_value = observations.get(field_name)
+        if raw_value is None or isinstance(raw_value, (bool, int, float, str)):
+            payload[field_name] = raw_value
 
     return payload
 

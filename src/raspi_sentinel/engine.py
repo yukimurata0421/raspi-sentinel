@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable, TypedDict
 
 from .checks import CheckResult, apply_records_progress_check, run_checks
 from .config import AppConfig, TargetConfig
@@ -15,6 +16,7 @@ from .cycle_notifications import (
     send_periodic_heartbeat,
     send_recovery_notification,
 )
+from .exit_codes import REBOOT_REQUESTED, STATE_LOCK_ERROR, STATE_PERSIST_FAILED, UNHEALTHY
 from .maintenance import is_target_suppressed_by_maintenance
 from .monitor_stats import maybe_write_monitor_stats
 from .notify import DiscordNotifier, format_failures
@@ -31,6 +33,42 @@ from .status_events import (
 from .time_health import apply_time_health_checks
 
 LOG = logging.getLogger(__name__)
+
+
+class FailureReport(TypedDict):
+    check: str
+    message: str
+
+
+class TargetReport(TypedDict, total=False):
+    status: str
+    reason: str
+    subreason: str
+    action: str
+    healthy: bool
+    evidence: dict[str, object]
+    failures: list[FailureReport]
+
+
+class CycleReport(TypedDict, total=False):
+    updated_at: str
+    overall_status: str
+    dry_run: bool
+    reboot_requested: bool
+    targets: dict[str, TargetReport]
+    limited_mode: bool
+    state_persisted: bool
+    state_issue: str
+    state_corrupt_backup_path: str
+    reason: str
+
+
+@dataclass(slots=True)
+class TargetEvaluationArtifacts:
+    target_results: dict[str, CheckResult]
+    target_reports: dict[str, TargetReport]
+    unhealthy_count: int
+    reboot_requested: bool
 
 
 def evaluate_target(
@@ -166,7 +204,7 @@ def persist_cycle_outputs(
     )
 
 
-def _overall_status(target_reports: dict[str, dict[str, Any]]) -> str:
+def _overall_status(target_reports: dict[str, TargetReport]) -> str:
     has_failed = any(report.get("status") == "failed" for report in target_reports.values())
     if has_failed:
         return "failed"
@@ -188,7 +226,7 @@ def _record_state_load_issue_event(
 
     ts_text = datetime.fromtimestamp(now_ts).astimezone().isoformat(timespec="seconds")
     kind = "state_corrupted" if diagnostics.state_corrupted else "state_load_error"
-    event: dict[str, Any] = {
+    event: dict[str, object] = {
         "ts": ts_text,
         "kind": kind,
         "reason": diagnostics.state_load_error or kind,
@@ -203,32 +241,51 @@ def _record_state_load_issue_event(
     )
 
 
-def _run_cycle_collect_locked(
+def _maintenance_suppressed_report() -> TargetReport:
+    return {
+        "status": "ok",
+        "reason": "maintenance_suppressed",
+        "action": "none",
+        "healthy": True,
+        "evidence": {},
+    }
+
+
+def _result_report(
+    policy: PolicySnapshot, outcome: RecoveryOutcome, result: CheckResult
+) -> TargetReport:
+    report_payload: TargetReport = {
+        "status": policy.status,
+        "reason": policy.reason,
+        "action": outcome.action,
+        "healthy": result.healthy,
+        "evidence": build_event_evidence(result),
+    }
+    if policy.subreason is not None:
+        report_payload["subreason"] = policy.subreason
+    if result.failures:
+        report_payload["failures"] = [
+            {"check": failure.check, "message": failure.message} for failure in result.failures
+        ]
+    return report_payload
+
+
+def _evaluate_targets_phase(
     config: AppConfig,
+    state: GlobalState,
     dry_run: bool,
-    store: StateStore,
     now_ts: float,
     mono_provider: Callable[[], float],
-) -> tuple[int, dict[str, Any]]:
-    state, state_diagnostics = store.load_with_diagnostics()
-    limited_mode = state_diagnostics.limited_mode
-    notifier = DiscordNotifier(config.notify_config.discord)
-
+    limited_mode: bool,
+    notifier: DiscordNotifier,
+    events_file: Path,
+    events_max: int,
+    events_backups: int,
+) -> TargetEvaluationArtifacts:
     unhealthy_count = 0
     reboot_requested = False
     target_results: dict[str, CheckResult] = {}
-    target_reports: dict[str, dict[str, Any]] = {}
-    events_file = config.global_config.events_file
-    events_max = config.global_config.events_max_file_bytes
-    events_backups = config.global_config.events_backup_generations
-
-    _record_state_load_issue_event(
-        diagnostics=state_diagnostics,
-        events_file=events_file,
-        max_file_bytes=events_max,
-        backup_generations=events_backups,
-        now_ts=now_ts,
-    )
+    target_reports: dict[str, TargetReport] = {}
 
     for target in config.targets:
         before = state.ensure_target(target.name)
@@ -241,13 +298,7 @@ def _run_cycle_collect_locked(
             now_mono_ts=mono_provider(),
         )
         if evaluated is None:
-            target_reports[target.name] = {
-                "status": "ok",
-                "reason": "maintenance_suppressed",
-                "action": "none",
-                "healthy": True,
-                "evidence": {},
-            }
+            target_reports[target.name] = _maintenance_suppressed_report()
             continue
 
         result, policy = evaluated
@@ -297,78 +348,144 @@ def _run_cycle_collect_locked(
             now_ts=now_ts,
         )
 
-        report_payload: dict[str, Any] = {
-            "status": policy.status,
-            "reason": policy.reason,
-            "action": outcome.action,
-            "healthy": result.healthy,
-            "evidence": build_event_evidence(result),
-        }
-        if policy.subreason is not None:
-            report_payload["subreason"] = policy.subreason
-        if result.failures:
-            report_payload["failures"] = [
-                {"check": failure.check, "message": failure.message} for failure in result.failures
-            ]
-        target_reports[target.name] = report_payload
+        target_reports[target.name] = _result_report(policy=policy, outcome=outcome, result=result)
 
         if outcome.requested_reboot:
             reboot_requested = True
             LOG.error("reboot requested after evaluating target '%s'", target.name)
             break
 
-    if notifier.enabled:
-        send_due_followups(
-            notifier=notifier,
-            state=state,
-            target_results=target_results,
-            now_ts=now_ts,
-            events_file=events_file,
-            events_max_bytes=events_max,
-            events_backup_generations=events_backups,
-        )
-        send_periodic_heartbeat(
-            notifier=notifier,
-            state=state,
-            target_results=target_results,
-            now_ts=now_ts,
-            events_file=events_file,
-            events_max_bytes=events_max,
-            events_backup_generations=events_backups,
-        )
-        send_delivery_backlog_summary(
-            notifier=notifier,
-            state=state,
-            now_ts=now_ts,
-            events_file=events_file,
-            events_max_bytes=events_max,
-            events_backup_generations=events_backups,
-        )
+    return TargetEvaluationArtifacts(
+        target_results=target_results,
+        target_reports=target_reports,
+        unhealthy_count=unhealthy_count,
+        reboot_requested=reboot_requested,
+    )
 
-    maybe_write_monitor_stats(
-        config=config,
+
+def _run_notification_phase(
+    *,
+    notifier: DiscordNotifier,
+    state: GlobalState,
+    target_results: dict[str, CheckResult],
+    now_ts: float,
+    events_file: Path,
+    events_max: int,
+    events_backups: int,
+) -> None:
+    if not notifier.enabled:
+        return
+    send_due_followups(
+        notifier=notifier,
         state=state,
         target_results=target_results,
         now_ts=now_ts,
+        events_file=events_file,
+        events_max_bytes=events_max,
+        events_backup_generations=events_backups,
+    )
+    send_periodic_heartbeat(
+        notifier=notifier,
+        state=state,
+        target_results=target_results,
+        now_ts=now_ts,
+        events_file=events_file,
+        events_max_bytes=events_max,
+        events_backup_generations=events_backups,
+    )
+    send_delivery_backlog_summary(
+        notifier=notifier,
+        state=state,
+        now_ts=now_ts,
+        events_file=events_file,
+        events_max_bytes=events_max,
+        events_backup_generations=events_backups,
     )
 
+
+def _build_cycle_report(
+    *,
+    dry_run: bool,
+    now_ts: float,
+    limited_mode: bool,
+    reboot_requested: bool,
+    target_reports: dict[str, TargetReport],
+    state_diagnostics: StateLoadDiagnostics,
+    state_persisted: bool,
+) -> CycleReport:
     updated_at = datetime.fromtimestamp(now_ts).astimezone().isoformat(timespec="seconds")
     overall_status = _overall_status(target_reports)
     if limited_mode and overall_status == "ok":
         overall_status = "degraded"
-    report: dict[str, Any] = {
+
+    report: CycleReport = {
         "updated_at": updated_at,
         "overall_status": overall_status,
         "dry_run": dry_run,
         "reboot_requested": reboot_requested,
         "targets": target_reports,
         "limited_mode": limited_mode,
-        "state_persisted": False,
+        "state_persisted": state_persisted,
     }
     if state_diagnostics.state_load_error:
         report["state_issue"] = state_diagnostics.state_load_error
     if state_diagnostics.corrupt_backup_path is not None:
         report["state_corrupt_backup_path"] = str(state_diagnostics.corrupt_backup_path)
+    return report
+
+
+def _run_cycle_collect_locked(
+    config: AppConfig,
+    dry_run: bool,
+    store: StateStore,
+    now_ts: float,
+    mono_provider: Callable[[], float],
+) -> tuple[int, CycleReport]:
+    state, state_diagnostics = store.load_with_diagnostics()
+    limited_mode = state_diagnostics.limited_mode
+    notifier = DiscordNotifier(config.notify_config.discord)
+
+    events_file = config.global_config.events_file
+    events_max = config.global_config.events_max_file_bytes
+    events_backups = config.global_config.events_backup_generations
+
+    _record_state_load_issue_event(
+        diagnostics=state_diagnostics,
+        events_file=events_file,
+        max_file_bytes=events_max,
+        backup_generations=events_backups,
+        now_ts=now_ts,
+    )
+
+    artifacts = _evaluate_targets_phase(
+        config=config,
+        state=state,
+        dry_run=dry_run,
+        now_ts=now_ts,
+        mono_provider=mono_provider,
+        limited_mode=limited_mode,
+        notifier=notifier,
+        events_file=events_file,
+        events_max=events_max,
+        events_backups=events_backups,
+    )
+
+    _run_notification_phase(
+        notifier=notifier,
+        state=state,
+        target_results=artifacts.target_results,
+        now_ts=now_ts,
+        events_file=events_file,
+        events_max=events_max,
+        events_backups=events_backups,
+    )
+
+    maybe_write_monitor_stats(
+        config=config,
+        state=state,
+        target_results=artifacts.target_results,
+        now_ts=now_ts,
+    )
 
     persisted = persist_cycle_outputs(
         store=store,
@@ -376,15 +493,24 @@ def _run_cycle_collect_locked(
         max_file_bytes=config.global_config.state_max_file_bytes,
         max_reboots_entries=config.global_config.state_reboots_max_entries,
     )
-    report["state_persisted"] = persisted
+
+    report = _build_cycle_report(
+        dry_run=dry_run,
+        now_ts=now_ts,
+        limited_mode=limited_mode,
+        reboot_requested=artifacts.reboot_requested,
+        target_reports=artifacts.target_reports,
+        state_diagnostics=state_diagnostics,
+        state_persisted=persisted,
+    )
+
     if not persisted:
         LOG.error("cycle state persistence failed")
-        return 14, report
-
-    if reboot_requested:
-        return 2, report
-    if unhealthy_count or limited_mode:
-        return 1, report
+        return STATE_PERSIST_FAILED, report
+    if artifacts.reboot_requested:
+        return REBOOT_REQUESTED, report
+    if artifacts.unhealthy_count or limited_mode:
+        return UNHEALTHY, report
     return 0, report
 
 
@@ -393,7 +519,7 @@ def run_cycle_collect(
     dry_run: bool,
     time_provider: Callable[[], float],
     mono_provider: Callable[[], float],
-) -> tuple[int, dict[str, Any]]:
+) -> tuple[int, CycleReport]:
     store = StateStore(config.global_config.state_file)
     try:
         with store.exclusive_lock(timeout_sec=config.global_config.state_lock_timeout_sec):
@@ -410,7 +536,7 @@ def run_cycle_collect(
         now_ts = time_provider()
         updated_at = datetime.fromtimestamp(now_ts).astimezone().isoformat(timespec="seconds")
         reason = "state_lock_timeout" if isinstance(exc, TimeoutError) else "state_lock_error"
-        report = {
+        report: CycleReport = {
             "updated_at": updated_at,
             "overall_status": "failed",
             "dry_run": dry_run,
@@ -420,4 +546,4 @@ def run_cycle_collect(
             "state_persisted": False,
             "limited_mode": False,
         }
-        return 13, report
+        return STATE_LOCK_ERROR, report

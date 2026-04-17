@@ -8,14 +8,20 @@ from pathlib import Path
 
 from .config import AppConfig, load_config
 from .config_summary import build_config_validation_report, format_config_validation_report
-from .engine import run_cycle_collect
+from .engine import CycleReport, run_cycle_collect
+from .exit_codes import (
+    CONFIG_LOAD_FAILED,
+    INVALID_INTERVAL,
+    REBOOT_REQUESTED,
+    VALIDATION_WARNING,
+)
 from .logging_utils import configure_logging
 from .state_helpers import safe_int
 
 LOG = logging.getLogger(__name__)
 
 
-def _run_cycle_collect(config: AppConfig, dry_run: bool) -> tuple[int, dict[str, object]]:
+def _run_cycle_collect(config: AppConfig, dry_run: bool) -> tuple[int, CycleReport]:
     rc, report = run_cycle_collect(
         config=config,
         dry_run=dry_run,
@@ -47,6 +53,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Evaluate and log actions but do not restart/reboot",
     )
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
+    parser.add_argument(
+        "--structured-logging",
+        action="store_true",
+        help="Emit logs as JSON lines for machine ingestion",
+    )
 
     sub = parser.add_subparsers(dest="command", required=True)
     run_once_parser = sub.add_parser("run-once", help="Run one health/recovery evaluation cycle")
@@ -86,13 +97,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
-    configure_logging(verbose=args.verbose)
+    configure_logging(verbose=args.verbose, structured=args.structured_logging)
 
     try:
         config = load_config(args.config)
     except Exception as exc:
         LOG.error("failed to load config '%s': %s", args.config, exc)
-        return 10
+        return CONFIG_LOAD_FAILED
 
     if args.command == "run-once":
         rc, report = _run_cycle_collect(config=config, dry_run=args.dry_run)
@@ -104,24 +115,27 @@ def main(argv: list[str] | None = None) -> int:
         interval = args.interval_sec or config.global_config.loop_interval_sec
         if interval <= 0:
             LOG.error("loop interval must be > 0")
-            return 11
+            return INVALID_INTERVAL
 
         LOG.info("starting loop mode interval=%ss", interval)
         while True:
             rc = _run_cycle(config=config, dry_run=args.dry_run)
-            if rc == 2:
+            if rc == REBOOT_REQUESTED:
                 LOG.error("reboot was requested; exiting loop")
                 return 0
             time.sleep(interval)
 
     # args.command == "validate-config" (only remaining subcommand)
-    report = build_config_validation_report(config_path=args.config, config=config)
+    config_report = build_config_validation_report(config_path=args.config, config=config)
     if args.json:
-        print(json.dumps(report, indent=2, sort_keys=True))
+        print(json.dumps(config_report, indent=2, sort_keys=True))
     else:
-        print(format_config_validation_report(report))
-    warning_count = safe_int(report.get("warning_count"), 0)
+        print(format_config_validation_report(config_report))
+    warning_count = safe_int(config_report.get("warning_count"), 0)
     if args.strict and warning_count > 0:
-        LOG.error("validate-config strict mode failed: warnings=%s", report["warning_count"])
-        return 15
+        LOG.error(
+            "validate-config strict mode failed: warnings=%s",
+            config_report["warning_count"],
+        )
+        return VALIDATION_WARNING
     return 0

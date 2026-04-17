@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast
 
 from .checks import CheckResult
+from .checks.models import Observations
 from .state_helpers import safe_bool, safe_float, safe_int
 from .state_models import TargetState
 
@@ -43,7 +44,7 @@ def classify_target_policy(
     target_state: TargetState | None = None,
 ) -> PolicySnapshot:
     checks = {failure.check for failure in result.failures}
-    observations = result.observations
+    observations = cast(Observations, result.observations)
     previous_reason = ""
     if target_state is not None:
         previous_reason = target_state.last_reason or ""

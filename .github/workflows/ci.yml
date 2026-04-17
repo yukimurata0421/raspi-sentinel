@@ -79,7 +79,7 @@ jobs:
       - name: Core checks + recovery gate
         run: |
           python -m coverage report \
-            --include="*/raspi_sentinel/checks.py,*/raspi_sentinel/recovery.py" \
+            --include="*/raspi_sentinel/checks/*.py,*/raspi_sentinel/recovery.py" \
             --fail-under=88
       - name: Notification pipeline gate
         run: |

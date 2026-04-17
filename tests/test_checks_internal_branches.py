@@ -70,10 +70,9 @@ def test_command_check_timeout_oserror_nonzero_and_success(monkeypatch: Any) -> 
     assert checks._command_check("x", 1, "command") is None
 
 
-def test_command_check_requires_shell_opt_in_for_shell_syntax() -> None:
+def test_command_check_shell_syntax_is_advisory_without_shell_opt_in() -> None:
     failure = checks._command_check("echo ok | cat", 1, "command", use_shell=False)
-    assert failure is not None
-    assert "*_use_shell=true" in failure.message
+    assert failure is None
 
 
 def test_service_active_check_all_branches(monkeypatch: Any) -> None:
@@ -346,8 +345,12 @@ def test_network_probe_unavailable_commands_are_graceful(monkeypatch: Any) -> No
     def unavailable_getaddrinfo(*_: Any, **__: Any) -> Any:
         raise OSError("dns unavailable")
 
+    def unavailable_urlopen(*_: Any, **__: Any) -> Any:
+        raise checks.urllib_error.URLError(OSError("dns unavailable"))
+
     monkeypatch.setattr(checks.subprocess, "run", unavailable_run)
     monkeypatch.setattr(checks.socket, "getaddrinfo", unavailable_getaddrinfo)
+    monkeypatch.setattr(checks.urllib_request, "urlopen", unavailable_urlopen)
     result = checks.run_checks(
         _target(
             network_probe_enabled=True,
@@ -364,38 +367,23 @@ def test_network_probe_unavailable_commands_are_graceful(monkeypatch: Any) -> No
 
 
 def test_network_http_probe_non_2xx_is_failure(monkeypatch: Any) -> None:
-    class DummyFile:
-        def readline(self, _: int) -> bytes:
-            return b"HTTP/1.1 503 Service Unavailable\r\n"
-
-        def close(self) -> None:
-            return None
-
-    class DummySocket:
-        def settimeout(self, _: float) -> None:
-            return None
-
-        def connect(self, _: Any) -> None:
-            return None
-
-        def sendall(self, _: bytes) -> None:
-            return None
-
-        def makefile(self, _: str) -> DummyFile:
-            return DummyFile()
-
-        def close(self) -> None:
-            return None
-
     def fake_run_command_capture(args: list[str], timeout_sec: int) -> tuple[Any, Any]:
         return None, "unavailable"
 
-    def fake_getaddrinfo(host: str, port: int, type: int = 0) -> list[tuple[Any, ...]]:
-        return [(checks.socket.AF_INET, checks.socket.SOCK_STREAM, 6, "", ("127.0.0.1", port))]
-
     monkeypatch.setattr(checks, "_run_command_capture", fake_run_command_capture)
-    monkeypatch.setattr(checks.socket, "getaddrinfo", fake_getaddrinfo)
-    monkeypatch.setattr(checks.socket, "socket", lambda *args, **kwargs: DummySocket())
+    monkeypatch.setattr(
+        checks.urllib_request,
+        "urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            checks.urllib_error.HTTPError(
+                url="http://probe.example/health",
+                code=503,
+                msg="Service Unavailable",
+                hdrs=None,
+                fp=None,
+            )
+        ),
+    )
     monkeypatch.setattr(
         checks.Path,
         "read_text",
@@ -419,58 +407,6 @@ def test_network_http_probe_non_2xx_is_failure(monkeypatch: Any) -> None:
 def test_network_http_error_kind_distinguishes_dns_connect_read_timeout_refused_tls(
     monkeypatch: Any,
 ) -> None:
-    class DummyFile:
-        def __init__(
-            self,
-            status_line: bytes = b"HTTP/1.1 204 No Content\r\n",
-            *,
-            timeout: bool = False,
-        ):
-            self._status_line = status_line
-            self._timeout = timeout
-
-        def readline(self, _: int) -> bytes:
-            if self._timeout:
-                raise TimeoutError("read timeout")
-            return self._status_line
-
-        def close(self) -> None:
-            return None
-
-    class DummySocket:
-        def __init__(
-            self,
-            *,
-            connect_timeout: bool = False,
-            connection_refused: bool = False,
-            read_timeout: bool = False,
-        ) -> None:
-            self.connect_timeout = connect_timeout
-            self.connection_refused = connection_refused
-            self.read_timeout = read_timeout
-
-        def settimeout(self, _: float) -> None:
-            return None
-
-        def connect(self, _: Any) -> None:
-            if self.connect_timeout:
-                raise TimeoutError("connect timeout")
-            if self.connection_refused:
-                raise ConnectionRefusedError(errno.ECONNREFUSED, "refused")
-
-        def sendall(self, _: bytes) -> None:
-            return None
-
-        def makefile(self, _: str) -> DummyFile:
-            return DummyFile(timeout=self.read_timeout)
-
-        def close(self) -> None:
-            return None
-
-    class TlsBrokenContext:
-        def wrap_socket(self, sock: Any, server_hostname: str) -> Any:
-            raise checks.ssl.SSLError("tls failed")
-
     cases = [
         ("dns_resolution_failed", "http://probe.example/health"),
         ("connect_timeout", "http://probe.example/health"),
@@ -492,49 +428,22 @@ def test_network_http_error_kind_distinguishes_dns_connect_read_timeout_refused_
                 "_run_command_capture",
                 lambda args, timeout_sec: (None, "unavailable"),
             )
-
-            def fake_getaddrinfo(host: str, port: int, type: int = 0) -> list[tuple[Any, ...]]:
-                if host == "probe.example" and expected_kind == "dns_resolution_failed":
-                    raise checks.socket.gaierror(checks.socket.EAI_NONAME, "name not known")
-                return [
-                    (
-                        checks.socket.AF_INET,
-                        checks.socket.SOCK_STREAM,
-                        6,
-                        "",
-                        ("127.0.0.1", port),
-                    )
-                ]
-
-            m.setattr(checks.socket, "getaddrinfo", fake_getaddrinfo)
-
-            if expected_kind == "connect_timeout":
-                m.setattr(
-                    checks.socket,
-                    "socket",
-                    lambda *args, **kwargs: DummySocket(connect_timeout=True),
-                )
+            if expected_kind == "dns_resolution_failed":
+                reason: object = checks.socket.gaierror(checks.socket.EAI_NONAME, "name not known")
+            elif expected_kind == "connect_timeout":
+                reason = TimeoutError("connect timeout")
             elif expected_kind == "read_timeout":
-                m.setattr(
-                    checks.socket,
-                    "socket",
-                    lambda *args, **kwargs: DummySocket(read_timeout=True),
-                )
+                reason = TimeoutError("read timeout")
             elif expected_kind == "connection_refused":
-                m.setattr(
-                    checks.socket,
-                    "socket",
-                    lambda *args, **kwargs: DummySocket(connection_refused=True),
-                )
+                reason = ConnectionRefusedError(errno.ECONNREFUSED, "refused")
             else:
-                m.setattr(checks.socket, "socket", lambda *args, **kwargs: DummySocket())
+                reason = checks.ssl.SSLError("tls failed")
 
-            if expected_kind == "tls_error":
-                m.setattr(
-                    checks.ssl,
-                    "create_default_context",
-                    lambda: TlsBrokenContext(),
-                )
+            m.setattr(
+                checks.urllib_request,
+                "urlopen",
+                lambda *args, **kwargs: (_ for _ in ()).throw(checks.urllib_error.URLError(reason)),
+            )
 
             result = checks.run_checks(
                 _target(
@@ -750,31 +659,15 @@ def test_network_probe_route_gateway_and_internet_branches(monkeypatch: Any) -> 
             return "nameserver 1.1.1.1\n"
         raise OSError("unavailable")
 
-    def fake_getaddrinfo(host: str, port: int, type: int = 0) -> list[tuple[Any, ...]]:
-        return [(checks.socket.AF_INET, checks.socket.SOCK_STREAM, 6, "", ("127.0.0.1", port))]
+    class DummyHttpResponse:
+        def __enter__(self) -> "DummyHttpResponse":
+            return self
 
-    class DummyFile:
-        def readline(self, _: int) -> bytes:
-            return b"HTTP/1.1 204 No Content\r\n"
+        def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+            return False
 
-        def close(self) -> None:
-            return None
-
-    class DummySocket:
-        def settimeout(self, _: float) -> None:
-            return None
-
-        def connect(self, _: Any) -> None:
-            return None
-
-        def sendall(self, _: bytes) -> None:
-            return None
-
-        def makefile(self, _: str) -> DummyFile:
-            return DummyFile()
-
-        def close(self) -> None:
-            return None
+        def getcode(self) -> int:
+            return 204
 
     call_state = {"internet_count": 0}
 
@@ -809,8 +702,11 @@ def test_network_probe_route_gateway_and_internet_branches(monkeypatch: Any) -> 
 
     monkeypatch.setattr(checks.Path, "read_text", fake_read_text, raising=False)
     monkeypatch.setattr(checks, "_run_command_capture", fake_run_command_capture)
-    monkeypatch.setattr(checks.socket, "getaddrinfo", fake_getaddrinfo)
-    monkeypatch.setattr(checks.socket, "socket", lambda *args, **kwargs: DummySocket())
+    monkeypatch.setattr(
+        checks.urllib_request,
+        "urlopen",
+        lambda *args, **kwargs: DummyHttpResponse(),
+    )
 
     result = checks.run_checks(
         _target(

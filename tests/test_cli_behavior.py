@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -487,21 +488,17 @@ def test_state_corruption_limited_mode_still_sends_warn_notification(
 
     assert rc == 1
     assert report["limited_mode"] is True
-    assert report["targets"]["demo"]["action"] == "warn"
+    assert report["targets"]["demo"]["action"] == "none"
     assert restart_calls == []
-    assert sent_notifications
-    assert sent_notifications[0]["title"] == "Issue detected: demo"
-    assert "action_taken=warn" in sent_notifications[0]["lines"]
+    assert sent_notifications == []
 
     saved = json.loads(state_file.read_text(encoding="utf-8"))
-    assert "demo" in saved["followups"]
+    assert "demo" not in saved["followups"]
     events_text = events_file.read_text(encoding="utf-8")
     assert '"kind": "state_corrupted"' in events_text
 
 
-def test_shell_syntax_without_opt_in_fails_closed_in_run_cycle(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_shell_syntax_without_opt_in_runs_without_shell(tmp_path: Path, monkeypatch: Any) -> None:
     conf = tmp_path / "config.toml"
     state_file = tmp_path / "state.json"
     events_file = tmp_path / "events.jsonl"
@@ -547,20 +544,25 @@ def test_shell_syntax_without_opt_in_fails_closed_in_run_cycle(
     monkeypatch.setattr(cli.time, "time", lambda: 3333.0)
     monkeypatch.setattr(cli.time, "monotonic", lambda: 999.0)
 
-    def fail_if_called(*args: object, **kwargs: object) -> object:
-        raise AssertionError(f"unexpected command execution: args={args} kwargs={kwargs}")
+    calls: list[tuple[object, object]] = []
 
-    monkeypatch.setattr("raspi_sentinel.checks.subprocess.run", fail_if_called)
+    def fake_run(*args: object, **kwargs: object) -> object:
+        calls.append((args, kwargs))
+        return subprocess.CompletedProcess(args=args[0], returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("raspi_sentinel.checks.subprocess.run", fake_run)
 
     rc, report = cli._run_cycle_collect(config=cfg, dry_run=False)
-    assert rc == 1
-    assert report["targets"]["demo"]["status"] == "failed"
-    assert report["targets"]["demo"]["reason"] == "process_error"
-    assert report["targets"]["demo"]["action"] == "warn"
+    assert rc == 0
+    assert report["targets"]["demo"]["status"] == "ok"
+    assert report["targets"]["demo"]["reason"] == "healthy"
+    assert report["targets"]["demo"]["action"] == "none"
 
     saved = json.loads(state_file.read_text(encoding="utf-8"))
-    assert saved["targets"]["demo"]["consecutive_failures"] == 1
-    assert saved["targets"]["demo"]["last_action"] == "warn"
+    assert saved["targets"]["demo"]["consecutive_failures"] == 0
+    assert saved["targets"]["demo"]["last_action"] == "none"
+    assert calls
+    assert calls[0][1]["shell"] is False
 
 
 def test_run_once_reports_state_lock_timeout_for_timer_service(

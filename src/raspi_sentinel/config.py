@@ -761,17 +761,9 @@ def load_config(path: Path) -> AppConfig:
             external=ext_cfg,
         )
 
-        if target.command_timeout_sec is None and target.command is not None:
+        if target.command_timeout_sec is None:
             target.command_timeout_sec = global_config.default_command_timeout_sec
-        if deps.dependency_check_timeout_sec is None and (
-            deps.dns_check_command is not None
-            or deps.dns_server_check_command is not None
-            or deps.gateway_check_command is not None
-            or deps.link_check_command is not None
-            or deps.default_route_check_command is not None
-            or deps.internet_ip_check_command is not None
-            or deps.wan_vs_target_check_command is not None
-        ):
+        if deps.dependency_check_timeout_sec is None:
             deps.dependency_check_timeout_sec = global_config.default_command_timeout_sec
         if (
             maint_cfg.maintenance_mode_timeout_sec is None

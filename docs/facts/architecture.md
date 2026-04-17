@@ -5,7 +5,7 @@
 ## Runtime Components
 
 - **CLI orchestrator** (`cli.py`): executes one cycle (`run-once`) or repeated cycles (`loop`)
-- **Checks layer** (`checks.py`): process/dependency/semantic checks
+- **Checks layer** (`checks/` package): process/dependency/semantic checks
 - **Time-health layer** (`time_health.py`): monotonic vs wall-clock anomaly detection
 - **Policy layer** (`policy.py`): computes `status` and `reason`
 - **Recovery layer** (`recovery.py`): applies `warn -> restart -> reboot` actions

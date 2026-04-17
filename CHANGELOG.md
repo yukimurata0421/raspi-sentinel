@@ -6,6 +6,21 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ## [Unreleased]
 
+### Added
+
+- `docs/facts/exit-codes.md`: stable CLI exit code table (`0/1/2/10/11/13/14/15`).
+- `README.ja.md`: Japanese quickstart/operation guide.
+- CLI flag `--structured-logging` for JSON log output.
+
+### Changed
+
+- Checks implementation was split from monolithic `checks.py` into `src/raspi_sentinel/checks/` package modules:
+  - `models.py`, `file_checks.py`, `command_checks.py`, `semantic_stats.py`, `network_probes.py`, `runner.py`.
+  - package `checks/__init__.py` now exposes `run_checks` / `apply_records_progress_check`.
+- `engine.py`: `_run_cycle_collect_locked` was decomposed into phase helpers (`_evaluate_targets_phase`, `_run_notification_phase`, `_build_cycle_report`) and typed report payloads.
+- Exit-code literals moved to `src/raspi_sentinel/exit_codes.py` and referenced from CLI/engine.
+- Timeout default fallback behavior was centralized in config-load phase (`command_timeout_sec`, `dependency_check_timeout_sec` defaulting to global command timeout when omitted).
+
 ## [0.5.0] - 2026-04-17
 
 ### Added

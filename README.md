@@ -2,6 +2,8 @@
 
 `raspi-sentinel` is a small standalone logical recovery layer for Raspberry Pi services managed by `systemd`.
 
+Japanese guide: [README.ja.md](README.ja.md)
+
 ## Responsibility Boundary
 
 ## Security model (read this)
@@ -11,7 +13,7 @@
 - **Not** a multi-tenant or internet-facing control plane: do not pass untrusted user input into config fields.
 - Config commands run with `shell=False` by default.
 - Shell execution is explicit opt-in via `command_use_shell`, `dns_check_use_shell`, `gateway_check_use_shell`, `maintenance_mode_use_shell`.
-- If shell syntax is detected without opt-in, the check fails safely and is recorded.
+- If shell syntax is detected without opt-in, a warning is logged and command execution remains `shell=False`.
 - When running as **root**, restrict config file permissions (for example `chmod 600` / `root:root`) so webhook URLs and commands are not exposed to other local users.
 - On load, if the config file is **group- or world-writable**, a **warning** is logged (unsafe in shared-admin environments).
 
@@ -229,6 +231,12 @@ Everything is logged to journald:
 ```bash
 journalctl -u raspi-sentinel.service -n 200 --no-pager
 journalctl -u raspi-sentinel.timer -n 200 --no-pager
+```
+
+Enable JSON logs for collectors/Loki pipelines:
+
+```bash
+raspi-sentinel --structured-logging -c /etc/raspi-sentinel/config.toml run-once
 ```
 
 Transition events are also appended to `/var/lib/raspi-sentinel/events.jsonl`.
@@ -554,8 +562,8 @@ pytest \
 python -m coverage report \
   --include="src/raspi_sentinel/policy.py,src/raspi_sentinel/status_events.py" \
   --fail-under=85
-python -m coverage report \
-  --include="src/raspi_sentinel/checks.py,src/raspi_sentinel/recovery.py" \
+  python -m coverage report \
+  --include="src/raspi_sentinel/checks/*.py,src/raspi_sentinel/recovery.py" \
   --fail-under=88
 ```
 
