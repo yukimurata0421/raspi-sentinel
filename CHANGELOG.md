@@ -31,6 +31,10 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - `consecutive_failure_thresholds`
   - `latency_thresholds_ms`
   - `packet_loss_thresholds_pct`
+- Notification delivery retry queue for network/transient Discord failures:
+  - failed sends are aggregated into state backlog (`notify.delivery_backlog`)
+  - periodic retry schedule (`notify.retry_due_ts`) using `notify.discord.retry_interval_sec` (default `60`)
+  - one deferred summary message on recovery including `delivery_failed_from`, `delivery_failed_until`, `failed_notifications_total`, and aggregated `contexts`
 
 ### Changed
 
@@ -79,6 +83,7 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - `wan_error_kind`: `all_targets_failed`, `partial_targets_failed`, `high_loss`, `high_latency`
   - `policy.subreason` is now propagated to cycle JSON output, `events.jsonl`, and monitor stats.
 - Reboot escalation now requires `policy_status=failed` on all reboot paths (including confirmed clock anomaly).
+- Notification send path now classifies delivery failures (`network` vs `http`) and only queues deferred retries for network/transient transport failures.
 
 ### Testing
 

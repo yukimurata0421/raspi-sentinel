@@ -30,6 +30,7 @@ def _base_config(extra_target: str = 'command = "true"') -> str:
     username = "raspi-sentinel"
     timeout_sec = 5
     followup_delay_sec = 300
+    retry_interval_sec = 60
     heartbeat_interval_sec = 0
 
     [[targets]]
@@ -88,6 +89,16 @@ def test_discord_enabled_requires_webhook(tmp_path: Path) -> None:
         _base_config().replace("enabled = false", "enabled = true"),
     )
     with pytest.raises(ValueError, match="webhook_url is required"):
+        load_config(conf)
+
+
+def test_retry_interval_sec_must_be_positive(tmp_path: Path) -> None:
+    conf = tmp_path / "config.toml"
+    _write(
+        conf,
+        _base_config().replace("retry_interval_sec = 60", "retry_interval_sec = 0"),
+    )
+    with pytest.raises(ValueError, match="retry_interval_sec must be > 0"):
         load_config(conf)
 
 

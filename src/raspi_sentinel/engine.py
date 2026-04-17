@@ -9,6 +9,7 @@ from .checks import CheckResult, apply_records_progress_check, run_checks
 from .config import AppConfig, TargetConfig
 from .cycle_notifications import (
     schedule_followup,
+    send_delivery_backlog_summary,
     send_due_followups,
     send_issue_notification,
     send_periodic_heartbeat,
@@ -111,6 +112,7 @@ def emit_target_notifications(
     if notifier.config.notify_on_recovery and result.healthy and previous_failures > 0:
         send_recovery_notification(
             notifier=notifier,
+            state=state,
             target_name=target.name,
             previous_failures=previous_failures,
             events_file=events_file,
@@ -127,6 +129,7 @@ def emit_target_notifications(
         if should_notify_now:
             send_issue_notification(
                 notifier=notifier,
+                state=state,
                 target_name=target.name,
                 result=result,
                 action=outcome.action,
@@ -328,6 +331,14 @@ def _run_cycle_collect_locked(
             notifier=notifier,
             state=state,
             target_results=target_results,
+            now_ts=now_ts,
+            events_file=events_file,
+            events_max_bytes=events_max,
+            events_backup_generations=events_backups,
+        )
+        send_delivery_backlog_summary(
+            notifier=notifier,
+            state=state,
             now_ts=now_ts,
             events_file=events_file,
             events_max_bytes=events_max,

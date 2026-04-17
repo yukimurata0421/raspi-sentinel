@@ -40,6 +40,7 @@ webhook_url = "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOK
 username = "raspi-sentinel-v2"
 timeout_sec = 5
 followup_delay_sec = 300
+retry_interval_sec = 60
 heartbeat_interval_sec = 0
 notify_on_recovery = false
 # Set heartbeat_interval_sec = 0 to disable periodic healthy heartbeat notifications.

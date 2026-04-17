@@ -164,6 +164,7 @@ class DiscordNotifyConfig:
     username: str
     timeout_sec: int
     followup_delay_sec: int
+    retry_interval_sec: int
     heartbeat_interval_sec: int
     notify_on_recovery: bool
 
@@ -580,6 +581,7 @@ def load_config(path: Path) -> AppConfig:
         username=discord_username,
         timeout_sec=_require_int(discord_raw, "timeout_sec", 5),
         followup_delay_sec=_require_int(discord_raw, "followup_delay_sec", 300),
+        retry_interval_sec=_require_int(discord_raw, "retry_interval_sec", 60),
         heartbeat_interval_sec=_require_int(discord_raw, "heartbeat_interval_sec", 300),
         notify_on_recovery=notify_on_recovery,
     )
@@ -588,6 +590,8 @@ def load_config(path: Path) -> AppConfig:
         raise ValueError("[notify.discord].timeout_sec must be > 0")
     if discord_config.followup_delay_sec <= 0:
         raise ValueError("[notify.discord].followup_delay_sec must be > 0")
+    if discord_config.retry_interval_sec <= 0:
+        raise ValueError("[notify.discord].retry_interval_sec must be > 0")
     if discord_config.heartbeat_interval_sec < 0:
         raise ValueError("[notify.discord].heartbeat_interval_sec must be >= 0")
     if discord_config.enabled and not discord_config.webhook_url:

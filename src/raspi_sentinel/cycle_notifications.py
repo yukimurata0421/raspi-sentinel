@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from .checks import CheckResult
@@ -11,8 +13,81 @@ from .notify import (
     should_send_periodic_heartbeat,
 )
 from .state_helpers import safe_int
-from .state_models import FollowupRecord, GlobalState
+from .state_models import FollowupRecord, GlobalState, NotifyDeliveryBacklog
 from .status_events import record_notify_failure_event
+
+
+@dataclass(slots=True)
+class NotificationSendResult:
+    sent: bool
+    network_failed: bool
+
+
+def _iso_ts(ts: float) -> str:
+    return datetime.fromtimestamp(ts).astimezone().isoformat(timespec="seconds")
+
+
+def _record_network_delivery_backlog(
+    state: GlobalState,
+    context: str,
+    now_ts: float,
+    retry_interval_sec: int,
+) -> None:
+    notify_state = state.notify
+    backlog = notify_state.delivery_backlog
+    if backlog is None:
+        backlog = NotifyDeliveryBacklog(
+            first_failed_ts=now_ts,
+            last_failed_ts=now_ts,
+            total_failures=1,
+            contexts={context: 1},
+        )
+        notify_state.delivery_backlog = backlog
+    else:
+        backlog.last_failed_ts = max(backlog.last_failed_ts, now_ts)
+        backlog.total_failures += 1
+        backlog.contexts[context] = backlog.contexts.get(context, 0) + 1
+
+    if notify_state.retry_due_ts is None or notify_state.retry_due_ts <= now_ts:
+        notify_state.retry_due_ts = now_ts + retry_interval_sec
+
+
+def _send_with_tracking(
+    notifier: DiscordNotifier,
+    *,
+    title: str,
+    severity: str,
+    lines: list[str],
+    context: str,
+    state: GlobalState | None,
+    retry_interval_sec: int,
+    events_file: Path | None,
+    events_max_bytes: int,
+    events_backup_generations: int,
+    now_ts: float | None,
+) -> NotificationSendResult:
+    sent = notifier.send_lines(
+        title=title,
+        severity=severity,
+        lines=lines,
+    )
+    network_failed = (not sent) and notifier.last_failure_kind == "network"
+    if not sent and events_file is not None and now_ts is not None:
+        record_notify_failure_event(
+            events_file,
+            events_max_bytes,
+            events_backup_generations,
+            context,
+            now_ts,
+        )
+    if network_failed and state is not None and now_ts is not None:
+        _record_network_delivery_backlog(
+            state=state,
+            context=context,
+            now_ts=now_ts,
+            retry_interval_sec=retry_interval_sec,
+        )
+    return NotificationSendResult(sent=sent, network_failed=network_failed)
 
 
 def schedule_followup(
@@ -43,6 +118,7 @@ def schedule_followup(
 
 def send_issue_notification(
     notifier: DiscordNotifier,
+    state: GlobalState | None,
     target_name: str,
     result: CheckResult,
     action: str,
@@ -53,11 +129,19 @@ def send_issue_notification(
     events_max_bytes: int = 0,
     events_backup_generations: int = 1,
     now_ts: float | None = None,
-) -> None:
+) -> NotificationSendResult:
     severity = "ERROR" if action == "reboot" else "WARN"
-    sent = notifier.send_lines(
+    return _send_with_tracking(
+        notifier=notifier,
         title=f"Issue detected: {target_name}",
         severity=severity,
+        context=f"issue_notification:{target_name}",
+        state=state,
+        retry_interval_sec=notifier.config.retry_interval_sec,
+        events_file=events_file,
+        events_max_bytes=events_max_bytes,
+        events_backup_generations=events_backup_generations,
+        now_ts=now_ts,
         lines=[
             f"problem={format_failures(result)}",
             f"action_taken={action}",
@@ -67,42 +151,35 @@ def send_issue_notification(
             "follow_up=scheduled",
         ],
     )
-    if not sent and events_file is not None and now_ts is not None:
-        record_notify_failure_event(
-            events_file,
-            events_max_bytes,
-            events_backup_generations,
-            f"issue_notification:{target_name}",
-            now_ts,
-        )
 
 
 def send_recovery_notification(
     notifier: DiscordNotifier,
+    state: GlobalState | None,
     target_name: str,
     previous_failures: int,
     events_file: Path | None = None,
     events_max_bytes: int = 0,
     events_backup_generations: int = 1,
     now_ts: float | None = None,
-) -> None:
-    sent = notifier.send_lines(
+) -> NotificationSendResult:
+    return _send_with_tracking(
+        notifier=notifier,
         title=f"Recovered: {target_name}",
         severity="INFO",
+        context=f"recovery_notification:{target_name}",
+        state=state,
+        retry_interval_sec=notifier.config.retry_interval_sec,
+        events_file=events_file,
+        events_max_bytes=events_max_bytes,
+        events_backup_generations=events_backup_generations,
+        now_ts=now_ts,
         lines=[
             "status=healthy",
             f"previous_consecutive_failures={previous_failures}",
             "action_taken=none",
         ],
     )
-    if not sent and events_file is not None and now_ts is not None:
-        record_notify_failure_event(
-            events_file,
-            events_max_bytes,
-            events_backup_generations,
-            f"recovery_notification:{target_name}",
-            now_ts,
-        )
 
 
 def send_due_followups(
@@ -133,9 +210,17 @@ def send_due_followups(
             current_problem = format_failures(result)
 
         severity = "INFO" if healthy else "WARN"
-        sent = notifier.send_lines(
+        send_result = _send_with_tracking(
+            notifier=notifier,
             title=f"Follow-up after 5min: {target_name}",
             severity=severity,
+            context=f"followup:{target_name}",
+            state=state,
+            retry_interval_sec=notifier.config.retry_interval_sec,
+            events_file=events_file,
+            events_max_bytes=events_max_bytes,
+            events_backup_generations=events_backup_generations,
+            now_ts=now_ts,
             lines=[
                 f"initial_action={event.initial_action}",
                 f"initial_problem={event.initial_reason}",
@@ -144,16 +229,8 @@ def send_due_followups(
                 f"current_consecutive_failures={consecutive}",
             ],
         )
-        if sent:
+        if send_result.sent:
             to_delete.append(target_name)
-        elif events_file is not None:
-            record_notify_failure_event(
-                events_file,
-                events_max_bytes,
-                events_backup_generations,
-                f"followup:{target_name}",
-                now_ts,
-            )
 
     for target_name in to_delete:
         state.followups.pop(target_name, None)
@@ -179,9 +256,17 @@ def send_periodic_heartbeat(
     snapshot = collect_system_snapshot()
     pending_count = len(state.followups)
 
-    sent = notifier.send_lines(
+    send_result = _send_with_tracking(
+        notifier=notifier,
         title="Heartbeat: monitor running",
         severity="INFO",
+        context="periodic_heartbeat",
+        state=state,
+        retry_interval_sec=notifier.config.retry_interval_sec,
+        events_file=events_file,
+        events_max_bytes=events_max_bytes,
+        events_backup_generations=events_backup_generations,
+        now_ts=now_ts,
         lines=[
             f"targets_healthy={healthy_count}",
             f"targets_unhealthy={unhealthy_count}",
@@ -191,13 +276,58 @@ def send_periodic_heartbeat(
             f"pending_followups={pending_count}",
         ],
     )
-    if sent:
+    if send_result.sent:
         mark_heartbeat_sent(state=state, now_ts=now_ts)
-    elif events_file is not None:
+
+
+def send_delivery_backlog_summary(
+    notifier: DiscordNotifier,
+    state: GlobalState,
+    now_ts: float,
+    events_file: Path | None = None,
+    events_max_bytes: int = 0,
+    events_backup_generations: int = 1,
+) -> None:
+    backlog = state.notify.delivery_backlog
+    if backlog is None:
+        return
+    retry_due_ts = state.notify.retry_due_ts
+    if retry_due_ts is not None and now_ts < retry_due_ts:
+        return
+
+    top_contexts = sorted(
+        backlog.contexts.items(),
+        key=lambda item: (-item[1], item[0]),
+    )
+    contexts_summary = ", ".join(f"{context}={count}" for context, count in top_contexts[:5])
+    if len(top_contexts) > 5:
+        contexts_summary = f"{contexts_summary}, ..."
+
+    lines = [
+        f"delivery_failed_from={_iso_ts(backlog.first_failed_ts)}",
+        f"delivery_failed_until={_iso_ts(backlog.last_failed_ts)}",
+        f"failed_notifications_total={backlog.total_failures}",
+        f"contexts={contexts_summary or 'unknown'}",
+        f"retry_interval_sec={notifier.config.retry_interval_sec}",
+    ]
+    sent = notifier.send_lines(
+        title="Delayed notifications summary",
+        severity="WARN",
+        lines=lines,
+    )
+    if sent:
+        state.notify.delivery_backlog = None
+        state.notify.retry_due_ts = None
+        return
+
+    if events_file is not None:
         record_notify_failure_event(
             events_file,
             events_max_bytes,
             events_backup_generations,
-            "periodic_heartbeat",
+            "deferred_notification_batch",
             now_ts,
         )
+    if notifier.last_failure_kind == "network":
+        backlog.last_failed_ts = max(backlog.last_failed_ts, now_ts)
+    state.notify.retry_due_ts = now_ts + notifier.config.retry_interval_sec

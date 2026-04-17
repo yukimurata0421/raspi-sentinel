@@ -196,18 +196,69 @@ class FollowupRecord:
 
 
 @dataclass(slots=True)
+class NotifyDeliveryBacklog:
+    first_failed_ts: float
+    last_failed_ts: float
+    total_failures: int
+    contexts: dict[str, int] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, object] | None) -> NotifyDeliveryBacklog | None:
+        if not isinstance(data, Mapping):
+            return None
+        first_failed_ts = safe_float(data.get("first_failed_ts"))
+        last_failed_ts = safe_float(data.get("last_failed_ts"))
+        if first_failed_ts is None or last_failed_ts is None:
+            return None
+        contexts_raw = data.get("contexts")
+        contexts: dict[str, int] = {}
+        if isinstance(contexts_raw, Mapping):
+            for context, count in contexts_raw.items():
+                if not isinstance(context, str):
+                    continue
+                parsed = safe_int(count, 0)
+                if parsed > 0:
+                    contexts[context] = parsed
+        known = {"first_failed_ts", "last_failed_ts", "total_failures", "contexts"}
+        extra = {k: v for k, v in data.items() if isinstance(k, str) and k not in known}
+        return cls(
+            first_failed_ts=first_failed_ts,
+            last_failed_ts=last_failed_ts,
+            total_failures=max(1, safe_int(data.get("total_failures"), 1)),
+            contexts=contexts,
+            extra=extra,
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        out: dict[str, object] = dict(self.extra)
+        out["first_failed_ts"] = self.first_failed_ts
+        out["last_failed_ts"] = self.last_failed_ts
+        out["total_failures"] = self.total_failures
+        out["contexts"] = dict(self.contexts)
+        return out
+
+
+@dataclass(slots=True)
 class NotifyState:
     last_heartbeat_ts: float | None = None
+    retry_due_ts: float | None = None
+    delivery_backlog: NotifyDeliveryBacklog | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, object] | None) -> NotifyState:
         if not isinstance(data, Mapping):
             return cls()
-        known = {"last_heartbeat_ts"}
+        known = {"last_heartbeat_ts", "retry_due_ts", "delivery_backlog"}
         extra = {k: v for k, v in data.items() if isinstance(k, str) and k not in known}
+        backlog_raw = data.get("delivery_backlog")
         return cls(
             last_heartbeat_ts=safe_float(data.get("last_heartbeat_ts")),
+            retry_due_ts=safe_float(data.get("retry_due_ts")),
+            delivery_backlog=NotifyDeliveryBacklog.from_dict(
+                backlog_raw if isinstance(backlog_raw, Mapping) else None
+            ),
             extra=extra,
         )
 
@@ -215,6 +266,10 @@ class NotifyState:
         out: dict[str, object] = dict(self.extra)
         if self.last_heartbeat_ts is not None:
             out["last_heartbeat_ts"] = self.last_heartbeat_ts
+        if self.retry_due_ts is not None:
+            out["retry_due_ts"] = self.retry_due_ts
+        if self.delivery_backlog is not None:
+            out["delivery_backlog"] = self.delivery_backlog.to_dict()
         return out
 
 

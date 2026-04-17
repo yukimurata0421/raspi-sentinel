@@ -104,6 +104,13 @@ def test_global_state_parses_followup_notify_monitor_legacy_fields() -> None:
         },
         "notify": {
             "last_heartbeat_ts": "80.5",
+            "retry_due_ts": "140.0",
+            "delivery_backlog": {
+                "first_failed_ts": "100.0",
+                "last_failed_ts": "120.0",
+                "total_failures": "3",
+                "contexts": {"issue_notification:svc": "2", "followup:svc": 1},
+            },
             "legacy_notify": "keep",
         },
         "monitor_stats": {
@@ -120,6 +127,10 @@ def test_global_state_parses_followup_notify_monitor_legacy_fields() -> None:
     assert model.followups["demo"].initial_consecutive_failures == 4
     assert model.followups["demo"].extra["legacy_followup"] == "x"
     assert model.notify.last_heartbeat_ts == 80.5
+    assert model.notify.retry_due_ts == 140.0
+    assert model.notify.delivery_backlog is not None
+    assert model.notify.delivery_backlog.total_failures == 3
+    assert model.notify.delivery_backlog.contexts["issue_notification:svc"] == 2
     assert model.notify.extra["legacy_notify"] == "keep"
     assert model.monitor_stats.last_written_ts == 70.5
     assert model.monitor_stats.last_snapshot_signature is None

@@ -54,6 +54,7 @@ def collect_system_snapshot() -> SystemSnapshot:
 class DiscordNotifier:
     def __init__(self, config: DiscordNotifyConfig) -> None:
         self.config = config
+        self.last_failure_kind: str | None = None
 
     @property
     def enabled(self) -> bool:
@@ -61,6 +62,7 @@ class DiscordNotifier:
 
     def send_lines(self, title: str, lines: list[str], severity: str = "INFO") -> bool:
         if not self.enabled:
+            self.last_failure_kind = None
             return False
 
         host = platform.node() or "unknown-host"
@@ -79,10 +81,13 @@ class DiscordNotifier:
 
         data = json.dumps(payload).encode("utf-8")
         max_attempts = 3
+        self.last_failure_kind = None
         for attempt in range(max_attempts):
-            ok, retry_after_sec = self._post_discord_payload(data)
+            ok, retry_after_sec, failure_kind = self._post_discord_payload(data)
             if ok:
+                self.last_failure_kind = None
                 return True
+            self.last_failure_kind = failure_kind
             if attempt < max_attempts - 1:
                 backoff_sec = 0.5 * (attempt + 1)
                 sleep_sec = retry_after_sec if retry_after_sec is not None else backoff_sec
@@ -94,7 +99,7 @@ class DiscordNotifier:
                 )
         return False
 
-    def _post_discord_payload(self, data: bytes) -> tuple[bool, float | None]:
+    def _post_discord_payload(self, data: bytes) -> tuple[bool, float | None, str | None]:
         req = urllib.request.Request(
             self.config.webhook_url or "",
             data=data,
@@ -110,23 +115,27 @@ class DiscordNotifier:
                 code = getattr(resp, "status", 204)
                 if code not in (200, 204):
                     LOG.error("discord webhook returned status=%s", code)
-                    return False, None
+                    if code >= 500:
+                        return False, None, "network"
+                    return False, None, "http"
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             LOG.error("discord webhook HTTP error: %s %s", exc.code, detail[:300])
             retry_after = _parse_retry_after_seconds(exc.headers.get("Retry-After"))
-            return False, retry_after
+            if exc.code == 429 or exc.code >= 500:
+                return False, retry_after, "network"
+            return False, retry_after, "http"
         except urllib.error.URLError as exc:
             LOG.error("discord webhook URL error: %s", exc)
-            return False, None
+            return False, None, "network"
         except TimeoutError:
             LOG.error("discord webhook timeout")
-            return False, None
+            return False, None, "network"
         except OSError as exc:
             LOG.error("discord webhook send failed: %s", exc)
-            return False, None
+            return False, None, "network"
 
-        return True, None
+        return True, None, None
 
 
 def _parse_retry_after_seconds(raw_value: Any) -> float | None:

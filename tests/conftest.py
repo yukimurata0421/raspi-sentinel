@@ -141,6 +141,7 @@ def make_discord_config(**overrides: Any) -> DiscordNotifyConfig:
         "username": "raspi-sentinel",
         "timeout_sec": 5,
         "followup_delay_sec": 300,
+        "retry_interval_sec": 60,
         "heartbeat_interval_sec": 300,
         "notify_on_recovery": True,
     }

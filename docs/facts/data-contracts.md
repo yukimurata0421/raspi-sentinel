@@ -16,6 +16,16 @@ Notes:
 - schema may evolve across releases
 - should not be used as the primary external observability API
 
+Current notification-related internal fields (under `notify`):
+
+- `last_heartbeat_ts`
+- `retry_due_ts` (next retry time for deferred delivery summary)
+- `delivery_backlog`:
+  - `first_failed_ts`
+  - `last_failed_ts`
+  - `total_failures`
+  - `contexts` (`context -> failure_count`)
+
 ## 2. `events.jsonl` (append-only transition log)
 
 Purpose:
@@ -40,6 +50,9 @@ Common fields:
   - diagnostic context: `dns_server`, `dns_query_target`, `dns_error_kind`, `http_probe_target`, `http_error_kind`, per-layer consecutive counters
     - `dns_error_kind`: `nxdomain`, `timeout`, `resolver_config_missing`, `no_server`, `unreachable`, `unknown`
     - `http_error_kind`: `dns_resolution_failed`, `connect_timeout`, `read_timeout`, `tls_error`, `connection_refused`, `non_2xx`, `unknown`
+  - notification delivery events:
+    - `kind: notify_delivery_failed`
+    - `context` (for example `issue_notification:<target>`, `followup:<target>`, `periodic_heartbeat`, `deferred_notification_batch`)
 
 Null semantics:
 

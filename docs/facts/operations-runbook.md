@@ -112,3 +112,53 @@ HTTP probe notes:
 - Treat command fields as trusted admin input only.
 - Use `*_use_shell=true` only where shell syntax is required.
 - If `state.json` is corrupt, the cycle runs in limited mode and records `state_corrupted` event.
+
+## 6. Notification Delivery Outage Runbook
+
+When Discord delivery fails due to network/transient transport failures, raspi-sentinel
+does not drop notifications immediately.
+
+Behavior:
+
+1. Failed sends are recorded as `kind=notify_delivery_failed` in `events.jsonl`.
+2. Network-related failures are aggregated in `state.json.notify.delivery_backlog`.
+3. Retry is attempted every `notify.discord.retry_interval_sec` (default 60 seconds).
+4. On recovery, one summary notification is sent with outage window and count.
+
+Quick checks:
+
+```bash
+# recent notification delivery failures
+grep 'notify_delivery_failed' /var/lib/raspi-sentinel/events.jsonl | tail -n 20
+
+# inspect current retry backlog in state.json
+python3 - <<'PY'
+import json
+from pathlib import Path
+p = Path('/var/lib/raspi-sentinel/state.json')
+if p.exists():
+    s = json.loads(p.read_text())
+    n = s.get('notify', {})
+    print(json.dumps({
+        'retry_due_ts': n.get('retry_due_ts'),
+        'delivery_backlog': n.get('delivery_backlog'),
+    }, ensure_ascii=False, indent=2))
+else:
+    print('state.json not found')
+PY
+```
+
+Interpretation:
+
+- `delivery_backlog.first_failed_ts`: first failed notification timestamp in current outage window.
+- `delivery_backlog.last_failed_ts`: last observed failed timestamp in current outage window.
+- `delivery_backlog.total_failures`: number of failed notification attempts in the backlog.
+- `delivery_backlog.contexts`: failed notification contexts and counts (`issue_notification:*`, `followup:*`, etc).
+- `retry_due_ts`: next retry schedule.
+
+If backlog never clears:
+
+1. Check DNS/connectivity from host to Discord webhook endpoint.
+2. Check journald for transport details:
+   `journalctl -u raspi-sentinel.service -n 200 --no-pager`.
+3. Confirm `notify.discord.webhook_url` validity and outbound firewall policy.

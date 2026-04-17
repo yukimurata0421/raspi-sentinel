@@ -10,6 +10,7 @@ from conftest import make_discord_config
 from raspi_sentinel.checks import CheckFailure, CheckResult
 from raspi_sentinel.cycle_notifications import (
     schedule_followup,
+    send_delivery_backlog_summary,
     send_due_followups,
     send_issue_notification,
     send_periodic_heartbeat,
@@ -110,6 +111,7 @@ class TestSendIssueNotification:
         events_file = tmp_path / "events.jsonl"
         send_issue_notification(
             notifier=n,
+            state=GlobalState(),
             target_name="svc",
             result=_result(healthy=False, failures=[CheckFailure("cmd", "exit 1")]),
             action="restart",
@@ -130,6 +132,7 @@ class TestSendIssueNotification:
         n = _notifier()
         send_issue_notification(
             notifier=n,
+            state=GlobalState(),
             target_name="svc",
             result=_result(healthy=False, failures=[CheckFailure("cmd", "exit 1")]),
             action="reboot",
@@ -149,6 +152,7 @@ class TestSendIssueNotification:
         events_file = tmp_path / "events.jsonl"
         send_issue_notification(
             notifier=n,
+            state=GlobalState(),
             target_name="svc",
             result=_result(healthy=False, failures=[CheckFailure("cmd", "exit 1")]),
             action="restart",
@@ -172,6 +176,7 @@ class TestSendRecoveryNotification:
         n = _notifier()
         send_recovery_notification(
             notifier=n,
+            state=GlobalState(),
             target_name="svc",
             previous_failures=5,
         )
@@ -187,6 +192,7 @@ class TestSendRecoveryNotification:
         events_file = tmp_path / "events.jsonl"
         send_recovery_notification(
             notifier=n,
+            state=GlobalState(),
             target_name="svc",
             previous_failures=3,
             events_file=events_file,
@@ -366,3 +372,127 @@ class TestSendPeriodicHeartbeat:
         event = json.loads(events_file.read_text().strip())
         assert event["kind"] == "notify_delivery_failed"
         assert event["context"] == "periodic_heartbeat"
+
+
+class TestDeferredNotificationSummary:
+    @patch.object(DiscordNotifier, "send_lines")
+    def test_network_failure_is_aggregated_and_summary_sent(
+        self, mock_send: MagicMock, tmp_path: Path
+    ) -> None:
+        n = _notifier(retry_interval_sec=60)
+        state = GlobalState()
+
+        def fail_as_network(*args: Any, **kwargs: Any) -> bool:
+            n.last_failure_kind = "network"
+            return False
+
+        mock_send.side_effect = fail_as_network
+        send_issue_notification(
+            notifier=n,
+            state=state,
+            target_name="svc",
+            result=_result(healthy=False, failures=[CheckFailure("cmd", "exit 1")]),
+            action="warn",
+            consecutive_failures=1,
+            services=[],
+            dry_run=False,
+            now_ts=1000.0,
+            events_file=tmp_path / "events.jsonl",
+            events_max_bytes=5_000_000,
+            events_backup_generations=1,
+        )
+        send_issue_notification(
+            notifier=n,
+            state=state,
+            target_name="svc",
+            result=_result(healthy=False, failures=[CheckFailure("cmd", "exit 1")]),
+            action="warn",
+            consecutive_failures=2,
+            services=[],
+            dry_run=False,
+            now_ts=1020.0,
+            events_file=tmp_path / "events2.jsonl",
+            events_max_bytes=5_000_000,
+            events_backup_generations=1,
+        )
+        assert state.notify.delivery_backlog is not None
+        assert state.notify.delivery_backlog.total_failures == 2
+
+        def succeed(*args: Any, **kwargs: Any) -> bool:
+            n.last_failure_kind = None
+            return True
+
+        mock_send.side_effect = succeed
+        send_delivery_backlog_summary(
+            notifier=n,
+            state=state,
+            now_ts=1061.0,
+        )
+        assert state.notify.delivery_backlog is None
+        assert state.notify.retry_due_ts is None
+        summary_call = mock_send.call_args_list[-1]
+        assert summary_call[1]["title"] == "Delayed notifications summary"
+        lines = summary_call[1]["lines"]
+        assert any("delivery_failed_from=" in line for line in lines)
+        assert any("delivery_failed_until=" in line for line in lines)
+        assert any("failed_notifications_total=2" in line for line in lines)
+
+    @patch.object(DiscordNotifier, "send_lines")
+    def test_summary_waits_until_retry_due(self, mock_send: MagicMock) -> None:
+        n = _notifier(retry_interval_sec=60)
+        state = GlobalState()
+
+        def fail_as_network(*args: Any, **kwargs: Any) -> bool:
+            n.last_failure_kind = "network"
+            return False
+
+        mock_send.side_effect = fail_as_network
+        send_issue_notification(
+            notifier=n,
+            state=state,
+            target_name="svc",
+            result=_result(healthy=False, failures=[CheckFailure("cmd", "exit 1")]),
+            action="warn",
+            consecutive_failures=1,
+            services=[],
+            dry_run=False,
+            now_ts=1000.0,
+        )
+        calls_after_failure = mock_send.call_count
+        send_delivery_backlog_summary(
+            notifier=n,
+            state=state,
+            now_ts=1059.0,
+        )
+        assert mock_send.call_count == calls_after_failure
+
+    @patch.object(DiscordNotifier, "send_lines")
+    def test_summary_failure_extends_failed_until_window(self, mock_send: MagicMock) -> None:
+        n = _notifier(retry_interval_sec=60)
+        state = GlobalState()
+
+        def fail_as_network(*args: Any, **kwargs: Any) -> bool:
+            n.last_failure_kind = "network"
+            return False
+
+        mock_send.side_effect = fail_as_network
+        send_issue_notification(
+            notifier=n,
+            state=state,
+            target_name="svc",
+            result=_result(healthy=False, failures=[CheckFailure("cmd", "exit 1")]),
+            action="warn",
+            consecutive_failures=1,
+            services=[],
+            dry_run=False,
+            now_ts=1000.0,
+        )
+        assert state.notify.delivery_backlog is not None
+        assert state.notify.delivery_backlog.last_failed_ts == 1000.0
+        send_delivery_backlog_summary(
+            notifier=n,
+            state=state,
+            now_ts=1060.0,
+        )
+        assert state.notify.delivery_backlog is not None
+        assert state.notify.delivery_backlog.last_failed_ts == 1060.0

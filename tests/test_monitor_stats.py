@@ -44,6 +44,7 @@ def test_monitor_stats_preserves_unknown_vs_false_for_network_layers() -> None:
                 username="raspi-sentinel",
                 timeout_sec=5,
                 followup_delay_sec=300,
+                retry_interval_sec=60,
                 heartbeat_interval_sec=0,
                 notify_on_recovery=False,
             )

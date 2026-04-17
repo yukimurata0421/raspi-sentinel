@@ -160,6 +160,15 @@ Reboot loop guards:
 2. Schedule follow-up (default `followup_delay_sec = 300`)
 3. On first cycle after due time, send current status (`healthy/unhealthy`)
 4. Send periodic heartbeat (`heartbeat_interval_sec`) with uptime/load/disk
+5. If delivery fails due to network/transient transport errors:
+   - failed notifications are queued in `state.json` (internal backlog)
+   - retries are attempted every `retry_interval_sec` (default 60s)
+   - retries are aggregated into a single summary message, not one message per failed attempt
+   - summary includes failure window:
+     - `delivery_failed_from=...`
+     - `delivery_failed_until=...`
+     - `failed_notifications_total=...`
+     - `contexts=...`
 
 ## Install
 
@@ -234,12 +243,15 @@ webhook_url = "https://discord.com/api/webhooks/..."
 username = "raspi-sentinel"
 timeout_sec = 5
 followup_delay_sec = 300
+retry_interval_sec = 60
 heartbeat_interval_sec = 0
 notify_on_recovery = false
 ```
 
 Set `heartbeat_interval_sec = 0` to disable periodic healthy-state notifications.
 Set `notify_on_recovery = false` to suppress "Recovered" messages.
+When notification delivery fails due to network/transient errors, failures are aggregated and retried
+every `retry_interval_sec` as one summary message containing the failure window (`from`/`until`).
 
 ## Global Snapshot Config
 

@@ -256,6 +256,7 @@ def _minimal_loadable_target(extra: str = 'command = "true"') -> str:
     username = "raspi-sentinel"
     timeout_sec = 5
     followup_delay_sec = 300
+    retry_interval_sec = 60
     heartbeat_interval_sec = 0
 
     [[targets]]
