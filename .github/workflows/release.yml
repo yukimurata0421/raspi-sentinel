@@ -18,28 +18,58 @@ jobs:
         with:
           script: |
             const headSha = context.sha;
-            const { data } = await github.rest.actions.listWorkflowRuns({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: "ci.yml",
-              head_sha: headSha,
-              status: "completed",
-              per_page: 50,
-            });
+            const timeoutMs = 20 * 60 * 1000;
+            const pollIntervalMs = 15 * 1000;
+            const deadline = Date.now() + timeoutMs;
 
-            const successfulRun = data.workflow_runs.find(
-              (run) => run.conclusion === "success" && run.name === "CI",
-            );
+            while (Date.now() < deadline) {
+              const { data } = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: "ci.yml",
+                head_sha: headSha,
+                per_page: 50,
+              });
 
-            if (!successfulRun) {
-              core.setFailed(
-                `No successful CI run found for commit ${headSha}. Run CI successfully before tagging.`,
+              const ciRuns = data.workflow_runs
+                .filter((run) => run.name === "CI")
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+              const successfulRun = ciRuns.find(
+                (run) => run.status === "completed" && run.conclusion === "success",
               );
-              return;
+              if (successfulRun) {
+                core.info(
+                  `Using successful CI run #${successfulRun.run_number} (${successfulRun.html_url}) for commit ${headSha}.`,
+                );
+                return;
+              }
+
+              const pendingRun = ciRuns.find(
+                (run) => run.status === "queued" || run.status === "in_progress",
+              );
+              if (pendingRun) {
+                core.info(
+                  `Waiting for CI run #${pendingRun.run_number} (${pendingRun.status}) on commit ${headSha}...`,
+                );
+                await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+                continue;
+              }
+
+              const latestRun = ciRuns[0];
+              if (latestRun) {
+                core.setFailed(
+                  `CI did not succeed for commit ${headSha}. Latest run #${latestRun.run_number} concluded with '${latestRun.conclusion}'.`,
+                );
+                return;
+              }
+
+              core.info(`No CI workflow run found yet for commit ${headSha}; retrying...`);
+              await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
             }
 
-            core.info(
-              `Using successful CI run #${successfulRun.run_number} (${successfulRun.html_url}) for commit ${headSha}.`,
+            core.setFailed(
+              `Timed out waiting for successful CI on commit ${headSha} after ${timeoutMs / 1000}s.`,
             );
 
   release:
