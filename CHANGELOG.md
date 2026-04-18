@@ -6,6 +6,19 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ## [Unreleased]
 
+### Changed
+
+- Test suite layout was reorganized into taxonomy directories:
+  - `tests/unit/`
+  - `tests/scenario/`
+  - `tests/e2e/`
+- Existing top-level tests were moved into the taxonomy buckets while keeping behavior and assertions unchanged.
+
+### Documentation
+
+- Added `docs/facts/test-map.md` to describe test responsibilities and taxonomy usage.
+- Updated `README.md`, `README.ja.md`, and docs indexes to reference the test map and current test layout.
+
 ## [0.6.0] - 2026-04-18
 
 ### Added

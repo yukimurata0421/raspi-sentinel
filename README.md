@@ -526,6 +526,16 @@ Not guaranteed:
 
 The goal of tests is to protect recovery policy behavior.
 
+Test ownership map:
+
+- [docs/facts/test-map.md](docs/facts/test-map.md)
+
+New test taxonomy (new files only):
+
+- `tests/unit/`
+- `tests/scenario/`
+- `tests/e2e/`
+
 Priority scenarios:
 
 - `systemd` NG (`service_active` failure) -> restart path
