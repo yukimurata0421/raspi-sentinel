@@ -22,14 +22,43 @@
 
 ## 2. Observations の dataclass/TypedDict 化
 
-部分対応。
+対応強化（2026-04-18）。
 
 - `checks/models.py` に `Observations` (`TypedDict`) を追加。
 - `policy.py` では型付きビューとして扱うように更新。
+- さらに `checks/models.py` に `ObservationBooleanFlag` (`Literal`) と
+  `is_observation_flag_true()` を追加し、ポリシー側の latency/loss 系の
+  observation 参照を型付きヘルパー経由に置換。
 
 補足:
 - 現時点では `CheckResult.observations` 本体は `ObservationMap` を維持（既存互換を優先）。
-- 完全な `CheckResult.observations: Observations` への移行は、`time_health.py` や `status_events.py` 側のキー定義整理を含む段階的対応が必要。
+- 完全な `CheckResult.observations: Observations` への移行は、`time_health.py` や
+  `status_events.py` 側のキー定義整理を含む段階的対応が必要。
+
+## 11. `config.py` 肥大化（34KB級）の分割
+
+対応済み（2026-04-18）。
+
+- 旧: `src/raspi_sentinel/config.py`（単一巨大モジュール）
+- 新:
+  - `src/raspi_sentinel/config_models.py`
+  - `src/raspi_sentinel/config_loader.py`
+  - `src/raspi_sentinel/config.py`（公開API互換のファサード）
+
+補足:
+- 既存互換のため `raspi_sentinel.config` から `load_config` と補助関数
+  (`_require_int`, `_validate_target_rules`, `_warn_config_permissions`) は引き続き参照可能。
+
+## 12. `test_checks_internal_branches.py` の巨大化
+
+対応済み（2026-04-18）。
+
+- 旧: `tests/test_checks_internal_branches.py`（34KB級）
+- 新:
+  - `tests/test_checks_internal_file_command.py`
+  - `tests/test_checks_internal_network.py`
+  - `tests/test_checks_internal_stats_and_progress.py`
+  - `tests/checks_internal_branches_helpers.py`（共通ヘルパー）
 
 ## 3. `_probe_network_uplink` の低レベルソケット実装
 
@@ -102,4 +131,3 @@
 - `ruff check src tests`
 - `mypy`
 - `pytest -q`
-

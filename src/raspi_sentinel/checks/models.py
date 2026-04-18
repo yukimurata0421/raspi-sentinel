@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 ObservationScalar = str | int | float | bool | None
 ObservationMap = dict[str, ObservationScalar]
@@ -59,6 +59,20 @@ class Observations(TypedDict, total=False):
     records_processed_total: int
     external_internal_state: str
     external_reason: str
+
+
+ObservationBooleanFlag = Literal[
+    "gateway_latency_exceeded",
+    "internet_latency_exceeded",
+    "dns_latency_exceeded",
+    "http_latency_exceeded",
+    "gateway_loss_exceeded",
+    "internet_loss_exceeded",
+]
+
+
+def is_observation_flag_true(observations: Observations, key: ObservationBooleanFlag) -> bool:
+    return observations.get(key) is True
 
 
 @dataclass(slots=True)

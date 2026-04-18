@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Literal, cast
 
 from .checks import CheckResult
-from .checks.models import Observations
+from .checks.models import Observations, is_observation_flag_true
 from .state_helpers import safe_bool, safe_float, safe_int
 from .state_models import TargetState
 
@@ -226,17 +226,17 @@ def _network_policy_enabled(ctx: PolicyContext, net: NetworkSignals) -> PolicySn
     if net.wan_vs_target_ok is False and net.internet_ip_ok is True:
         return PolicySnapshot("degraded", "target_reachability_error")
 
-    if observations.get("gateway_latency_exceeded") is True:
+    if is_observation_flag_true(observations, "gateway_latency_exceeded"):
         return PolicySnapshot("degraded", "gateway_latency_high")
-    if observations.get("internet_latency_exceeded") is True:
+    if is_observation_flag_true(observations, "internet_latency_exceeded"):
         return PolicySnapshot("degraded", "wan_latency_high")
-    if observations.get("gateway_loss_exceeded") is True:
+    if is_observation_flag_true(observations, "gateway_loss_exceeded"):
         return PolicySnapshot("degraded", "gateway_packet_loss")
-    if observations.get("internet_loss_exceeded") is True:
+    if is_observation_flag_true(observations, "internet_loss_exceeded"):
         return PolicySnapshot("degraded", "wan_packet_loss")
-    if observations.get("dns_latency_exceeded") is True:
+    if is_observation_flag_true(observations, "dns_latency_exceeded"):
         return PolicySnapshot("degraded", "dns_latency_high")
-    if observations.get("http_latency_exceeded") is True:
+    if is_observation_flag_true(observations, "http_latency_exceeded"):
         return PolicySnapshot("degraded", "http_latency_high")
 
     has_transient_network_failure = any(
