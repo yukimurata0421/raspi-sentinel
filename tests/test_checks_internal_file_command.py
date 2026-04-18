@@ -96,7 +96,6 @@ def test_service_active_check_all_branches(monkeypatch: Any) -> None:
     assert checks._service_active_check("svc") is None
 
 
-
 def test_run_checks_with_command_dns_gateway_and_service(monkeypatch: Any) -> None:
     calls: list[Any] = []
 
@@ -176,7 +175,6 @@ def test_run_checks_heartbeat_output_and_service_failure(tmp_path: Path, monkeyp
     assert any(f.check == "service_active" for f in result.failures)
 
 
-
 def test_run_command_capture_and_ping_parser_branches(monkeypatch: Any) -> None:
     def timeout_run(*_: Any, **__: Any) -> Any:
         raise subprocess.TimeoutExpired(cmd="x", timeout=1)
@@ -207,5 +205,3 @@ def test_run_command_capture_and_ping_parser_branches(monkeypatch: Any) -> None:
     )
     assert latency == 2.0
     assert loss == 0.0
-
-

@@ -284,7 +284,6 @@ def test_dns_and_http_error_classifier_helpers() -> None:
     assert checks._classify_http_oserror(OSError(errno.EPERM, "x"), True) == "unknown"
 
 
-
 def test_network_probe_route_gateway_and_internet_branches(monkeypatch: Any) -> None:
     class Result:
         def __init__(self, stdout: str, returncode: int = 0) -> None:
@@ -474,5 +473,3 @@ def test_network_probe_sets_route_and_gateway_error_kinds(monkeypatch: Any) -> N
     assert obs["route_error_kind"] == "iface_mismatch"
     assert obs["gateway_error_kind"] == "neighbor_unresolved"
     assert obs["wan_error_kind"] == "all_targets_failed"
-
-

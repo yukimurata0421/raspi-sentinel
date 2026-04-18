@@ -140,7 +140,6 @@ def test_stats_last_input_stale_branch(tmp_path: Path) -> None:
     assert any(f.check == "semantic_last_input_ts" for f in result.failures)
 
 
-
 def test_stats_schema_validates_extended_dependency_fields(tmp_path: Path) -> None:
     now = datetime.now(timezone.utc).isoformat()
     p = tmp_path / "stats.json"
@@ -165,7 +164,6 @@ def test_stats_schema_validates_extended_dependency_fields(tmp_path: Path) -> No
     assert "dependency_internet_ip" in names
     assert "dependency_dns_server" in names
     assert "dependency_wan_target" in names
-
 
 
 def test_stats_checks_handles_none_payload(monkeypatch: Any) -> None:
