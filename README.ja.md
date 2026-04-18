@@ -48,5 +48,4 @@ raspi-sentinel --structured-logging -c /etc/raspi-sentinel/config.toml run-once
 - 運用手順: [docs/facts/operations-runbook.md](docs/facts/operations-runbook.md)
 - データ契約: [docs/facts/data-contracts.md](docs/facts/data-contracts.md)
 - 終了コード: [docs/facts/exit-codes.md](docs/facts/exit-codes.md)
-- リリースノート: [docs/release-notes/v0.5.0.md](docs/release-notes/v0.5.0.md)
-
+- リリースノート: [docs/release-notes/v0.6.0.md](docs/release-notes/v0.6.0.md)

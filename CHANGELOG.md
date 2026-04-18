@@ -6,6 +6,8 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-04-18
+
 ### Added
 
 - `docs/facts/exit-codes.md`: stable CLI exit code table (`0/1/2/10/11/13/14/15`).
@@ -14,6 +16,11 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ### Changed
 
+- Release workflow now enforces release integrity for tag pushes:
+  - requires a successful `CI` workflow run on the tagged commit
+  - builds `sdist`/`wheel` during release
+  - smoke-tests installed wheel (`raspi-sentinel --help`)
+  - uploads `dist/*.whl` and `dist/*.tar.gz` as GitHub Release assets
 - Checks implementation was split from monolithic `checks.py` into `src/raspi_sentinel/checks/` package modules:
   - `models.py`, `file_checks.py`, `command_checks.py`, `semantic_stats.py`, `network_probes.py`, `runner.py`.
   - package `checks/__init__.py` now exposes `run_checks` / `apply_records_progress_check`.

@@ -6,16 +6,72 @@ on:
       - "v*"
 
 permissions:
+  actions: read
   contents: write
 
 jobs:
-  release:
+  verify-ci:
     runs-on: ubuntu-latest
     steps:
+      - name: Require successful CI on tagged commit
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const headSha = context.sha;
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: "ci.yml",
+              head_sha: headSha,
+              status: "completed",
+              per_page: 50,
+            });
+
+            const successfulRun = data.workflow_runs.find(
+              (run) => run.conclusion === "success" && run.name === "CI",
+            );
+
+            if (!successfulRun) {
+              core.setFailed(
+                `No successful CI run found for commit ${headSha}. Run CI successfully before tagging.`,
+              );
+              return;
+            }
+
+            core.info(
+              `Using successful CI run #${successfulRun.run_number} (${successfulRun.html_url}) for commit ${headSha}.`,
+            );
+
+  release:
+    runs-on: ubuntu-latest
+    needs: verify-ci
+    steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build distributions
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build
+          python -m build --sdist --wheel
+      - name: Install wheel and smoke test CLI
+        run: |
+          python -m pip install dist/*.whl
+          raspi-sentinel --help
+      - name: Validate release notes file
+        run: |
+          NOTES_FILE="docs/release-notes/${GITHUB_REF_NAME}.md"
+          if [ ! -f "${NOTES_FILE}" ]; then
+            echo "Missing release notes file: ${NOTES_FILE}"
+            exit 1
+          fi
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: Release ${{ github.ref_name }}
           # Curated notes; add docs/release-notes/vX.Y.Z.md before tagging (see docs/VERSIONING.md).
           body_path: docs/release-notes/${{ github.ref_name }}.md
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
