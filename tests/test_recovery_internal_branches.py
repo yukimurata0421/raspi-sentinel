@@ -256,9 +256,15 @@ def test_apply_recovery_restart_cooldown_suppresses_repeat(monkeypatch: Any) -> 
     assert not outcome.requested_reboot
 
 
-def test_apply_recovery_reboot_failure_falls_back_to_restart(monkeypatch: Any) -> None:
+def test_apply_recovery_reboot_is_deferred_and_not_executed(monkeypatch: Any) -> None:
     monkeypatch.setattr(recovery, "read_uptime_sec", lambda: 1000.0)
-    monkeypatch.setattr(recovery, "_trigger_reboot", lambda dry_run, reason: False)
+    reboot_called = {"value": False}
+
+    def fake_trigger_reboot(dry_run: bool, reason: str) -> bool:
+        reboot_called["value"] = True
+        return True
+
+    monkeypatch.setattr(recovery, "_trigger_reboot", fake_trigger_reboot)
     monkeypatch.setattr(recovery, "_restart_services", lambda services, dry_run: True)
     state = GlobalState()
     outcome = recovery.apply_recovery(
@@ -275,8 +281,10 @@ def test_apply_recovery_reboot_failure_falls_back_to_restart(monkeypatch: Any) -
         state=state,
         dry_run=True,
     )
-    assert outcome.action == "restart"
-    assert not outcome.requested_reboot
+    assert outcome.action == "reboot"
+    assert outcome.requested_reboot
+    assert reboot_called["value"] is False
+    assert state.reboots
 
 
 def test_apply_recovery_clock_only_blocks_reboot_without_ready() -> None:

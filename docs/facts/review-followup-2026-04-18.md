@@ -77,6 +77,16 @@
 - 直接的なテスト全面書き換えは未実施。
 - ただし network probe の関数分割により、今後は粒度の小さい単体テストへ移行しやすい構造になった。
 
+## 8. reboot履歴永続化の race condition（最重要）
+
+対応済み。
+
+- `apply_recovery()` は reboot の即時実行を行わず、`StateStore.append_reboot_record()` で履歴を state に反映して reboot 要求を返すだけに変更。
+- engine 側で通知・monitor stats・`persist_cycle_outputs()` を完了した後にのみ reboot コマンドを実行する deferred phase を導入。
+- reboot コマンド失敗時は `reason=reboot_command_failed` を report に残して `UNHEALTHY` を返す。
+
+これにより、reboot 実行でプロセスが早期終了しても reboot 履歴欠落による safeguard 破綻が起きない順序になった。
+
 ## 検証
 
 対応後に以下を実施し、すべて成功。
@@ -84,4 +94,3 @@
 - `ruff check src tests`
 - `mypy`
 - `pytest -q`
-

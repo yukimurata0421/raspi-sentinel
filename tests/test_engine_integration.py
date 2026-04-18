@@ -10,11 +10,14 @@ from conftest import make_app_config, make_target
 
 from raspi_sentinel.checks import CheckResult
 from raspi_sentinel.engine import (
+    TargetEvaluationArtifacts,
     _overall_status,
+    _run_cycle_collect_locked,
     apply_recovery_phase,
     evaluate_target,
     persist_cycle_outputs,
 )
+from raspi_sentinel.exit_codes import REBOOT_REQUESTED, UNHEALTHY
 from raspi_sentinel.state import StateStore
 from raspi_sentinel.state_models import GlobalState
 
@@ -94,3 +97,96 @@ def test_overall_status_logic() -> None:
     assert _overall_status({"a": {"status": "ok"}}) == "ok"
     assert _overall_status({"a": {"status": "degraded"}}) == "degraded"
     assert _overall_status({"a": {"status": "degraded"}, "b": {"status": "failed"}}) == "failed"
+
+
+def test_run_cycle_executes_reboot_after_persist(tmp_path: Path, monkeypatch: Any) -> None:
+    cfg = make_app_config()
+    store = StateStore(tmp_path / "state.json")
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        "raspi_sentinel.engine._evaluate_targets_phase",
+        lambda **kwargs: TargetEvaluationArtifacts(
+            target_results={},
+            target_reports={
+                "demo": {
+                    "status": "failed",
+                    "reason": "dependency_gateway",
+                    "action": "reboot",
+                    "healthy": False,
+                    "evidence": {},
+                }
+            },
+            unhealthy_count=1,
+            reboot_requested=True,
+            reboot_reason="gateway failed",
+        ),
+    )
+    monkeypatch.setattr(
+        "raspi_sentinel.engine._run_notification_phase", lambda **kwargs: calls.append("notify")
+    )
+    monkeypatch.setattr(
+        "raspi_sentinel.engine.maybe_write_monitor_stats",
+        lambda **kwargs: calls.append("monitor"),
+    )
+    monkeypatch.setattr(
+        "raspi_sentinel.engine.persist_cycle_outputs",
+        lambda **kwargs: calls.append("persist") or True,
+    )
+    monkeypatch.setattr(
+        "raspi_sentinel.engine.execute_deferred_reboot",
+        lambda **kwargs: calls.append("reboot") or True,
+    )
+
+    rc, report = _run_cycle_collect_locked(
+        config=cfg,
+        dry_run=False,
+        store=store,
+        now_ts=1000.0,
+        mono_provider=lambda: 1.0,
+    )
+
+    assert rc == REBOOT_REQUESTED
+    assert report["reboot_requested"] is True
+    assert calls.index("persist") < calls.index("reboot")
+
+
+def test_run_cycle_reboot_command_failure_returns_unhealthy(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    cfg = make_app_config()
+    store = StateStore(tmp_path / "state.json")
+
+    monkeypatch.setattr(
+        "raspi_sentinel.engine._evaluate_targets_phase",
+        lambda **kwargs: TargetEvaluationArtifacts(
+            target_results={},
+            target_reports={
+                "demo": {
+                    "status": "failed",
+                    "reason": "dependency_gateway",
+                    "action": "reboot",
+                    "healthy": False,
+                    "evidence": {},
+                }
+            },
+            unhealthy_count=1,
+            reboot_requested=True,
+            reboot_reason="gateway failed",
+        ),
+    )
+    monkeypatch.setattr("raspi_sentinel.engine._run_notification_phase", lambda **kwargs: None)
+    monkeypatch.setattr("raspi_sentinel.engine.maybe_write_monitor_stats", lambda **kwargs: None)
+    monkeypatch.setattr("raspi_sentinel.engine.persist_cycle_outputs", lambda **kwargs: True)
+    monkeypatch.setattr("raspi_sentinel.engine.execute_deferred_reboot", lambda **kwargs: False)
+
+    rc, report = _run_cycle_collect_locked(
+        config=cfg,
+        dry_run=False,
+        store=store,
+        now_ts=1000.0,
+        mono_provider=lambda: 1.0,
+    )
+
+    assert rc == UNHEALTHY
+    assert report["reason"] == "reboot_command_failed"

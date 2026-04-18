@@ -26,6 +26,7 @@ CLOCK_FAILURE_CHECKS = frozenset(
 class RecoveryOutcome:
     action: str
     requested_reboot: bool
+    reboot_reason: str | None = None
 
 
 def _thresholds(target: TargetConfig, global_config: GlobalConfig) -> tuple[int, int]:
@@ -180,6 +181,11 @@ def _trigger_reboot(dry_run: bool, reason: str) -> bool:
     return True
 
 
+def execute_deferred_reboot(*, dry_run: bool, reason: str) -> bool:
+    """Execute a reboot command after state has been durably persisted."""
+    return _trigger_reboot(dry_run=dry_run, reason=reason)
+
+
 def apply_recovery(
     target: TargetConfig,
     check_result: CheckResult,
@@ -194,9 +200,11 @@ def apply_recovery(
     clock_reboot_confirmed = _clock_reboot_confirmed(check_result)
     policy_failed = _policy_failed(check_result)
 
-    def _return(action: str, *, reboot: bool = False) -> RecoveryOutcome:
+    def _return(
+        action: str, *, reboot: bool = False, reboot_reason: str | None = None
+    ) -> RecoveryOutcome:
         _record_action_model(ts, action, effective_now)
-        return RecoveryOutcome(action=action, requested_reboot=reboot)
+        return RecoveryOutcome(action=action, requested_reboot=reboot, reboot_reason=reboot_reason)
 
     if check_result.healthy and not clock_reboot_confirmed:
         previous = ts.consecutive_failures
@@ -245,16 +253,13 @@ def apply_recovery(
                 target.name,
                 failures_text,
             )
-            reboot_ok = _trigger_reboot(dry_run=dry_run, reason=failures_text)
-            if reboot_ok:
-                StateStore.append_reboot_record(
-                    state,
-                    now_ts=effective_now,
-                    target=target.name,
-                    reason=failures_text,
-                )
-                return _return("reboot", reboot=True)
-            LOG.error("target '%s': confirmed clock reboot request failed", target.name)
+            StateStore.append_reboot_record(
+                state,
+                now_ts=effective_now,
+                target=target.name,
+                reason=failures_text,
+            )
+            return _return("reboot", reboot=True, reboot_reason=failures_text)
         else:
             LOG.error(
                 "target '%s': confirmed clock reboot blocked by safeguard: %s",
@@ -335,19 +340,13 @@ def apply_recovery(
                     target.name,
                     failures_text,
                 )
-                reboot_ok = _trigger_reboot(dry_run=dry_run, reason=failures_text)
-                if reboot_ok:
-                    StateStore.append_reboot_record(
-                        state,
-                        now_ts=effective_now,
-                        target=target.name,
-                        reason=failures_text,
-                    )
-                    return _return("reboot", reboot=True)
-                LOG.error(
-                    "target '%s': reboot request failed, falling back to restart path",
-                    target.name,
+                StateStore.append_reboot_record(
+                    state,
+                    now_ts=effective_now,
+                    target=target.name,
+                    reason=failures_text,
                 )
+                return _return("reboot", reboot=True, reboot_reason=failures_text)
             else:
                 LOG.error(
                     "target '%s': reboot blocked by safeguard: %s",

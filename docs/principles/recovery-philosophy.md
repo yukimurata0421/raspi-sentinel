@@ -17,6 +17,8 @@ Recovery is deliberately staged:
 
 A reboot is never treated as a first response to a single weak signal.
 
+Reboot execution is deferred until `state.json` persistence completes, so reboot-loop safeguards keep accurate history even when the process is terminated by reboot.
+
 ## Why DNS/Gateway/Clock Are Split
 
 Operationally, these failures are different classes and need different actions:

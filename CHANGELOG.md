@@ -18,6 +18,10 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - `models.py`, `file_checks.py`, `command_checks.py`, `semantic_stats.py`, `network_probes.py`, `runner.py`.
   - package `checks/__init__.py` now exposes `run_checks` / `apply_records_progress_check`.
 - `engine.py`: `_run_cycle_collect_locked` was decomposed into phase helpers (`_evaluate_targets_phase`, `_run_notification_phase`, `_build_cycle_report`) and typed report payloads.
+- Reboot execution order was hardened to prevent persistence race:
+  - `recovery.apply_recovery()` now records reboot intent/history without issuing reboot command directly
+  - `engine` executes reboot only after successful `persist_cycle_outputs()`
+  - reboot command failure now yields explicit cycle reason `reboot_command_failed`
 - Exit-code literals moved to `src/raspi_sentinel/exit_codes.py` and referenced from CLI/engine.
 - Timeout default fallback behavior was centralized in config-load phase (`command_timeout_sec`, `dependency_check_timeout_sec` defaulting to global command timeout when omitted).
 

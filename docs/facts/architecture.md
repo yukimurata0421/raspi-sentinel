@@ -8,7 +8,7 @@
 - **Checks layer** (`checks/` package): process/dependency/semantic checks
 - **Time-health layer** (`time_health.py`): monotonic vs wall-clock anomaly detection
 - **Policy layer** (`policy.py`): computes `status` and `reason`
-- **Recovery layer** (`recovery.py`): applies `warn -> restart -> reboot` actions
+- **Recovery layer** (`recovery.py`): decides `warn -> restart -> reboot-request` actions
 - **Event/state outputs** (`status_events.py`, `state.py`, `monitor_stats.py`): `events.jsonl`, `state.json`, monitor stats snapshot
 
 ## Cycle Flow
@@ -19,9 +19,10 @@
    2. Run checks and collect observations.
    3. Apply semantic progress and time-health logic.
    4. Classify policy (`ok` / `degraded` / `failed` + reason).
-   5. Apply recovery action with safeguards.
+   5. Apply recovery action with safeguards (reboot is requested, not executed here).
    6. Emit transition events and notifications.
 3. Persist state and monitor snapshot.
+4. If reboot was requested and persistence succeeded, execute deferred reboot command.
 
 ## State Surfaces
 

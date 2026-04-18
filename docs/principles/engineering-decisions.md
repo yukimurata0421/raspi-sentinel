@@ -28,7 +28,7 @@ Rationale: Complex recovery logic decays without decision memory. A decision log
 
 Locations: [src/raspi_sentinel/cli.py](../../src/raspi_sentinel/cli.py)
 
-Rationale: One cycle owns ordering (checks -> policy -> recovery -> events -> persistence). This avoids inconsistent side effects when adding features.
+Rationale: One cycle owns ordering (checks -> policy -> recovery -> notifications/stats -> persistence -> deferred reboot). This avoids inconsistent side effects when adding features.
 
 ### 1-2. Separate evaluation from recovery
 
@@ -36,7 +36,19 @@ Locations: [src/raspi_sentinel/cli.py](../../src/raspi_sentinel/cli.py), [src/ra
 
 Rationale: Classification and action execution are intentionally separated so policy can evolve without rewriting actuator logic.
 
-### 1-3. Add machine-readable one-cycle output
+### 1-3. Defer reboot command until after durable state persistence
+
+Locations: [src/raspi_sentinel/recovery.py](../../src/raspi_sentinel/recovery.py), [src/raspi_sentinel/engine.py](../../src/raspi_sentinel/engine.py), [src/raspi_sentinel/state.py](../../src/raspi_sentinel/state.py)
+
+Decision:
+
+- `apply_recovery()` records reboot intent and appends reboot history to in-memory state.
+- The actual reboot command is executed only in engine deferred phase, after `persist_cycle_outputs()` succeeds.
+- If reboot command fails after persistence, cycle returns unhealthy with explicit `reason=reboot_command_failed`.
+
+Rationale: Reboot is irreversible side effect. Persisting reboot history first prevents safeguard undercount caused by process termination between reboot request and state save.
+
+### 1-4. Add machine-readable one-cycle output
 
 Locations: [src/raspi_sentinel/cli.py](../../src/raspi_sentinel/cli.py)
 

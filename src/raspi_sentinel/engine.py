@@ -21,7 +21,7 @@ from .maintenance import is_target_suppressed_by_maintenance
 from .monitor_stats import maybe_write_monitor_stats
 from .notify import DiscordNotifier, format_failures
 from .policy import PolicySnapshot, classify_target_policy
-from .recovery import RecoveryOutcome, apply_recovery
+from .recovery import RecoveryOutcome, apply_recovery, execute_deferred_reboot
 from .state import StateLoadDiagnostics, StateStore
 from .state_models import GlobalState
 from .status_events import (
@@ -69,6 +69,7 @@ class TargetEvaluationArtifacts:
     target_reports: dict[str, TargetReport]
     unhealthy_count: int
     reboot_requested: bool
+    reboot_reason: str | None
 
 
 @dataclass(slots=True)
@@ -77,6 +78,7 @@ class ProcessTargetResult:
     result: CheckResult | None
     policy_status: str
     reboot_requested: bool
+    reboot_reason: str | None
 
 
 def evaluate_target(
@@ -307,6 +309,7 @@ def _process_single_target(
             result=None,
             policy_status="ok",
             reboot_requested=False,
+            reboot_reason=None,
         )
 
     result, policy = evaluated
@@ -356,6 +359,7 @@ def _process_single_target(
         result=result,
         policy_status=policy.status,
         reboot_requested=outcome.requested_reboot,
+        reboot_reason=outcome.reboot_reason,
     )
 
 
@@ -373,6 +377,7 @@ def _evaluate_targets_phase(
 ) -> TargetEvaluationArtifacts:
     unhealthy_count = 0
     reboot_requested = False
+    reboot_reason: str | None = None
     target_results: dict[str, CheckResult] = {}
     target_reports: dict[str, TargetReport] = {}
 
@@ -400,6 +405,7 @@ def _evaluate_targets_phase(
 
         if processed.reboot_requested:
             reboot_requested = True
+            reboot_reason = processed.reboot_reason
             LOG.error("reboot requested after evaluating target '%s'", target.name)
             break
 
@@ -408,6 +414,7 @@ def _evaluate_targets_phase(
         target_reports=target_reports,
         unhealthy_count=unhealthy_count,
         reboot_requested=reboot_requested,
+        reboot_reason=reboot_reason,
     )
 
 
@@ -556,7 +563,12 @@ def _run_cycle_collect_locked(
         LOG.error("cycle state persistence failed")
         return STATE_PERSIST_FAILED, report
     if artifacts.reboot_requested:
-        return REBOOT_REQUESTED, report
+        reason = artifacts.reboot_reason or "reboot_requested"
+        reboot_ok = execute_deferred_reboot(dry_run=dry_run, reason=reason)
+        if reboot_ok:
+            return REBOOT_REQUESTED, report
+        report["reason"] = "reboot_command_failed"
+        return UNHEALTHY, report
     if artifacts.unhealthy_count or limited_mode:
         return UNHEALTHY, report
     return 0, report
