@@ -45,6 +45,12 @@ Many Raspberry Pi failures are logical stalls, not full kernel hangs:
 
 ## Architecture
 
+## Health Topology Snapshot
+
+Example topology view rendered from `stats.json`:
+
+![raspi-sentinel Health Topology](docs/images/health-topology.png)
+
 - **Python CLI** (`raspi-sentinel` / `python -m raspi_sentinel`)
 - **TOML config** as source of truth
 - **Rule-based checks per target**:

@@ -12,6 +12,12 @@
 - 連続失敗回数とクールダウンを使った安全な復旧判断
 - Discord 通知（再送キュー集約あり）
 
+## Health Topology スナップショット
+
+`stats.json` をもとに描画したヘルストポロジーの表示例です。
+
+![raspi-sentinel Health Topology](docs/images/health-topology.png)
+
 ## クイックスタート
 
 ```bash
