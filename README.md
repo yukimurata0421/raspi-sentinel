@@ -6,7 +6,9 @@ Japanese guide: [README.ja.md](README.ja.md)
 
 ## Responsibility Boundary
 
-## Security model (read this)
+This section defines what `raspi-sentinel` is responsible for and what remains outside of its scope.
+
+### Security model (read this)
 
 `raspi-sentinel` is designed for **trusted operator-controlled configuration** on a single machine (for example `/etc/raspi-sentinel/config.toml` owned by root).
 
@@ -17,7 +19,7 @@ Japanese guide: [README.ja.md](README.ja.md)
 - When running as **root**, restrict config file permissions (for example `chmod 600` / `root:root`) so webhook URLs and commands are not exposed to other local users.
 - On load, if the config file is **group- or world-writable**, a **warning** is logged (unsafe in shared-admin environments).
 
-## Core (this project)
+### Core (this project)
 
 - logical health monitoring while the OS is alive
 - external status JSON supervision (generic, shallow interpretation)
@@ -26,7 +28,7 @@ Japanese guide: [README.ja.md](README.ja.md)
   2. restart target services
   3. reboot only after repeated failures and safeguards
 
-## Optional integration (outside core)
+### Optional integration (outside core)
 
 - hardware/system watchdog as lower-level failsafe for deeper hangs
 - watchdog integration examples and docs are separated from core runtime logic
@@ -180,7 +182,7 @@ Reboot loop guards:
 
 ## Install
 
-## 1. Install package
+### 1. Install package
 
 ```bash
 git clone https://github.com/<your-account>/raspi-sentinel.git
@@ -188,7 +190,7 @@ cd raspi-sentinel
 python3 -m pip install .
 ```
 
-## 2. Install config
+### 2. Install config
 
 ```bash
 sudo install -d -m 0755 /etc/raspi-sentinel
@@ -197,13 +199,13 @@ sudo install -m 0644 config/raspi-sentinel.example.toml /etc/raspi-sentinel/conf
 
 Edit `/etc/raspi-sentinel/config.toml` for your real services/paths.
 
-## 3. Prepare state directory
+### 3. Prepare state directory
 
 ```bash
 sudo install -d -m 0755 /var/lib/raspi-sentinel
 ```
 
-## 4. Install core systemd units
+### 4. Install core systemd units
 
 ```bash
 sudo install -m 0644 systemd/raspi-sentinel.service /etc/systemd/system/raspi-sentinel.service
@@ -212,7 +214,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now raspi-sentinel.timer
 ```
 
-## 5. Validate dry-run
+### 5. Validate dry-run
 
 ```bash
 sudo raspi-sentinel -c /etc/raspi-sentinel/config.toml --dry-run --verbose run-once
