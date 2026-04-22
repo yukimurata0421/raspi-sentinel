@@ -10,6 +10,8 @@ from typing import Any
 @dataclass(slots=True)
 class GlobalConfig:
     state_file: Path
+    state_durable_file: Path | None
+    state_durable_fields: tuple[str, ...]
     state_max_file_bytes: int
     state_reboots_max_entries: int
     state_lock_timeout_sec: int
@@ -27,6 +29,10 @@ class GlobalConfig:
     min_uptime_for_reboot_sec: int
     default_command_timeout_sec: int
     loop_interval_sec: int
+    storage_require_tmpfs: bool
+    storage_verify_min_free_bytes: int
+    storage_verify_write_bytes: int
+    storage_verify_cooldown_sec: int
 
 
 @dataclass(slots=True)

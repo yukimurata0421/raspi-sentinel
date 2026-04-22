@@ -31,3 +31,4 @@ This index is the entry point for operational and design documentation of `raspi
 ## Optional Integration
 
 - [Watchdog Integration](watchdog.md)
+- [Storage Tiers (tmpfs + durable split)](storage-tiers.md)

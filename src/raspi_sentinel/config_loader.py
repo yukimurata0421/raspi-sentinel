@@ -22,6 +22,20 @@ from .config_models import (
 
 LOG = logging.getLogger(__name__)
 
+_DEFAULT_DURABLE_FIELDS: tuple[str, ...] = (
+    "reboot_history",
+    "followup_schedule",
+    "notify_backlog",
+)
+_DURABLE_FIELD_ALIASES: dict[str, str] = {
+    "reboot_history": "reboot_history",
+    "reboots": "reboot_history",
+    "followup_schedule": "followup_schedule",
+    "followups": "followup_schedule",
+    "notify_backlog": "notify_backlog",
+    "notify_delivery_backlog": "notify_backlog",
+}
+
 
 def _require_int(data: Mapping[str, object], key: str, default: int | None = None) -> int:
     value = data.get(key, default)
@@ -76,6 +90,29 @@ def _optional_float_from_mapping(data: Mapping[str, Any], key: str) -> float | N
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"'{key}' must be a number")
     return float(value)
+
+
+def _parse_state_durable_fields(storage_raw: Mapping[str, object]) -> tuple[str, ...]:
+    raw = storage_raw.get("state_durable_fields")
+    if raw is None:
+        return _DEFAULT_DURABLE_FIELDS
+    if not isinstance(raw, list):
+        raise ValueError("[storage].state_durable_fields must be an array of strings")
+    fields: list[str] = []
+    for item in raw:
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError("[storage].state_durable_fields must be an array of non-empty strings")
+        canonical = _DURABLE_FIELD_ALIASES.get(item.strip().lower())
+        if canonical is None:
+            raise ValueError(
+                (
+                    "[storage].state_durable_fields contains unknown value "
+                    f"'{item}'; supported: reboot_history, followup_schedule, notify_backlog"
+                )
+            )
+        if canonical not in fields:
+            fields.append(canonical)
+    return tuple(fields)
 
 
 def _validate_target_rules(target: TargetConfig) -> None:
@@ -349,18 +386,52 @@ def load_config(path: Path) -> AppConfig:
     global_raw = raw.get("global", {})
     if not isinstance(global_raw, dict):
         raise ValueError("[global] must be a table")
+    storage_raw = raw.get("storage", {})
+    if storage_raw is None:
+        storage_raw = {}
+    if not isinstance(storage_raw, dict):
+        raise ValueError("[storage] must be a table")
+
+    state_file = Path(global_raw.get("state_file", "/var/lib/raspi-sentinel/state.json"))
+    state_durable_file: Path | None = None
+    events_file = Path(global_raw.get("events_file", "/var/lib/raspi-sentinel/events.jsonl"))
+    monitor_stats_file = Path(global_raw.get("monitor_stats_file", "/var/lib/raspi-sentinel/stats.json"))
+    state_durable_fields: tuple[str, ...] = ()
+    storage_require_tmpfs = False
+    storage_verify_min_free_bytes = 1_048_576
+    storage_verify_write_bytes = 4096
+    storage_verify_cooldown_sec = 2
+
+    if storage_raw:
+        state_file = Path(storage_raw.get("state_volatile_path", str(state_file)))
+        state_durable_file = Path(
+            storage_raw.get("state_durable_path", "/var/lib/raspi-sentinel/state.durable.json")
+        )
+        events_file = Path(storage_raw.get("events_path", str(events_file)))
+        monitor_stats_file = Path(storage_raw.get("snapshot_path", str(monitor_stats_file)))
+        state_durable_fields = _parse_state_durable_fields(storage_raw)
+        storage_require_tmpfs = _optional_bool(storage_raw, "require_tmpfs", True)
+        storage_verify_min_free_bytes = _require_int(
+            storage_raw, "verify_min_free_bytes", storage_verify_min_free_bytes
+        )
+        storage_verify_write_bytes = _require_int(
+            storage_raw, "verify_write_bytes", storage_verify_write_bytes
+        )
+        storage_verify_cooldown_sec = _require_int(
+            storage_raw, "verify_cooldown_sec", storage_verify_cooldown_sec
+        )
 
     global_config = GlobalConfig(
-        state_file=Path(global_raw.get("state_file", "/var/lib/raspi-sentinel/state.json")),
+        state_file=state_file,
+        state_durable_file=state_durable_file,
+        state_durable_fields=state_durable_fields,
         state_max_file_bytes=_require_int(global_raw, "state_max_file_bytes", 2_000_000),
         state_reboots_max_entries=_require_int(global_raw, "state_reboots_max_entries", 256),
         state_lock_timeout_sec=_require_int(global_raw, "state_lock_timeout_sec", 5),
-        events_file=Path(global_raw.get("events_file", "/var/lib/raspi-sentinel/events.jsonl")),
+        events_file=events_file,
         events_max_file_bytes=_require_int(global_raw, "events_max_file_bytes", 5_000_000),
         events_backup_generations=_require_int(global_raw, "events_backup_generations", 3),
-        monitor_stats_file=Path(
-            global_raw.get("monitor_stats_file", "/var/lib/raspi-sentinel/stats.json")
-        ),
+        monitor_stats_file=monitor_stats_file,
         monitor_stats_interval_sec=_require_int(global_raw, "monitor_stats_interval_sec", 30),
         restart_threshold=_require_int(global_raw, "restart_threshold", 3),
         reboot_threshold=_require_int(global_raw, "reboot_threshold", 6),
@@ -371,6 +442,10 @@ def load_config(path: Path) -> AppConfig:
         min_uptime_for_reboot_sec=_require_int(global_raw, "min_uptime_for_reboot_sec", 600),
         default_command_timeout_sec=_require_int(global_raw, "default_command_timeout_sec", 10),
         loop_interval_sec=_require_int(global_raw, "loop_interval_sec", 60),
+        storage_require_tmpfs=storage_require_tmpfs,
+        storage_verify_min_free_bytes=storage_verify_min_free_bytes,
+        storage_verify_write_bytes=storage_verify_write_bytes,
+        storage_verify_cooldown_sec=storage_verify_cooldown_sec,
     )
 
     if global_config.restart_threshold <= 0:
@@ -403,6 +478,12 @@ def load_config(path: Path) -> AppConfig:
         raise ValueError("global state_reboots_max_entries must be > 0")
     if global_config.state_lock_timeout_sec <= 0:
         raise ValueError("global state_lock_timeout_sec must be > 0")
+    if global_config.storage_verify_min_free_bytes <= 0:
+        raise ValueError("storage verify_min_free_bytes must be > 0")
+    if global_config.storage_verify_write_bytes <= 0:
+        raise ValueError("storage verify_write_bytes must be > 0")
+    if global_config.storage_verify_cooldown_sec < 0:
+        raise ValueError("storage verify_cooldown_sec must be >= 0")
 
     notify_raw = raw.get("notify", {})
     if not isinstance(notify_raw, dict):

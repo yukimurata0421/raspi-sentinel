@@ -18,7 +18,7 @@ from raspi_sentinel.engine import (
     persist_cycle_outputs,
 )
 from raspi_sentinel.exit_codes import REBOOT_REQUESTED, UNHEALTHY
-from raspi_sentinel.state import StateStore
+from raspi_sentinel.state import TieredStateStore
 from raspi_sentinel.state_models import GlobalState
 
 
@@ -78,7 +78,7 @@ def test_apply_recovery_phase_delegates_to_recovery() -> None:
 
 def test_persist_cycle_outputs_saves_state(tmp_path: Path) -> None:
     state_file = tmp_path / "state.json"
-    store = StateStore(state_file)
+    store = TieredStateStore(state_file)
     state = GlobalState()
     state.ensure_target("svc").consecutive_failures = 3
     ok = persist_cycle_outputs(
@@ -101,7 +101,7 @@ def test_overall_status_logic() -> None:
 
 def test_run_cycle_executes_reboot_after_persist(tmp_path: Path, monkeypatch: Any) -> None:
     cfg = make_app_config()
-    store = StateStore(tmp_path / "state.json")
+    store = TieredStateStore(tmp_path / "state.json")
     calls: list[str] = []
 
     monkeypatch.setattr(
@@ -155,7 +155,7 @@ def test_run_cycle_reboot_command_failure_returns_unhealthy(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     cfg = make_app_config()
-    store = StateStore(tmp_path / "state.json")
+    store = TieredStateStore(tmp_path / "state.json")
 
     monkeypatch.setattr(
         "raspi_sentinel.engine._evaluate_targets_phase",

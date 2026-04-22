@@ -173,12 +173,20 @@ Reboot loop guards:
 5. If delivery fails due to network/transient transport errors:
    - failed notifications are queued in `state.json` (internal backlog)
    - retries are attempted every `retry_interval_sec` (default 60s)
-   - retries are aggregated into a single summary message, not one message per failed attempt
-   - summary includes failure window:
-     - `delivery_failed_from=...`
-     - `delivery_failed_until=...`
-     - `failed_notifications_total=...`
-     - `contexts=...`
+  - retries are aggregated into a single summary message, not one message per failed attempt
+  - summary includes failure window:
+    - `delivery_failed_from=...`
+    - `delivery_failed_until=...`
+    - `failed_notifications_total=...`
+    - `contexts=...`
+
+## Storage Tiers (SD Wear Optimization)
+
+`raspi-sentinel` can split runtime files into volatile and durable tiers so frequent writes stay on tmpfs while reboot-sensitive state remains on disk.
+
+- docs: `docs/storage-tiers.md`
+- config: optional `[storage]` section in `config/raspi-sentinel.example.toml`
+- verify command: `raspi-sentinel -c /etc/raspi-sentinel/config.toml verify-storage --json`
 
 ## Install
 
@@ -210,9 +218,21 @@ sudo install -d -m 0755 /var/lib/raspi-sentinel
 ```bash
 sudo install -m 0644 systemd/raspi-sentinel.service /etc/systemd/system/raspi-sentinel.service
 sudo install -m 0644 systemd/raspi-sentinel.timer /etc/systemd/system/raspi-sentinel.timer
+sudo install -m 0644 systemd/raspi-sentinel-tmpfs-verify.service /etc/systemd/system/raspi-sentinel-tmpfs-verify.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now raspi-sentinel.timer
 ```
+
+Optional tmpfs mount unit (when `[storage]` uses `/run/raspi-sentinel/*`):
+
+```bash
+sudo install -m 0644 systemd/raspi-sentinel-tmpfs.mount /etc/systemd/system/raspi-sentinel-tmpfs.mount
+sudo systemctl daemon-reload
+sudo systemctl enable --now raspi-sentinel-tmpfs.mount
+```
+
+`raspi-sentinel.service` requires `raspi-sentinel-tmpfs-verify.service`.
+When tmpfs tiering is enabled and verification fails, service start is blocked.
 
 ### 5. Validate dry-run
 
@@ -480,6 +500,12 @@ JSON summary output (for automation):
 raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --json
 ```
 
+Verify tmpfs storage mount/permissions/writability before monitor start:
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml verify-storage --json
+```
+
 Fail validation when warnings exist:
 
 ```bash
@@ -499,6 +525,7 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
 | `13` | State lock timeout (another cycle holds the lock) |
 | `14` | State persistence failed |
 | `15` | `validate-config --strict` found warnings |
+| `16` | Storage verification failed (`verify-storage`) |
 
 Use `0` vs `1` / `2` in systemd `ExecStart=` or scripts if you alert on unhealthy cycles or reboot requests.
 

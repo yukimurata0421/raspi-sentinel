@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from raspi_sentinel.config import load_config
-from raspi_sentinel.state import StateStore
+from raspi_sentinel.state import StateStore, TieredStateStore
 from raspi_sentinel.state_helpers import maybe_rotate_file
 
 
@@ -48,6 +48,8 @@ def test_load_config_defaults_include_monitor_stats(tmp_path: Path) -> None:
     assert cfg.global_config.events_file == Path("/var/lib/raspi-sentinel/events.jsonl")
     assert cfg.global_config.monitor_stats_file == Path("/var/lib/raspi-sentinel/stats.json")
     assert cfg.global_config.monitor_stats_interval_sec == 30
+    assert cfg.global_config.state_durable_file is None
+    assert cfg.global_config.state_durable_fields == ()
 
 
 def test_load_config_rejects_stats_rules_without_stats_file(tmp_path: Path) -> None:
@@ -183,6 +185,103 @@ def test_load_config_accepts_network_probe_settings(tmp_path: Path) -> None:
     assert target.latency_thresholds_ms["gateway"] == 100.0
 
 
+def test_load_config_storage_section_overrides_paths_and_fields(tmp_path: Path) -> None:
+    conf = tmp_path / "config.toml"
+    _write(
+        conf,
+        """
+        [global]
+        state_file = "/tmp/state.json"
+        restart_threshold = 2
+        reboot_threshold = 3
+        restart_cooldown_sec = 10
+        reboot_cooldown_sec = 20
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 60
+        default_command_timeout_sec = 7
+        loop_interval_sec = 30
+
+        [storage]
+        snapshot_path = "/run/raspi-sentinel/stats.json"
+        state_volatile_path = "/run/raspi-sentinel/state.volatile.json"
+        state_durable_path = "/var/lib/raspi-sentinel/state.durable.json"
+        events_path = "/var/lib/raspi-sentinel/events.jsonl"
+        state_durable_fields = ["reboot_history", "followup_schedule", "notify_backlog"]
+        require_tmpfs = true
+        verify_min_free_bytes = 2048
+        verify_write_bytes = 64
+        verify_cooldown_sec = 1
+
+        [notify.discord]
+        enabled = false
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "network_uplink"
+        services = []
+        service_active = false
+        command = "true"
+        """,
+    )
+    cfg = load_config(conf)
+    assert cfg.global_config.state_file == Path("/run/raspi-sentinel/state.volatile.json")
+    assert cfg.global_config.state_durable_file == Path("/var/lib/raspi-sentinel/state.durable.json")
+    assert cfg.global_config.monitor_stats_file == Path("/run/raspi-sentinel/stats.json")
+    assert cfg.global_config.state_durable_fields == (
+        "reboot_history",
+        "followup_schedule",
+        "notify_backlog",
+    )
+    assert cfg.global_config.storage_require_tmpfs is True
+    assert cfg.global_config.storage_verify_min_free_bytes == 2048
+    assert cfg.global_config.storage_verify_write_bytes == 64
+    assert cfg.global_config.storage_verify_cooldown_sec == 1
+
+
+def test_load_config_rejects_unknown_storage_durable_field(tmp_path: Path) -> None:
+    conf = tmp_path / "config.toml"
+    _write(
+        conf,
+        """
+        [global]
+        state_file = "/tmp/state.json"
+        restart_threshold = 2
+        reboot_threshold = 3
+        restart_cooldown_sec = 10
+        reboot_cooldown_sec = 20
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 60
+        default_command_timeout_sec = 7
+        loop_interval_sec = 30
+
+        [storage]
+        state_volatile_path = "/run/raspi-sentinel/state.volatile.json"
+        state_durable_path = "/var/lib/raspi-sentinel/state.durable.json"
+        state_durable_fields = ["unknown_field"]
+
+        [notify.discord]
+        enabled = false
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "network_uplink"
+        services = []
+        service_active = false
+        command = "true"
+        """,
+    )
+    with pytest.raises(ValueError, match="state_durable_fields contains unknown value"):
+        load_config(conf)
+
+
 def test_state_store_round_trip_preserves_monitor_stats(tmp_path: Path) -> None:
     state_file = tmp_path / "state.json"
     store = StateStore(state_file)
@@ -257,3 +356,87 @@ def test_state_store_quarantines_corrupted_json(tmp_path: Path) -> None:
     assert diagnostics.corrupt_backup_path.exists()
     assert not state_file.exists()
     assert loaded["targets"] == {}
+
+
+def test_tiered_state_store_splits_durable_fields(tmp_path: Path) -> None:
+    volatile = tmp_path / "state.volatile.json"
+    durable = tmp_path / "state.durable.json"
+    store = TieredStateStore(
+        volatile_path=volatile,
+        durable_path=durable,
+        durable_fields=("reboot_history", "followup_schedule", "notify_backlog"),
+    )
+    payload = {
+        "targets": {"demo": {"consecutive_failures": 2, "last_reason": "clock_jump"}},
+        "reboots": [{"ts": 10.0, "target": "demo", "reason": "failed"}],
+        "followups": {
+            "demo": {
+                "due_ts": 20.0,
+                "created_ts": 10.0,
+                "initial_action": "restart",
+                "initial_reason": "failed",
+                "initial_consecutive_failures": 2,
+            }
+        },
+        "notify": {
+            "last_heartbeat_ts": 11.0,
+            "retry_due_ts": 30.0,
+            "delivery_backlog": {
+                "first_failed_ts": 12.0,
+                "last_failed_ts": 13.0,
+                "total_failures": 2,
+                "contexts": {"issue_notification:demo": 2},
+            },
+        },
+        "monitor_stats": {"last_written_ts": 9.0},
+    }
+    assert store.save(payload, max_file_bytes=1_000_000, max_reboots_entries=256)
+
+    volatile_raw = volatile.read_text(encoding="utf-8")
+    assert '"reboots"' not in volatile_raw
+    assert '"followups"' not in volatile_raw
+    assert '"delivery_backlog"' not in volatile_raw
+    assert '"retry_due_ts"' not in volatile_raw
+
+    durable_raw = durable.read_text(encoding="utf-8")
+    assert '"reboots"' in durable_raw
+    assert '"followups"' in durable_raw
+    assert '"delivery_backlog"' in durable_raw
+    assert '"retry_due_ts"' in durable_raw
+
+    loaded = store.load()
+    assert loaded["targets"]["demo"]["consecutive_failures"] == 2
+    assert loaded["reboots"][0]["target"] == "demo"
+    assert loaded["followups"]["demo"]["initial_action"] == "restart"
+    assert loaded["notify"]["delivery_backlog"]["total_failures"] == 2
+
+
+def test_tiered_state_store_returns_false_when_durable_save_fails(tmp_path: Path) -> None:
+    volatile = tmp_path / "state.volatile.json"
+    durable = tmp_path / "state.durable.json"
+    store = TieredStateStore(
+        volatile_path=volatile,
+        durable_path=durable,
+        durable_fields=("reboot_history", "followup_schedule", "notify_backlog"),
+    )
+    payload = {
+        "targets": {"demo": {"consecutive_failures": 1}},
+        "reboots": [{"ts": 10.0, "target": "demo", "reason": "failed"}],
+        "followups": {},
+        "notify": {},
+        "monitor_stats": {},
+    }
+    calls: list[Path] = []
+    original = store._save_raw_payload
+
+    def fake_save_raw_payload(*, path: Path, payload: dict[str, object], max_file_bytes: int) -> bool:
+        calls.append(path)
+        if path == durable:
+            return False
+        return original(path=path, payload=payload, max_file_bytes=max_file_bytes)
+
+    store._save_raw_payload = fake_save_raw_payload  # type: ignore[method-assign]
+    ok = store.save(payload, max_file_bytes=1_000_000, max_reboots_entries=256)
+    assert ok is False
+    assert calls == [volatile, durable]
+    assert volatile.exists()

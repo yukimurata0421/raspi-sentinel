@@ -1,7 +1,8 @@
 [Unit]
 Description=raspi-sentinel one-shot health and recovery check
 Wants=network-online.target
-After=network-online.target
+Requires=raspi-sentinel-tmpfs-verify.service
+After=network-online.target raspi-sentinel-tmpfs-verify.service
 
 [Service]
 Type=oneshot
@@ -15,7 +16,7 @@ ProtectControlGroups=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectSystem=full
-ReadWritePaths=/var/lib/raspi-sentinel
+ReadWritePaths=/var/lib/raspi-sentinel /run/raspi-sentinel
 Nice=5
 
 [Install]

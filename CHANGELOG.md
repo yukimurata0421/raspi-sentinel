@@ -6,8 +6,30 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ## [Unreleased]
 
+### Added
+
+- Optional storage-tier architecture (`[storage]`) for SD wear optimization:
+  - `snapshot_path`
+  - `state_volatile_path`
+  - `state_durable_path`
+  - `events_path`
+  - `state_durable_fields`
+- New CLI command: `verify-storage` for tmpfs preflight verification
+  (mount/owner-mode/write-read/capacity/cooldown).
+- New optional systemd units:
+  - `systemd/raspi-sentinel-tmpfs.mount`
+  - `systemd/raspi-sentinel-tmpfs-verify.service`
+- New documentation:
+  - `docs/storage-tiers.md`
+
 ### Changed
 
+- State persistence now supports durability split:
+  - volatile state for high-frequency runtime fields
+  - durable state for `reboot_history`, `followup_schedule`, `notify_backlog`
+  - rationale: avoid breaking reboot loop guard and notification continuity while reducing SD writes
+- `raspi-sentinel.service` now requires `raspi-sentinel-tmpfs-verify.service`;
+  when tmpfs tiering is enabled and verify fails, service start is blocked.
 - Test suite layout was reorganized into taxonomy directories:
   - `tests/unit/`
   - `tests/scenario/`
@@ -18,6 +40,8 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 - Added `docs/facts/test-map.md` to describe test responsibilities and taxonomy usage.
 - Updated `README.md`, `README.ja.md`, and docs indexes to reference the test map and current test layout.
+- Updated `docs/principles/engineering-decisions.md` with storage-tier decision,
+  explicit reason for not moving full `state.json` to tmpfs, and cooldown intent.
 
 ## [0.6.0] - 2026-04-18
 

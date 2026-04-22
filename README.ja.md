@@ -32,6 +32,14 @@
 
 ![raspi-sentinel Health Topology](docs/images/health-topology.png)
 
+## Storage Tiers（SD寿命最適化・任意）
+
+高頻度書き込みを tmpfs に逃がしつつ、再起動ガードに必要な状態を永続化するオプションを提供します。
+
+- 詳細: [docs/storage-tiers.md](docs/storage-tiers.md)
+- 設定例: `config/raspi-sentinel.example.toml` の `[storage]`
+- 検証コマンド: `raspi-sentinel -c /etc/raspi-sentinel/config.toml verify-storage --json`
+
 ## クイックスタート
 
 ```bash

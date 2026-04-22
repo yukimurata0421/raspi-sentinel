@@ -112,6 +112,8 @@ def make_target(**overrides: Any) -> TargetConfig:
 def make_global_config(**overrides: Any) -> GlobalConfig:
     base: dict[str, Any] = {
         "state_file": Path("/tmp/raspi-sentinel-test-state.json"),
+        "state_durable_file": None,
+        "state_durable_fields": (),
         "state_max_file_bytes": 2_000_000,
         "state_reboots_max_entries": 256,
         "state_lock_timeout_sec": 5,
@@ -129,6 +131,10 @@ def make_global_config(**overrides: Any) -> GlobalConfig:
         "min_uptime_for_reboot_sec": 600,
         "default_command_timeout_sec": 10,
         "loop_interval_sec": 60,
+        "storage_require_tmpfs": True,
+        "storage_verify_min_free_bytes": 1_048_576,
+        "storage_verify_write_bytes": 4096,
+        "storage_verify_cooldown_sec": 2,
     }
     base.update(overrides)
     return GlobalConfig(**base)

@@ -9,6 +9,8 @@ from raspi_sentinel import cli, config_summary
 from raspi_sentinel import recovery as recovery_module
 from raspi_sentinel.checks import CheckFailure, CheckResult
 from raspi_sentinel.config import load_config
+from raspi_sentinel.exit_codes import STORAGE_VERIFY_FAILED
+from raspi_sentinel.storage_verify import StorageVerifyResult
 from raspi_sentinel.status_events import classify_target_reason, classify_target_status
 
 
@@ -231,6 +233,106 @@ def test_validate_config_returns_error_code_for_invalid_config(tmp_path: Path) -
 
     rc = cli.main(["-c", str(conf), "validate-config"])
     assert rc == 10
+
+
+def test_verify_storage_returns_success_json(tmp_path: Path, monkeypatch: Any, capsys: Any) -> None:
+    conf = tmp_path / "config.toml"
+    _write(
+        conf,
+        """
+        [global]
+        state_file = "/tmp/state.json"
+        restart_threshold = 2
+        reboot_threshold = 3
+        restart_cooldown_sec = 10
+        reboot_cooldown_sec = 20
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 60
+        default_command_timeout_sec = 5
+        loop_interval_sec = 30
+
+        [notify.discord]
+        enabled = false
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "demo"
+        services = []
+        service_active = false
+        command = "true"
+        """,
+    )
+    monkeypatch.setattr(
+        cli,
+        "verify_tmpfs_storage",
+        lambda **kwargs: StorageVerifyResult(
+            ok=True,
+            mount_path=Path("/run/raspi-sentinel"),
+            mount_fs_type="tmpfs",
+            owner_uid=0,
+            owner_gid=0,
+            mode=0o755,
+            free_bytes=1024 * 1024,
+        ),
+    )
+    rc = cli.main(["-c", str(conf), "verify-storage", "--json"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["mount_fs_type"] == "tmpfs"
+
+
+def test_verify_storage_returns_failure_code(tmp_path: Path, monkeypatch: Any) -> None:
+    conf = tmp_path / "config.toml"
+    _write(
+        conf,
+        """
+        [global]
+        state_file = "/tmp/state.json"
+        restart_threshold = 2
+        reboot_threshold = 3
+        restart_cooldown_sec = 10
+        reboot_cooldown_sec = 20
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 60
+        default_command_timeout_sec = 5
+        loop_interval_sec = 30
+
+        [notify.discord]
+        enabled = false
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "demo"
+        services = []
+        service_active = false
+        command = "true"
+        """,
+    )
+    monkeypatch.setattr(
+        cli,
+        "verify_tmpfs_storage",
+        lambda **kwargs: StorageVerifyResult(
+            ok=False,
+            mount_path=Path("/run/raspi-sentinel"),
+            mount_fs_type="ext4",
+            owner_uid=0,
+            owner_gid=0,
+            mode=0o755,
+            free_bytes=1024,
+            reason="mount fs type is not tmpfs",
+        ),
+    )
+    rc = cli.main(["-c", str(conf), "verify-storage"])
+    assert rc == STORAGE_VERIFY_FAILED
 
 
 def test_validate_config_strict_returns_nonzero_on_warnings(
@@ -603,7 +705,7 @@ def test_run_once_reports_state_lock_timeout_for_timer_service(
     def timeout_lock(self: Any, timeout_sec: int = 5) -> None:
         raise TimeoutError(f"state lock timeout after {timeout_sec}s: forced for test")
 
-    monkeypatch.setattr("raspi_sentinel.engine.StateStore.exclusive_lock", timeout_lock)
+    monkeypatch.setattr("raspi_sentinel.engine.TieredStateStore.exclusive_lock", timeout_lock)
 
     rc = cli.main(["-c", str(conf), "run-once", "--json"])
     assert rc == 13

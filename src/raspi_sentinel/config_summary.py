@@ -304,6 +304,12 @@ def build_config_validation_report(config_path: Path, config: AppConfig) -> dict
         "config_permission_warning": permission_warning,
         "global": {
             "state_file": str(config.global_config.state_file),
+            "state_durable_file": (
+                str(config.global_config.state_durable_file)
+                if config.global_config.state_durable_file is not None
+                else None
+            ),
+            "state_durable_fields": list(config.global_config.state_durable_fields),
             "state_max_file_bytes": config.global_config.state_max_file_bytes,
             "state_reboots_max_entries": config.global_config.state_reboots_max_entries,
             "state_lock_timeout_sec": config.global_config.state_lock_timeout_sec,
@@ -311,6 +317,10 @@ def build_config_validation_report(config_path: Path, config: AppConfig) -> dict
             "events_max_file_bytes": config.global_config.events_max_file_bytes,
             "events_backup_generations": config.global_config.events_backup_generations,
             "monitor_stats_file": str(config.global_config.monitor_stats_file),
+            "storage_require_tmpfs": config.global_config.storage_require_tmpfs,
+            "storage_verify_min_free_bytes": config.global_config.storage_verify_min_free_bytes,
+            "storage_verify_write_bytes": config.global_config.storage_verify_write_bytes,
+            "storage_verify_cooldown_sec": config.global_config.storage_verify_cooldown_sec,
             "loop_interval_sec": config.global_config.loop_interval_sec,
             "restart_threshold": config.global_config.restart_threshold,
             "reboot_threshold": config.global_config.reboot_threshold,

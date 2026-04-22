@@ -13,9 +13,11 @@ from .exit_codes import (
     CONFIG_LOAD_FAILED,
     INVALID_INTERVAL,
     REBOOT_REQUESTED,
+    STORAGE_VERIFY_FAILED,
     VALIDATION_WARNING,
 )
 from .logging_utils import configure_logging
+from .storage_verify import verify_tmpfs_storage
 from .state_helpers import safe_int
 
 LOG = logging.getLogger(__name__)
@@ -90,6 +92,34 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Return non-zero when config summary contains warnings",
     )
 
+    verify_storage_parser = sub.add_parser(
+        "verify-storage",
+        help="Verify tmpfs-backed volatile storage before starting monitor cycle",
+    )
+    verify_storage_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print storage verification result as JSON",
+    )
+    verify_storage_parser.add_argument(
+        "--expected-mode",
+        type=lambda value: int(value, 8),
+        default=0o755,
+        help="Expected mount directory mode in octal (default: 0755)",
+    )
+    verify_storage_parser.add_argument(
+        "--expected-owner-uid",
+        type=int,
+        default=0,
+        help="Expected mount directory owner uid (default: 0)",
+    )
+    verify_storage_parser.add_argument(
+        "--expected-owner-gid",
+        type=int,
+        default=0,
+        help="Expected mount directory owner gid (default: 0)",
+    )
+
     return parser
 
 
@@ -124,6 +154,19 @@ def main(argv: list[str] | None = None) -> int:
                 LOG.error("reboot was requested; exiting loop")
                 return 0
             time.sleep(interval)
+
+    if args.command == "verify-storage":
+        verify_result = verify_tmpfs_storage(
+            config=config,
+            expected_mode=args.expected_mode,
+            expected_owner_uid=args.expected_owner_uid,
+            expected_owner_gid=args.expected_owner_gid,
+        )
+        if args.json:
+            print(json.dumps(verify_result.to_dict(), indent=2, sort_keys=True))
+        else:
+            LOG.info("storage verify result: %s", verify_result.to_dict())
+        return 0 if verify_result.ok else STORAGE_VERIFY_FAILED
 
     # args.command == "validate-config" (only remaining subcommand)
     config_report = build_config_validation_report(config_path=args.config, config=config)

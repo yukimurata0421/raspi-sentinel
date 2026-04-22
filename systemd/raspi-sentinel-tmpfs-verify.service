@@ -1,0 +1,14 @@
+[Unit]
+Description=Verify raspi-sentinel tmpfs storage is writable and safe
+After=raspi-sentinel-tmpfs.mount
+Before=raspi-sentinel.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/bin/env python3 -m raspi_sentinel -c /etc/raspi-sentinel/config.toml verify-storage --expected-mode 0755 --expected-owner-uid 0 --expected-owner-gid 0
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

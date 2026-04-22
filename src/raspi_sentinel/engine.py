@@ -22,7 +22,7 @@ from .monitor_stats import maybe_write_monitor_stats
 from .notify import DiscordNotifier, format_failures
 from .policy import PolicySnapshot, classify_target_policy
 from .recovery import RecoveryOutcome, apply_recovery, execute_deferred_reboot
-from .state import StateLoadDiagnostics, StateStore
+from .state import StateLoadDiagnostics, TieredStateStore
 from .state_models import GlobalState
 from .status_events import (
     append_event,
@@ -202,7 +202,7 @@ def emit_target_notifications(
 
 
 def persist_cycle_outputs(
-    store: StateStore,
+    store: TieredStateStore,
     state: GlobalState,
     max_file_bytes: int,
     max_reboots_entries: int,
@@ -492,7 +492,7 @@ def _build_cycle_report(
 def _run_cycle_collect_locked(
     config: AppConfig,
     dry_run: bool,
-    store: StateStore,
+    store: TieredStateStore,
     now_ts: float,
     mono_provider: Callable[[], float],
 ) -> tuple[int, CycleReport]:
@@ -580,7 +580,11 @@ def run_cycle_collect(
     time_provider: Callable[[], float],
     mono_provider: Callable[[], float],
 ) -> tuple[int, CycleReport]:
-    store = StateStore(config.global_config.state_file)
+    store = TieredStateStore(
+        volatile_path=config.global_config.state_file,
+        durable_path=config.global_config.state_durable_file,
+        durable_fields=config.global_config.state_durable_fields,
+    )
     try:
         with store.exclusive_lock(timeout_sec=config.global_config.state_lock_timeout_sec):
             now_ts = time_provider()

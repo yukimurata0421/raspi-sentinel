@@ -1,0 +1,12 @@
+[Unit]
+Description=raspi-sentinel tmpfs for volatile state
+Before=raspi-sentinel.service
+
+[Mount]
+What=tmpfs
+Where=/run/raspi-sentinel
+Type=tmpfs
+Options=size=16M,mode=0755,noexec,nosuid,nodev
+
+[Install]
+WantedBy=multi-user.target

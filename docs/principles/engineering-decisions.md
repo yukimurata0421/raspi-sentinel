@@ -98,6 +98,23 @@ Locations: [src/raspi_sentinel/cli.py](../../src/raspi_sentinel/cli.py)
 
 Rationale: Notification semantics depend on "previous" counters. Capturing them before in-cycle mutations keeps intent explicit.
 
+### 3-4. Split state into durability tiers instead of moving whole `state.json` to tmpfs
+
+Locations: [src/raspi_sentinel/config_loader.py](../../src/raspi_sentinel/config_loader.py), [src/raspi_sentinel/state.py](../../src/raspi_sentinel/state.py), [docs/storage-tiers.md](../storage-tiers.md)
+
+Decision:
+
+- SD wear concern was identified during `raspi-sentinel` development.
+- Instead of placing the full state on tmpfs, state persistence is split by durability requirement:
+  - volatile tier (tmpfs candidate): frequent counters/snapshots
+  - durable tier (disk): `reboot_history`, `followup_schedule`, `notify_backlog`
+  - event history tier (disk): `events.jsonl`
+- Durability vs wear tradeoff is selected by config (`[storage]`), not hard-coded.
+
+Rationale: A naive full-tmpfs move can break safety guards designed to survive process/host restarts. If durable safety fields disappear, reboot-loop guard and notification continuity can be silently weakened.
+
+Tradeoff: Tiered state introduces configuration and persistence complexity, but preserves recovery safety semantics while reducing high-frequency disk writes.
+
 ---
 
 ## 4. Health Classification
@@ -252,6 +269,29 @@ Rationale: Command checks run via shell execution. The trust boundary is local a
 Locations: [src/raspi_sentinel/time_health.py](../../src/raspi_sentinel/time_health.py), [docs/time-health-decision-table.md](../time-health-decision-table.md)
 
 Rationale: Automatic wall-clock mutation has broad side effects; detection and staged recovery are safer defaults.
+
+### 7-3. Require storage verification before service run when tmpfs tiering is enabled
+
+Locations: [src/raspi_sentinel/storage_verify.py](../../src/raspi_sentinel/storage_verify.py), [systemd/raspi-sentinel.service](../../systemd/raspi-sentinel.service), [systemd/raspi-sentinel-tmpfs-verify.service](../../systemd/raspi-sentinel-tmpfs-verify.service)
+
+Decision:
+
+- `raspi-sentinel.service` now requires `raspi-sentinel-tmpfs-verify.service`.
+- `verify-storage` performs:
+  1. mount-point / filesystem verification
+  2. owner/mode verification
+  3. write-read probe
+  4. free-capacity check
+  5. cooldown wait
+- If verification fails under tmpfs tiering, monitor cycle does not start.
+
+Rationale: This catches mount/permission/capacity issues before recovery logic runs and avoids silently writing to an unintended layer.
+
+Cooldown intent:
+
+- allow kernel/mount state to settle after mount activation
+- ensure systemd dependency ordering has completed
+- create a short human intervention window before monitor actions begin
 
 ---
 

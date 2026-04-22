@@ -10,7 +10,8 @@
 | `10` | `CONFIG_LOAD_FAILED` | Config file could not be parsed/validated. |
 | `11` | `INVALID_INTERVAL` | `loop --interval-sec` value is invalid (`<= 0`). |
 | `13` | `STATE_LOCK_ERROR` | Could not acquire state lock or lock I/O failed. |
-| `14` | `STATE_PERSIST_FAILED` | Cycle ran but `state.json` persistence failed. |
+| `14` | `STATE_PERSIST_FAILED` | Cycle ran but state persistence failed (volatile or durable tier). |
 | `15` | `VALIDATION_WARNING` | `validate-config --strict` detected warnings. |
+| `16` | `STORAGE_VERIFY_FAILED` | `verify-storage` detected mount/permission/writability/capacity issues. |
 
 Implementation source: [src/raspi_sentinel/exit_codes.py](../../src/raspi_sentinel/exit_codes.py).
