@@ -237,10 +237,14 @@ class TieredStateStore:
         durable_payload: dict[str, Any] = {}
 
         if "reboot_history" in self.durable_fields:
-            durable_payload["reboots"] = list(volatile_payload.get("reboots", []))
+            reboots_raw = volatile_payload.get("reboots")
+            durable_payload["reboots"] = list(reboots_raw) if isinstance(reboots_raw, list) else []
             volatile_payload.pop("reboots", None)
         if "followup_schedule" in self.durable_fields:
-            durable_payload["followups"] = dict(volatile_payload.get("followups", {}))
+            followups_raw = volatile_payload.get("followups")
+            durable_payload["followups"] = (
+                dict(followups_raw) if isinstance(followups_raw, dict) else {}
+            )
             volatile_payload.pop("followups", None)
         if "notify_backlog" in self.durable_fields:
             volatile_notify_raw = volatile_payload.get("notify")
