@@ -40,6 +40,13 @@
 - 設定例: `config/raspi-sentinel.example.toml` の `[storage]`
 - 検証コマンド: `raspi-sentinel -c /etc/raspi-sentinel/config.toml verify-storage --json`
 
+## Non-goals（非目標）
+
+- 本リリースでは「完全な SD フリー運用」はサポートしません。
+  `events.jsonl` と安全ガードに必要な永続状態はディスク保持を前提にします。
+- この機能はシステム層の耐障害対策
+  （電源断対策、ファイルシステム点検、ハードウェア watchdog 戦略）を置き換えるものではありません。
+
 ## クイックスタート
 
 ```bash

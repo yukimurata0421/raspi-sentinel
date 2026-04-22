@@ -188,6 +188,13 @@ Reboot loop guards:
 - config: optional `[storage]` section in `config/raspi-sentinel.example.toml`
 - verify command: `raspi-sentinel -c /etc/raspi-sentinel/config.toml verify-storage --json`
 
+## Non-goals
+
+- Full "SD-free operation" is explicitly not supported in this release.
+  `events.jsonl` and durable safety state are intentionally kept on disk.
+- This feature does not replace system-level durability controls
+  (power-loss handling, filesystem checks, hardware watchdog strategy).
+
 ## Install
 
 ### 1. Install package

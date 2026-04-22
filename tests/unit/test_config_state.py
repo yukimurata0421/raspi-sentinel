@@ -229,7 +229,9 @@ def test_load_config_storage_section_overrides_paths_and_fields(tmp_path: Path) 
     )
     cfg = load_config(conf)
     assert cfg.global_config.state_file == Path("/run/raspi-sentinel/state.volatile.json")
-    assert cfg.global_config.state_durable_file == Path("/var/lib/raspi-sentinel/state.durable.json")
+    assert cfg.global_config.state_durable_file == Path(
+        "/var/lib/raspi-sentinel/state.durable.json"
+    )
     assert cfg.global_config.monitor_stats_file == Path("/run/raspi-sentinel/stats.json")
     assert cfg.global_config.state_durable_fields == (
         "reboot_history",
@@ -429,7 +431,9 @@ def test_tiered_state_store_returns_false_when_durable_save_fails(tmp_path: Path
     calls: list[Path] = []
     original = store._save_raw_payload
 
-    def fake_save_raw_payload(*, path: Path, payload: dict[str, object], max_file_bytes: int) -> bool:
+    def fake_save_raw_payload(
+        *, path: Path, payload: dict[str, object], max_file_bytes: int
+    ) -> bool:
         calls.append(path)
         if path == durable:
             return False

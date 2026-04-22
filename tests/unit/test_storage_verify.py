@@ -124,9 +124,7 @@ def test_verify_tmpfs_storage_rejects_non_mount_path(tmp_path: Path, monkeypatch
     assert "not an independent mount point" in result.reason
 
 
-def test_verify_tmpfs_storage_rejects_owner_uid_mismatch(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_verify_tmpfs_storage_rejects_owner_uid_mismatch(tmp_path: Path, monkeypatch: Any) -> None:
     mount_dir = tmp_path / "run" / "raspi-sentinel"
     mount_dir.mkdir(parents=True)
     cfg = make_app_config(
@@ -152,9 +150,7 @@ def test_verify_tmpfs_storage_rejects_owner_uid_mismatch(
     assert "owner uid mismatch" in result.reason
 
 
-def test_verify_tmpfs_storage_rejects_write_probe_failure(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_verify_tmpfs_storage_rejects_write_probe_failure(tmp_path: Path, monkeypatch: Any) -> None:
     mount_dir = tmp_path / "run" / "raspi-sentinel"
     mount_dir.mkdir(parents=True)
     cfg = make_app_config(

@@ -17,8 +17,8 @@ from .exit_codes import (
     VALIDATION_WARNING,
 )
 from .logging_utils import configure_logging
-from .storage_verify import verify_tmpfs_storage
 from .state_helpers import safe_int
+from .storage_verify import verify_tmpfs_storage
 
 LOG = logging.getLogger(__name__)
 

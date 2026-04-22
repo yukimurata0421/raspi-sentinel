@@ -10,8 +10,8 @@ from raspi_sentinel import recovery as recovery_module
 from raspi_sentinel.checks import CheckFailure, CheckResult
 from raspi_sentinel.config import load_config
 from raspi_sentinel.exit_codes import STORAGE_VERIFY_FAILED
-from raspi_sentinel.storage_verify import StorageVerifyResult
 from raspi_sentinel.status_events import classify_target_reason, classify_target_status
+from raspi_sentinel.storage_verify import StorageVerifyResult
 
 
 def _write(path: Path, text: str) -> None:

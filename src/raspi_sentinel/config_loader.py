@@ -395,7 +395,9 @@ def load_config(path: Path) -> AppConfig:
     state_file = Path(global_raw.get("state_file", "/var/lib/raspi-sentinel/state.json"))
     state_durable_file: Path | None = None
     events_file = Path(global_raw.get("events_file", "/var/lib/raspi-sentinel/events.jsonl"))
-    monitor_stats_file = Path(global_raw.get("monitor_stats_file", "/var/lib/raspi-sentinel/stats.json"))
+    monitor_stats_file = Path(
+        global_raw.get("monitor_stats_file", "/var/lib/raspi-sentinel/stats.json")
+    )
     state_durable_fields: tuple[str, ...] = ()
     storage_require_tmpfs = False
     storage_verify_min_free_bytes = 1_048_576
