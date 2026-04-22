@@ -202,7 +202,14 @@ Reboot loop guards:
 ```bash
 git clone https://github.com/<your-account>/raspi-sentinel.git
 cd raspi-sentinel
+git config core.hooksPath .githooks
 python3 -m pip install .
+```
+
+Before push, run:
+
+```bash
+bash scripts/prepush_check.sh
 ```
 
 ### 2. Install config

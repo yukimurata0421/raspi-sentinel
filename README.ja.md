@@ -52,6 +52,7 @@
 ```bash
 git clone https://github.com/<your-account>/raspi-sentinel.git
 cd raspi-sentinel
+git config core.hooksPath .githooks
 python3 -m pip install .
 ```
 
@@ -63,6 +64,12 @@ sudo install -d -m 0755 /var/lib/raspi-sentinel
 
 ```bash
 sudo raspi-sentinel -c /etc/raspi-sentinel/config.toml --dry-run --verbose run-once
+```
+
+push 前チェック:
+
+```bash
+bash scripts/prepush_check.sh
 ```
 
 ## 主な実行モード

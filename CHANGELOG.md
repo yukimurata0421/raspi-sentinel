@@ -21,6 +21,11 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - `systemd/raspi-sentinel-tmpfs-verify.service`
 - New documentation:
   - `docs/storage-tiers.md`
+- Pre-push guard script and hook template:
+  - `scripts/prepush_check.sh`
+  - `.githooks/pre-push`
+- New example-config placeholder test:
+  - `tests/unit/test_example_config_placeholders.py`
 
 ### Changed
 
@@ -30,6 +35,9 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - rationale: avoid breaking reboot loop guard and notification continuity while reducing SD writes
 - `raspi-sentinel.service` now requires `raspi-sentinel-tmpfs-verify.service`;
   when tmpfs tiering is enabled and verify fails, service start is blocked.
+- CI now includes a dedicated `prepush_guard` job that runs the same guard script used by local pre-push checks.
+- Public secret scan now includes explicit validation that `config/raspi-sentinel.example.toml`
+  does not contain a real Discord webhook URL.
 - Test suite layout was reorganized into taxonomy directories:
   - `tests/unit/`
   - `tests/scenario/`

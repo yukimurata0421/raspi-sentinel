@@ -18,6 +18,11 @@ _BLOCK_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("google_api_key", re.compile(r"\bAIza[0-9A-Za-z\-_]{35}\b")),
 ]
 
+_EXAMPLE_CONFIG_PATH = Path("config/raspi-sentinel.example.toml")
+_EXAMPLE_DISCORD_WEBHOOK_PATTERN = re.compile(
+    r'webhook_url\s*=\s*"https://discord\.com/api/webhooks/(?!\.\.\.)[^"]+"'
+)
+
 
 def _tracked_files(repo_root: Path) -> list[Path]:
     try:
@@ -55,3 +60,13 @@ def test_no_accidental_secrets_in_tracked_files() -> None:
             break
 
     assert offenders == [], "Potential secret-like values found:\n" + "\n".join(offenders)
+
+
+def test_example_config_discord_webhook_must_be_placeholder() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    path = repo_root / _EXAMPLE_CONFIG_PATH
+    text = path.read_text(encoding="utf-8")
+    assert _EXAMPLE_DISCORD_WEBHOOK_PATTERN.search(text) is None, (
+        "config/raspi-sentinel.example.toml must not include a real Discord webhook URL; "
+        "use https://discord.com/api/webhooks/..."
+    )
