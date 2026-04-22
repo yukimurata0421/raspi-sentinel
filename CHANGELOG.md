@@ -17,7 +17,7 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 - New CLI command: `verify-storage` for tmpfs preflight verification
   (mount/owner-mode/write-read/capacity/cooldown).
 - New optional systemd units:
-  - `systemd/raspi-sentinel-tmpfs.mount`
+  - `systemd/run-raspi\x2dsentinel.mount`
   - `systemd/raspi-sentinel-tmpfs-verify.service`
 - New documentation:
   - `docs/storage-tiers.md`

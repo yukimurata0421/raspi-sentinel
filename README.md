@@ -226,9 +226,9 @@ sudo systemctl enable --now raspi-sentinel.timer
 Optional tmpfs mount unit (when `[storage]` uses `/run/raspi-sentinel/*`):
 
 ```bash
-sudo install -m 0644 systemd/raspi-sentinel-tmpfs.mount /etc/systemd/system/raspi-sentinel-tmpfs.mount
+sudo install -m 0644 systemd/run-raspi\\x2dsentinel.mount /etc/systemd/system/run-raspi\\x2dsentinel.mount
 sudo systemctl daemon-reload
-sudo systemctl enable --now raspi-sentinel-tmpfs.mount
+sudo systemctl enable --now run-raspi\\x2dsentinel.mount
 ```
 
 `raspi-sentinel.service` requires `raspi-sentinel-tmpfs-verify.service`.

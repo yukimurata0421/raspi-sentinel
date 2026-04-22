@@ -12,10 +12,18 @@ def test_raspi_sentinel_service_requires_tmpfs_verify_service() -> None:
     text = service_path.read_text(encoding="utf-8")
     assert "Requires=raspi-sentinel-tmpfs-verify.service" in text
     assert "After=network-online.target raspi-sentinel-tmpfs-verify.service" in text
+    assert "ExecStart=/opt/raspi-sentinel/.venv/bin/raspi-sentinel" in text
 
 
 def test_tmpfs_verify_service_orders_before_raspi_sentinel_service() -> None:
     verify_path = _repo_root() / "systemd" / "raspi-sentinel-tmpfs-verify.service"
     text = verify_path.read_text(encoding="utf-8")
+    assert "After=run-raspi\\x2dsentinel.mount" in text
     assert "Before=raspi-sentinel.service" in text
     assert "verify-storage" in text
+
+
+def test_tmpfs_mount_unit_name_matches_mountpoint() -> None:
+    mount_path = _repo_root() / "systemd" / "run-raspi\\x2dsentinel.mount"
+    text = mount_path.read_text(encoding="utf-8")
+    assert "Where=/run/raspi-sentinel" in text

@@ -42,7 +42,7 @@ verify_cooldown_sec = 2
 
 Recommended sequence before running `raspi-sentinel.service`:
 
-1. Attempt tmpfs mount (`raspi-sentinel-tmpfs.mount`)
+1. Attempt tmpfs mount (`run-raspi\x2dsentinel.mount` for `/run/raspi-sentinel`)
 2. Verify mount status (`mount point`, `fs type`)
 3. Verify owner/mode (`uid`, `gid`, `mode`)
 4. Write/read probe file
