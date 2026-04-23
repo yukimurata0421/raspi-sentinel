@@ -6,6 +6,8 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-04-23
+
 ### Added
 
 - Optional storage-tier architecture (`[storage]`) for SD wear optimization:
@@ -33,6 +35,10 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - volatile state for high-frequency runtime fields
   - durable state for `reboot_history`, `followup_schedule`, `notify_backlog`
   - rationale: avoid breaking reboot loop guard and notification continuity while reducing SD writes
+- `[storage].require_tmpfs` is now opt-in by default (`false`) when omitted, to keep existing
+  non-tmpfs behavior unless strict mode is explicitly enabled.
+- Startup directory initialization now prepares volatile state directories before storage verify
+  and state persistence checks, reducing boot-time false failures when `/run` is empty.
 - `raspi-sentinel.service` now requires `raspi-sentinel-tmpfs-verify.service`;
   when tmpfs tiering is enabled and verify fails, service start is blocked.
 - CI now includes a dedicated `prepush_guard` job that runs the same guard script used by local pre-push checks.

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .config import AppConfig
+from .state import ensure_directory
 
 LOG = logging.getLogger(__name__)
 
@@ -83,6 +84,19 @@ def verify_tmpfs_storage(
         )
 
     mount_path = config.global_config.state_file.parent
+
+    desired_mode = expected_mode if expected_mode is not None else 0o755
+    if not ensure_directory(mount_path, mode=desired_mode):
+        return StorageVerifyResult(
+            ok=False,
+            mount_path=mount_path,
+            mount_fs_type=None,
+            owner_uid=None,
+            owner_gid=None,
+            mode=None,
+            free_bytes=None,
+            reason=f"failed to prepare mount path directory: {mount_path}",
+        )
 
     if not mount_path.exists():
         return StorageVerifyResult(

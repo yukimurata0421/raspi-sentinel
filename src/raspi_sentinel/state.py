@@ -21,6 +21,21 @@ from .state_models import GlobalState, RebootRecord
 LOG = logging.getLogger(__name__)
 
 
+def ensure_directory(path: Path, mode: int = 0o755) -> bool:
+    """Ensure a directory exists, and set mode when newly created."""
+    try:
+        created = False
+        if not path.exists():
+            path.mkdir(parents=True, exist_ok=True)
+            created = True
+        if created:
+            path.chmod(mode)
+    except OSError as exc:
+        LOG.error("failed to prepare directory %s: %s", path, exc)
+        return False
+    return True
+
+
 @dataclass(slots=True)
 class StateLoadDiagnostics:
     used_default_state: bool = False
@@ -37,6 +52,8 @@ class StateStore:
     def __init__(self, path: Path) -> None:
         self.path = path
         self.lock_path = path.with_suffix(path.suffix + ".lock")
+        ensure_directory(self.path.parent)
+        ensure_directory(self.lock_path.parent)
 
     def load(self) -> GlobalState:
         state, _ = self.load_with_diagnostics()
@@ -380,4 +397,6 @@ class TieredStateStore:
                     path,
                 )
                 return False
+        # Both volatile and durable tier writes go through the same
+        # temp-file + rename atomic helper.
         return write_json_atomic(path, payload, indent=2)

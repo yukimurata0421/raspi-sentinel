@@ -244,6 +244,46 @@ def test_load_config_storage_section_overrides_paths_and_fields(tmp_path: Path) 
     assert cfg.global_config.storage_verify_cooldown_sec == 1
 
 
+def test_load_config_storage_require_tmpfs_defaults_to_false(tmp_path: Path) -> None:
+    conf = tmp_path / "config.toml"
+    _write(
+        conf,
+        """
+        [global]
+        state_file = "/tmp/state.json"
+        restart_threshold = 2
+        reboot_threshold = 3
+        restart_cooldown_sec = 10
+        reboot_cooldown_sec = 20
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 60
+        default_command_timeout_sec = 7
+        loop_interval_sec = 30
+
+        [storage]
+        state_volatile_path = "/run/raspi-sentinel/state.volatile.json"
+        state_durable_path = "/var/lib/raspi-sentinel/state.durable.json"
+        state_durable_fields = ["reboot_history"]
+
+        [notify.discord]
+        enabled = false
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "network_uplink"
+        services = []
+        service_active = false
+        command = "true"
+        """,
+    )
+    cfg = load_config(conf)
+    assert cfg.global_config.storage_require_tmpfs is False
+
+
 def test_load_config_rejects_unknown_storage_durable_field(tmp_path: Path) -> None:
     conf = tmp_path / "config.toml"
     _write(
@@ -444,3 +484,19 @@ def test_tiered_state_store_returns_false_when_durable_save_fails(tmp_path: Path
     assert ok is False
     assert calls == [volatile, durable]
     assert volatile.exists()
+
+
+def test_tiered_state_store_initializes_missing_parent_directories(tmp_path: Path) -> None:
+    volatile = tmp_path / "run" / "raspi-sentinel" / "state.volatile.json"
+    durable = tmp_path / "var" / "lib" / "raspi-sentinel" / "state.durable.json"
+    assert not volatile.parent.exists()
+    assert not durable.parent.exists()
+
+    TieredStateStore(
+        volatile_path=volatile,
+        durable_path=durable,
+        durable_fields=("reboot_history",),
+    )
+
+    assert volatile.parent.is_dir()
+    assert durable.parent.is_dir()

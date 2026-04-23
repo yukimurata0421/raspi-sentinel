@@ -131,7 +131,7 @@ def make_global_config(**overrides: Any) -> GlobalConfig:
         "min_uptime_for_reboot_sec": 600,
         "default_command_timeout_sec": 10,
         "loop_interval_sec": 60,
-        "storage_require_tmpfs": True,
+        "storage_require_tmpfs": False,
         "storage_verify_min_free_bytes": 1_048_576,
         "storage_verify_write_bytes": 4096,
         "storage_verify_cooldown_sec": 2,

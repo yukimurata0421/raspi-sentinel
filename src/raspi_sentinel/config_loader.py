@@ -412,7 +412,7 @@ def load_config(path: Path) -> AppConfig:
         events_file = Path(storage_raw.get("events_path", str(events_file)))
         monitor_stats_file = Path(storage_raw.get("snapshot_path", str(monitor_stats_file)))
         state_durable_fields = _parse_state_durable_fields(storage_raw)
-        storage_require_tmpfs = _optional_bool(storage_raw, "require_tmpfs", True)
+        storage_require_tmpfs = _optional_bool(storage_raw, "require_tmpfs", False)
         storage_verify_min_free_bytes = _require_int(
             storage_raw, "verify_min_free_bytes", storage_verify_min_free_bytes
         )

@@ -31,6 +31,10 @@ verify_write_bytes = 4096
 verify_cooldown_sec = 2
 ```
 
+`require_tmpfs` defaults to `false`. Enable it explicitly when you want strict tmpfs enforcement.
+On low-memory models, tune tmpfs size with `RuntimeDirectorySize=` (or mount `size=` option)
+to avoid pressure from volatile files.
+
 ## 2. Write frequency by file
 
 - `stats.json`: frequent (periodic + change-triggered) -> recommended tmpfs
@@ -42,13 +46,14 @@ verify_cooldown_sec = 2
 
 Recommended sequence before running `raspi-sentinel.service`:
 
-1. Attempt tmpfs mount (`run-raspi\x2dsentinel.mount` for `/run/raspi-sentinel`)
-2. Verify mount status (`mount point`, `fs type`)
-3. Verify owner/mode (`uid`, `gid`, `mode`)
-4. Write/read probe file
-5. Check free bytes (avoid write failure under size pressure)
-6. Cooldown (`verify_cooldown_sec`)
-7. Start `raspi-sentinel` process
+1. Ensure `/run/raspi-sentinel` exists (created automatically when missing)
+2. Attempt tmpfs mount (`run-raspi\x2dsentinel.mount` for `/run/raspi-sentinel`)
+3. Verify mount status (`mount point`, `fs type`)
+4. Verify owner/mode (`uid`, `gid`, `mode`)
+5. Write/read probe file
+6. Check free bytes (avoid write failure under size pressure)
+7. Cooldown (`verify_cooldown_sec`)
+8. Start `raspi-sentinel` process
 
 Use:
 

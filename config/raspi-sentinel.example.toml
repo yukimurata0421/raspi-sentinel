@@ -47,7 +47,7 @@ loop_interval_sec = 30
 ## Supported values: reboot_history, followup_schedule, notify_backlog
 #state_durable_fields = ["reboot_history", "followup_schedule", "notify_backlog"]
 ## Startup verification options used by `verify-storage`
-#require_tmpfs = true
+#require_tmpfs = true  # default is false (opt-in)
 #verify_min_free_bytes = 1048576
 #verify_write_bytes = 4096
 #verify_cooldown_sec = 2

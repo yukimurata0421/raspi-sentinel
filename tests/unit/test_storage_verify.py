@@ -39,6 +39,60 @@ def test_verify_tmpfs_storage_success(tmp_path: Path, monkeypatch: Any) -> None:
     assert result.mount_fs_type == "tmpfs"
 
 
+def test_verify_tmpfs_storage_creates_missing_mount_dir(tmp_path: Path, monkeypatch: Any) -> None:
+    mount_dir = tmp_path / "run" / "raspi-sentinel"
+    cfg = make_app_config(
+        global_overrides={
+            "state_file": mount_dir / "state.volatile.json",
+            "storage_verify_cooldown_sec": 0,
+            "storage_verify_write_bytes": 8,
+            "storage_verify_min_free_bytes": 1024,
+            "storage_require_tmpfs": True,
+        }
+    )
+    monkeypatch.setattr(
+        "raspi_sentinel.storage_verify._lookup_mount_info",
+        lambda path: (mount_dir, "tmpfs"),
+    )
+    monkeypatch.setattr(
+        "raspi_sentinel.storage_verify.shutil.disk_usage",
+        lambda path: SimpleNamespace(total=1024 * 1024, used=512, free=1024 * 1024),
+    )
+
+    assert not mount_dir.exists()
+    result = verify_tmpfs_storage(
+        config=cfg,
+        expected_mode=None,
+        expected_owner_uid=None,
+        expected_owner_gid=None,
+    )
+
+    assert result.ok is True
+    assert mount_dir.is_dir()
+
+
+def test_verify_tmpfs_storage_fails_when_mount_dir_prepare_fails(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    mount_dir = tmp_path / "run" / "raspi-sentinel"
+    cfg = make_app_config(
+        global_overrides={
+            "state_file": mount_dir / "state.volatile.json",
+            "storage_require_tmpfs": True,
+        }
+    )
+    monkeypatch.setattr(
+        "raspi_sentinel.storage_verify.ensure_directory",
+        lambda *_args, **_kwargs: False,
+    )
+
+    result = verify_tmpfs_storage(config=cfg)
+
+    assert result.ok is False
+    assert result.reason is not None
+    assert "failed to prepare mount path directory" in result.reason
+
+
 def test_verify_tmpfs_storage_rejects_non_tmpfs(tmp_path: Path, monkeypatch: Any) -> None:
     mount_dir = tmp_path / "run" / "raspi-sentinel"
     mount_dir.mkdir(parents=True)

@@ -276,13 +276,15 @@ Locations: [src/raspi_sentinel/storage_verify.py](../../src/raspi_sentinel/stora
 
 Decision:
 
+- `[storage].require_tmpfs` defaults to `false` (opt-in strict mode).
 - `raspi-sentinel.service` now requires `raspi-sentinel-tmpfs-verify.service`.
 - `verify-storage` performs:
-  1. mount-point / filesystem verification
-  2. owner/mode verification
-  3. write-read probe
-  4. free-capacity check
-  5. cooldown wait
+  1. ensure mount directory exists
+  2. mount-point / filesystem verification
+  3. owner/mode verification
+  4. write-read probe
+  5. free-capacity check
+  6. cooldown wait
 - If verification fails under tmpfs tiering, monitor cycle does not start.
 
 Rationale: This catches mount/permission/capacity issues before recovery logic runs and avoids silently writing to an unintended layer.
