@@ -59,6 +59,7 @@ def _stats_checks(
 
 def run_checks(target: TargetConfig, now_wall_ts: float | None = None) -> CheckResult:
     from . import runner as _runner
+
     return _runner.run_checks(target=target, now_wall_ts=now_wall_ts)
 
 
