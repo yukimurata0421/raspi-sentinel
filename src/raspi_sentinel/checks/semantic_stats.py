@@ -38,6 +38,7 @@ def age_check_from_stats(
     ts, err = parse_ts(ts_raw, key)
     if err:
         return CheckFailure(check_name, err)
+    # parse_ts guarantees non-None ts when err is None; keep this guard for type narrowing.
     if ts is None:
         return CheckFailure(check_name, f"{key} missing timestamp")
 

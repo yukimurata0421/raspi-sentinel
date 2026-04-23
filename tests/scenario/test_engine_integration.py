@@ -12,13 +12,14 @@ from raspi_sentinel.checks import CheckResult
 from raspi_sentinel.engine import (
     TargetEvaluationArtifacts,
     _overall_status,
+    _record_state_load_issue_event,
     _run_cycle_collect_locked,
     apply_recovery_phase,
     evaluate_target,
     persist_cycle_outputs,
 )
 from raspi_sentinel.exit_codes import REBOOT_REQUESTED, UNHEALTHY
-from raspi_sentinel.state import TieredStateStore
+from raspi_sentinel.state import StateLoadDiagnostics, TieredStateStore
 from raspi_sentinel.state_models import GlobalState
 
 
@@ -190,3 +191,21 @@ def test_run_cycle_reboot_command_failure_returns_unhealthy(
 
     assert rc == UNHEALTHY
     assert report["reason"] == "reboot_command_failed"
+
+
+def test_record_state_load_issue_event_omits_reason_when_no_detail(tmp_path: Path) -> None:
+    events_file = tmp_path / "events.jsonl"
+    diagnostics = StateLoadDiagnostics(
+        state_corrupted=True,
+        state_load_error=None,
+    )
+    _record_state_load_issue_event(
+        diagnostics=diagnostics,
+        events_file=events_file,
+        max_file_bytes=1_000_000,
+        backup_generations=1,
+        now_ts=1_000.0,
+    )
+    event = json.loads(events_file.read_text(encoding="utf-8").strip())
+    assert event["kind"] == "state_corrupted"
+    assert "reason" not in event

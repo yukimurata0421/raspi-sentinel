@@ -86,3 +86,35 @@ def test_monitor_stats_preserves_unknown_vs_false_for_network_layers() -> None:
     assert payload["gateway_ok"] is False
     assert payload["neighbor_resolved"] is False
     assert payload["arp_gateway_ok"] is None
+
+
+def test_monitor_stats_unknown_target_status_is_not_counted_as_health_bucket() -> None:
+    config = AppConfig(
+        global_config=_global(),
+        notify_config=NotifyConfig(
+            discord=DiscordNotifyConfig(
+                enabled=False,
+                webhook_url=None,
+                username="raspi-sentinel",
+                timeout_sec=5,
+                followup_delay_sec=300,
+                retry_interval_sec=60,
+                heartbeat_interval_sec=0,
+                notify_on_recovery=False,
+            )
+        ),
+        targets=[_target()],
+    )
+    state = GlobalState()
+    snapshot = build_monitor_stats_snapshot(
+        config=config,
+        state=state,
+        target_results={},
+        now_ts=1_000_000.0,
+    )
+    assert snapshot["status"] == "unknown"
+    assert snapshot["targets_ok"] == 0
+    assert snapshot["targets_degraded"] == 0
+    assert snapshot["targets_failed"] == 0
+    payload = snapshot["targets"]["network_uplink"]
+    assert payload["status"] == "unknown"

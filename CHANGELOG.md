@@ -20,6 +20,15 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - historical `config/checks` refactor memo moved from `docs/facts/` to `docs/history/`
   - engineering decision test references updated to taxonomy paths
   - time-health decision table conditions aligned with current policy semantics.
+- `monitor_stats` cleanup:
+  - removed dead `unknown` count bucket from health counters
+  - replaced module-level sentinel-based missing detection with explicit key-presence checks.
+- state-load issue event cleanup:
+  - `_record_state_load_issue_event` now emits `reason` only when detailed load error text exists.
+- storage verify diagnostics:
+  - `_lookup_mount_info` now logs warning when `/proc/mounts` cannot be read.
+- semantic stats clarification:
+  - added comment in `age_check_from_stats` that `ts is None` guard is kept for type narrowing.
 
 ## [0.7.1] - 2026-04-23
 

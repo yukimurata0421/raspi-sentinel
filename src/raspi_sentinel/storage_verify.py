@@ -61,7 +61,8 @@ def _lookup_mount_info(path: Path) -> tuple[Path, str | None]:
                     if len(str(mount_resolved)) > len(str(best_mount)):
                         best_mount = mount_resolved
                         best_type = fs_type
-    except OSError:
+    except OSError as exc:
+        LOG.warning("/proc/mounts unreadable; cannot determine mount fs type: %s", exc)
         return Path("/"), None
     return best_mount, best_type
 

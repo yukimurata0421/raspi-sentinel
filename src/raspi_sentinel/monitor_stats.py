@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
+from typing import Literal
 
 from .checks import CheckResult
 from .config import AppConfig
@@ -11,8 +12,6 @@ from .state_models import GlobalState
 from .status_events import classify_target_reason, classify_target_status
 
 LOG = logging.getLogger(__name__)
-
-_MISSING = object()
 
 
 def build_monitor_stats_snapshot(
@@ -25,11 +24,10 @@ def build_monitor_stats_snapshot(
     state_targets = state.targets
 
     targets_payload: dict[str, object] = {}
-    counts: dict[str, int] = {
+    counts: dict[Literal["ok", "degraded", "failed"], int] = {
         "ok": 0,
         "degraded": 0,
         "failed": 0,
-        "unknown": 0,
     }
 
     for target in config.targets:
@@ -47,7 +45,8 @@ def build_monitor_stats_snapshot(
             status = classify_target_status(result=result, target_state=state_for_target)
             reason = classify_target_reason(result=result, target_state=state_for_target)
 
-        counts[status] = counts.get(status, 0) + 1
+        if status in counts:
+            counts[status] += 1
         target_state = state_targets.get(target.name)
         last_action = target_state.last_action if target_state is not None else "unknown"
         last_failure_reason = target_state.last_failure_reason if target_state is not None else ""
@@ -61,7 +60,6 @@ def build_monitor_stats_snapshot(
             "last_failure_reason": str(last_failure_reason),
         }
         if result is not None:
-            missing = _MISSING
             policy_subreason = result.observations.get("policy_subreason")
             if isinstance(policy_subreason, str):
                 payload["subreason"] = policy_subreason
@@ -98,7 +96,9 @@ def build_monitor_stats_snapshot(
                 "wan_vs_target_ok",
                 "http_probe_ok",
             ):
-                raw = result.observations.get(field_name, missing)
+                if field_name not in result.observations:
+                    continue
+                raw = result.observations.get(field_name)
                 if isinstance(raw, bool):
                     payload[field_name] = raw
                 elif raw is None:
@@ -119,7 +119,9 @@ def build_monitor_stats_snapshot(
                 "http_probe_target",
                 "http_error_kind",
             ):
-                raw = result.observations.get(field_name, missing)
+                if field_name not in result.observations:
+                    continue
+                raw = result.observations.get(field_name)
                 if isinstance(raw, str):
                     payload[field_name] = raw
                 elif raw is None:

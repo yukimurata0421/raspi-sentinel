@@ -6,7 +6,7 @@ from typing import Any
 
 from conftest import make_app_config
 
-from raspi_sentinel.storage_verify import verify_tmpfs_storage
+from raspi_sentinel.storage_verify import _lookup_mount_info, verify_tmpfs_storage
 
 
 def test_verify_tmpfs_storage_success(tmp_path: Path, monkeypatch: Any) -> None:
@@ -37,6 +37,21 @@ def test_verify_tmpfs_storage_success(tmp_path: Path, monkeypatch: Any) -> None:
     )
     assert result.ok is True
     assert result.mount_fs_type == "tmpfs"
+
+
+def test_lookup_mount_info_logs_warning_when_proc_mounts_unreadable(
+    monkeypatch: Any, caplog: Any
+) -> None:
+    def fail_open(*_args: Any, **_kwargs: Any) -> Any:
+        raise OSError("cannot read mounts")
+
+    monkeypatch.setattr("builtins.open", fail_open)
+    with caplog.at_level("WARNING", logger="raspi_sentinel.storage_verify"):
+        mount_path, fs_type = _lookup_mount_info(Path("/run/raspi-sentinel"))
+
+    assert mount_path == Path("/")
+    assert fs_type is None
+    assert "cannot determine mount fs type" in caplog.text
 
 
 def test_verify_tmpfs_storage_creates_missing_mount_dir(tmp_path: Path, monkeypatch: Any) -> None:
