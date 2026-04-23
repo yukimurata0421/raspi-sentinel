@@ -6,6 +6,8 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-04-23
+
 ### Changed
 
 - `verify-storage` tmpfs-tier enablement is now fully config-driven. Path-based auto-detection
