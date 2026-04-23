@@ -219,10 +219,7 @@ def _validate_target_rules(target: TargetConfig) -> None:
             f"target '{target.name}': consecutive_failure_thresholds.failed must be >= degraded"
         )
 
-    if (
-        deps.dependency_check_timeout_sec is not None
-        and deps.dependency_check_timeout_sec <= 0
-    ):
+    if deps.dependency_check_timeout_sec is not None and deps.dependency_check_timeout_sec <= 0:
         raise ValueError(f"target '{target.name}': dependency_check_timeout_sec must be > 0")
 
     if (

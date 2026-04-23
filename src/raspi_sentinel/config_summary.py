@@ -217,12 +217,9 @@ def _target_warnings(
     ):
         warnings.append("reboot_threshold is lower than restart_threshold")
 
-    if (
-        target.time_health.time_health_enabled
-        and (
-            target.time_health.check_interval_threshold_sec
-            > target.time_health.wall_clock_freeze_min_monotonic_sec
-        )
+    if target.time_health.time_health_enabled and (
+        target.time_health.check_interval_threshold_sec
+        > target.time_health.wall_clock_freeze_min_monotonic_sec
     ):
         warnings.append(
             (
