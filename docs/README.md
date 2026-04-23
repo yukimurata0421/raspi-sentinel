@@ -12,7 +12,6 @@ This index is the entry point for operational and design documentation of `raspi
 - [Operations Runbook](facts/operations-runbook.md)
 - [Data Contracts](facts/data-contracts.md)
 - [Test Map](facts/test-map.md)
-- [Config/Checks リファクタメモ (2026-04-18)](facts/config-and-checks-refactor-2026-04-18.md)
 - [Exit Codes](facts/exit-codes.md)
 - [Time Health Decision Table](time-health-decision-table.md)
 
@@ -30,6 +29,7 @@ This index is the entry point for operational and design documentation of `raspi
 
 - [改善提案対応状況 (2026-04-17)](history/improvement-status-2026-04-17.md)
 - [レビュー対応メモ (2026-04-18)](history/review-followup-2026-04-18.md)
+- [Config/Checks リファクタメモ (2026-04-18)](history/config-and-checks-refactor-2026-04-18.md)
 
 ## Optional Integration
 

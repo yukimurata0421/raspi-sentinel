@@ -14,6 +14,12 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   and tiered state store paths.
 - `TieredStateStore` now treats configured durable path as tiered mode even when durable field selection
   is empty, aligning runtime behavior with storage-tier verification expectations.
+- Documentation consistency updates:
+  - README versioning line now reflects `0.7.1`
+  - README.ja release note link now points to `v0.7.1`
+  - historical `config/checks` refactor memo moved from `docs/facts/` to `docs/history/`
+  - engineering decision test references updated to taxonomy paths
+  - time-health decision table conditions aligned with current policy semantics.
 
 ## [0.7.1] - 2026-04-23
 

@@ -308,7 +308,7 @@ Rationale: Recovery correctness depends on branch behavior, not only statement e
 
 ### 8-2. Add tests for operator-facing outputs, not only internal logic
 
-Locations: [tests/test_cli_behavior.py](../../tests/test_cli_behavior.py), [tests/test_config_summary.py](../../tests/test_config_summary.py)
+Locations: [tests/e2e/test_cli_behavior.py](../../tests/e2e/test_cli_behavior.py), [tests/unit/test_config_summary.py](../../tests/unit/test_config_summary.py)
 
 Rationale: `validate-config` and JSON outputs are operational interfaces and must remain stable.
 

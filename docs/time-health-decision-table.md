@@ -17,8 +17,8 @@ It does not correct system time directly (`date -s` is never executed).
 | T3 | `abs(clock_drift_sec) >= wall_clock_drift_threshold_sec` and not T2 | `degraded` | `clock_jump` | no reboot |
 | T4 | `http_probe_ok=true` and `abs(http_time_skew_sec) >= clock_skew_threshold_sec` | `degraded` | `clock_skewed` | no reboot |
 | T5 | `http_probe_ok=false` | `degraded` | `http_error` | no reboot |
-| T6 | `dns_ok=false` and `gateway_ok=true` | `degraded` | `dns_error` | no reboot |
-| T7 | `gateway_ok=false` | `degraded` | `gateway_error` | no reboot |
+| T6 | `dns_ok=false` and `internet_ip_ok=true` | `degraded` | `dns_error` | no reboot |
+| T7 | `gateway_ok=false` and `link_ok=true` | `degraded` | `gateway_error` | no reboot |
 | T8 | `ntp_sync_ok=false` and skew is below threshold | `degraded` | `time_sync_broken` | no reboot |
 | T9 | `ntp_sync_ok=false` and T4 | `degraded` | `time_sync_broken_skewed` | no reboot |
 | T10 | T2 occurs 2 consecutive times | `degraded` | `clock_frozen_persistent` | still no reboot |

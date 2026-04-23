@@ -41,6 +41,9 @@ to avoid pressure from volatile files.
 - `state_durable_path` is configured, or
 - `state_durable_fields` is non-empty.
 
+`require_tmpfs = true` alone enables preflight tmpfs verification, but does not split state by itself.
+State split requires `state_durable_path` to be configured.
+
 ## 2. Write frequency by file
 
 - `stats.json`: frequent (periodic + change-triggered) -> recommended tmpfs
