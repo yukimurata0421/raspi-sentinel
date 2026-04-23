@@ -218,6 +218,8 @@ class TieredStateStore:
 
     @property
     def _tiered_enabled(self) -> bool:
+        # require_tmpfs alone enables verify-storage preflight only.
+        # Runtime split requires durable_store (docs/storage-tiers.md).
         if self.durable_store is None:
             return False
         return is_storage_tiering_enabled(

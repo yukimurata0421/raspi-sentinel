@@ -71,7 +71,7 @@ def test_notify_state_to_dict_includes_optional_fields() -> None:
     assert "delivery_backlog" in out
 
 
-def test_global_state_mapping_helpers_and_edge_parsing() -> None:
+def test_global_state_edge_parsing() -> None:
     state = GlobalState.from_dict(
         {
             "targets": {1: {"consecutive_failures": 1}, "demo": "bad"},
@@ -84,8 +84,6 @@ def test_global_state_mapping_helpers_and_edge_parsing() -> None:
     assert state.reboots == []
     assert state.followups == {}
 
-    # __getitem__ branches and get(default) fallback path.
-    assert isinstance(state["followups"], dict)
-    assert isinstance(state["notify"], dict)
-    assert isinstance(state["monitor_stats"], dict)
-    assert state.get("unknown", "fallback") == "fallback"
+    assert state.followups == {}
+    assert state.notify.to_dict() == {}
+    assert state.monitor_stats.to_dict() == {}

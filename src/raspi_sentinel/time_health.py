@@ -247,20 +247,17 @@ def apply_time_health_checks(
     model.clock_prev_wall_time_epoch = wall_now
     model.clock_prev_monotonic_sec = mono_now
 
-    http_probe_ok: bool | None = None
+    http_probe_ok = safe_bool(result.observations.get("http_probe_ok"))
     if target.http_time_probe_url:
         http_epoch, probe_error = _fetch_http_date_epoch(
             url=target.http_time_probe_url,
             timeout_sec=target.http_time_probe_timeout_sec,
         )
-        http_probe_ok = probe_error is None and http_epoch is not None
-        result.observations["http_time_probe_ok"] = http_probe_ok
-        existing_http_probe_ok = safe_bool(result.observations.get("http_probe_ok"))
-        if existing_http_probe_ok is None:
-            result.observations["http_probe_ok"] = http_probe_ok
-        else:
-            # Keep network-probe result authoritative when it already produced a bool value.
-            http_probe_ok = existing_http_probe_ok
+        http_time_probe_ok = probe_error is None and http_epoch is not None
+        result.observations["http_time_probe_ok"] = http_time_probe_ok
+        if http_probe_ok is None:
+            http_probe_ok = http_time_probe_ok
+            result.observations["http_probe_ok"] = http_time_probe_ok
         if probe_error is not None:
             result.observations["http_time_probe_error"] = probe_error
         if http_epoch is not None:
@@ -296,8 +293,6 @@ def apply_time_health_checks(
     gateway_ok = safe_bool(result.observations.get("gateway_ok"))
     internet_ip_ok = safe_bool(result.observations.get("internet_ip_ok"))
     wan_vs_target_ok = safe_bool(result.observations.get("wan_vs_target_ok"))
-    if target.http_time_probe_url and http_probe_ok is None:
-        http_probe_ok = safe_bool(result.observations.get("http_probe_ok"))
     skew_abs = abs(safe_float(result.observations.get("http_time_skew_sec")) or 0.0)
 
     _update_network_counters(target, model, result, http_probe_ok)

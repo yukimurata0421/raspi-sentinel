@@ -1,5 +1,8 @@
 # Config/Checks Refactor Memo (2026-04-18)
 
+> Historical note: this memo preserves wording and paths at the time of writing.
+> Current repository paths may differ due to later test taxonomy refactors.
+
 ## Scope
 
 This memo records the follow-up implementation for:

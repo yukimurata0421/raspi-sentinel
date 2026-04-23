@@ -337,7 +337,7 @@ def test_state_store_round_trip_preserves_monitor_stats(tmp_path: Path) -> None:
     }
     store.save(GlobalState.from_dict(payload))
     loaded = store.load()
-    assert loaded["monitor_stats"]["last_written_ts"] == 123.0
+    assert loaded.monitor_stats.last_written_ts == 123.0
 
 
 def test_state_store_save_blocks_oversized_payload(tmp_path: Path) -> None:
@@ -376,8 +376,8 @@ def test_state_store_save_trims_reboots_list(tmp_path: Path) -> None:
     )
     assert ok
     loaded = store.load()
-    assert len(loaded["reboots"]) == 3
-    assert loaded["reboots"][0]["ts"] == 7.0
+    assert len(loaded.reboots) == 3
+    assert loaded.reboots[0].ts == 7.0
 
 
 def test_maybe_rotate_file_supports_multiple_generations(tmp_path: Path) -> None:
@@ -406,7 +406,7 @@ def test_state_store_quarantines_corrupted_json(tmp_path: Path) -> None:
     assert diagnostics.corrupt_backup_path is not None
     assert diagnostics.corrupt_backup_path.exists()
     assert not state_file.exists()
-    assert loaded["targets"] == {}
+    assert loaded.targets == {}
 
 
 def test_tiered_state_store_splits_durable_fields(tmp_path: Path) -> None:
@@ -460,10 +460,11 @@ def test_tiered_state_store_splits_durable_fields(tmp_path: Path) -> None:
     assert '"retry_due_ts"' in durable_raw
 
     loaded = store.load()
-    assert loaded["targets"]["demo"]["consecutive_failures"] == 2
-    assert loaded["reboots"][0]["target"] == "demo"
-    assert loaded["followups"]["demo"]["initial_action"] == "restart"
-    assert loaded["notify"]["delivery_backlog"]["total_failures"] == 2
+    assert loaded.targets["demo"].consecutive_failures == 2
+    assert loaded.reboots[0].target == "demo"
+    assert loaded.followups["demo"].initial_action == "restart"
+    assert loaded.notify.delivery_backlog is not None
+    assert loaded.notify.delivery_backlog.total_failures == 2
 
 
 def test_tiered_state_store_keeps_tiered_mode_when_durable_file_is_configured(
@@ -494,8 +495,8 @@ def test_tiered_state_store_keeps_tiered_mode_when_durable_file_is_configured(
     assert durable.read_text(encoding="utf-8").strip() == "{}"
 
     loaded = store.load()
-    assert loaded["targets"]["demo"]["consecutive_failures"] == 2
-    assert loaded["reboots"][0]["target"] == "demo"
+    assert loaded.targets["demo"].consecutive_failures == 2
+    assert loaded.reboots[0].target == "demo"
 
 
 def test_tiered_state_store_returns_false_when_durable_save_fails(tmp_path: Path) -> None:

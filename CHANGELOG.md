@@ -37,6 +37,12 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 - time-health observation precedence:
   - when `http_probe_ok` is already a bool from network probe, time-health keeps that value and records
     its own result in `http_time_probe_ok`.
+- `GlobalState` API cleanup:
+  - removed legacy mapping-style access (`__getitem__` / `get`); internal/tests now use typed attributes.
+- validate-config semantics note:
+  - time-health threshold consistency (`check_interval_threshold_sec` vs
+    `wall_clock_freeze_min_monotonic_sec`) is currently surfaced as warning-level guidance
+    in `config_summary`, not a `load_config` hard error.
 
 ## [0.7.1] - 2026-04-23
 

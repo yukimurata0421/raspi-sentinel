@@ -376,25 +376,3 @@ class GlobalState:
             target = TargetState()
             self.targets[target_name] = target
         return target
-
-    # Backward-compatible read-only mapping helpers for legacy tests/callers.
-    def __getitem__(self, key: str) -> object:
-        if key == "targets":
-            return {name: target.to_dict() for name, target in self.targets.items()}
-        if key == "reboots":
-            return [entry.to_dict() for entry in self.reboots]
-        if key == "followups":
-            return {
-                target_name: followup.to_dict() for target_name, followup in self.followups.items()
-            }
-        if key == "notify":
-            return self.notify.to_dict()
-        if key == "monitor_stats":
-            return self.monitor_stats.to_dict()
-        raise KeyError(key)
-
-    def get(self, key: str, default: object = None) -> object:
-        try:
-            return self[key]
-        except KeyError:
-            return default
