@@ -109,6 +109,12 @@ class ExternalStatusCheckConfig:
 
 _SUB_CONFIG_ATTRS = ("deps", "network", "stats", "time_health", "maintenance", "external")
 _DEPRECATED_ATTR_WARNED: set[str] = set()
+_DEPRECATED_ATTR_REMOVAL_VERSION = "1.0.0"
+
+
+def _reset_deprecated_attr_warnings_for_tests() -> None:
+    """Clear warned shim attributes for deterministic test assertions."""
+    _DEPRECATED_ATTR_WARNED.clear()
 
 
 @dataclass
@@ -120,6 +126,9 @@ class TargetConfig:
     and ``external``.  For backward compatibility every sub-field is also
     reachable as a flat attribute (e.g. ``target.dns_check_command``
     delegates to ``target.deps.dns_check_command``).
+
+    The flat-attribute shim is deprecated and planned to be removed in
+    v1.0.0.
     """
 
     name: str
@@ -157,7 +166,8 @@ class TargetConfig:
                     warnings.warn(
                         (
                             f"TargetConfig.{name} is deprecated; "
-                            f"use TargetConfig.{attr}.{name} instead"
+                            f"use TargetConfig.{attr}.{name} instead "
+                            f"(planned removal in v{_DEPRECATED_ATTR_REMOVAL_VERSION})"
                         ),
                         DeprecationWarning,
                         stacklevel=2,

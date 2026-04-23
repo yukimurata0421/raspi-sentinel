@@ -35,6 +35,12 @@ verify_cooldown_sec = 2
 On low-memory models, tune tmpfs size with `RuntimeDirectorySize=` (or mount `size=` option)
 to avoid pressure from volatile files.
 
+`verify-storage` runs tmpfs-tier checks only when storage tiering is explicitly enabled by config:
+
+- `require_tmpfs = true`, or
+- `state_durable_path` is configured, or
+- `state_durable_fields` is non-empty.
+
 ## 2. Write frequency by file
 
 - `stats.json`: frequent (periodic + change-triggered) -> recommended tmpfs

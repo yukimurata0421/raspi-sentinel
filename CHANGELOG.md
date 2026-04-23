@@ -6,6 +6,22 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ## [Unreleased]
 
+### Changed
+
+- `verify-storage` tmpfs-tier enablement is now fully config-driven. Path-based auto-detection
+  from `state_file.parent == /run/raspi-sentinel` was removed to keep behavior explicit.
+- Storage write probe now uses a unique temp file per run, avoiding fixed-filename collisions
+  when verify processes overlap.
+- Release workflow (`release.yml`) now waits up to 45 minutes for CI and reports failure using
+  the most recent completed run for clearer diagnostics.
+- `docs/facts` was trimmed to stable operational references; dated review/improvement notes moved
+  to `docs/history/`.
+
+### Deprecated
+
+- Flat `TargetConfig.<field>` shim access remains supported for compatibility but is scheduled
+  for removal in `v1.0.0`. Prefer grouped access (`target.deps.*`, `target.network.*`, etc.).
+
 ## [0.7.0] - 2026-04-23
 
 ### Added

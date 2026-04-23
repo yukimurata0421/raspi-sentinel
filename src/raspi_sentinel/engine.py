@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, TypedDict
+from typing import Callable, NotRequired, Required, TypedDict
 
 from .checks import CheckResult, apply_records_progress_check, run_checks
 from .config import AppConfig, TargetConfig
@@ -50,17 +50,17 @@ class TargetReport(TypedDict, total=False):
     failures: list[FailureReport]
 
 
-class CycleReport(TypedDict, total=False):
-    updated_at: str
-    overall_status: str
-    dry_run: bool
-    reboot_requested: bool
-    targets: dict[str, TargetReport]
-    limited_mode: bool
-    state_persisted: bool
-    state_issue: str
-    state_corrupt_backup_path: str
-    reason: str
+class CycleReport(TypedDict):
+    updated_at: Required[str]
+    overall_status: Required[str]
+    dry_run: Required[bool]
+    reboot_requested: Required[bool]
+    targets: Required[dict[str, TargetReport]]
+    limited_mode: NotRequired[bool]
+    state_persisted: NotRequired[bool]
+    state_issue: NotRequired[str]
+    state_corrupt_backup_path: NotRequired[str]
+    reason: NotRequired[str]
 
 
 @dataclass(slots=True)

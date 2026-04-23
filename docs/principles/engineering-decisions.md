@@ -277,6 +277,7 @@ Locations: [src/raspi_sentinel/storage_verify.py](../../src/raspi_sentinel/stora
 Decision:
 
 - `[storage].require_tmpfs` defaults to `false` (opt-in strict mode).
+- tmpfs verification enablement is config-driven only (`require_tmpfs`, `state_durable_path`, `state_durable_fields`) and does not depend on path-name heuristics.
 - `raspi-sentinel.service` now requires `raspi-sentinel-tmpfs-verify.service`.
 - `verify-storage` performs:
   1. ensure mount directory exists

@@ -19,11 +19,14 @@
 
 ## 2. `TargetConfig.__getattr__` の型安全性低下
 
-部分対応（移行フェーズ開始）。
+部分対応（移行フェーズ開始、2026-04-23に方針追記）。
 
 - 内部コードは `target.deps.* / target.network.* / target.stats.* / target.external.* / target.maintenance.*` 参照へ移行を開始。
 - `__getattr__` は deprecation shim として維持。
 - shim利用時には `DeprecationWarning` を出す実装を追加（内部モジュールからのアクセスは警告抑制）。
+- shim利用時の警告メッセージに「v1.0.0で削除予定」を明記。
+- `CHANGELOG.md` の `Unreleased/Deprecated` に削除予定を記載。
+- テスト独立性のため `config_models._reset_deprecated_attr_warnings_for_tests()` を追加。
 
 補足:
 - 既存テスト互換のため、外部向け後方互換は保持。

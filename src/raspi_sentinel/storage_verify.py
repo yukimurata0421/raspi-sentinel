@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import stat
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -186,10 +188,19 @@ def verify_tmpfs_storage(
         )
 
     write_bytes = config.global_config.storage_verify_write_bytes
-    probe_path = mount_path / ".tmpfs-write-check.bin"
     probe_data = b"x" * write_bytes
+    probe_fd: int | None = None
+    probe_path: Path | None = None
     try:
-        probe_path.write_bytes(probe_data)
+        probe_fd, probe_name = tempfile.mkstemp(
+            dir=mount_path,
+            prefix=".tmpfs-write-check-",
+            suffix=".bin",
+        )
+        probe_path = Path(probe_name)
+        with os.fdopen(probe_fd, "wb") as fh:
+            fh.write(probe_data)
+        probe_fd = None
         read_back = probe_path.read_bytes()
     except OSError as exc:
         return StorageVerifyResult(
@@ -203,8 +214,14 @@ def verify_tmpfs_storage(
             reason=f"write/read probe failed: {exc}",
         )
     finally:
+        if probe_fd is not None:
+            try:
+                os.close(probe_fd)
+            except OSError:
+                pass
         try:
-            probe_path.unlink(missing_ok=True)
+            if probe_path is not None:
+                probe_path.unlink(missing_ok=True)
         except OSError:
             pass
     if read_back != probe_data:
@@ -264,11 +281,8 @@ def verify_tmpfs_storage(
 
 
 def _is_tmpfs_tiering_enabled(config: AppConfig) -> bool:
-    state_parent = config.global_config.state_file.parent
-    if config.global_config.storage_require_tmpfs:
-        return True
-    if config.global_config.state_durable_file is not None:
-        return True
-    if bool(config.global_config.state_durable_fields):
-        return True
-    return state_parent == Path("/run/raspi-sentinel")
+    return (
+        config.global_config.storage_require_tmpfs
+        or config.global_config.state_durable_file is not None
+        or bool(config.global_config.state_durable_fields)
+    )

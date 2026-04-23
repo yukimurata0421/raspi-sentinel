@@ -18,7 +18,7 @@ jobs:
         with:
           script: |
             const headSha = context.sha;
-            const timeoutMs = 20 * 60 * 1000;
+            const timeoutMs = 45 * 60 * 1000;
             const pollIntervalMs = 15 * 1000;
             const deadline = Date.now() + timeoutMs;
 
@@ -56,10 +56,10 @@ jobs:
                 continue;
               }
 
-              const latestRun = ciRuns[0];
-              if (latestRun) {
+              const completedRun = ciRuns.find((run) => run.status === "completed");
+              if (completedRun) {
                 core.setFailed(
-                  `CI did not succeed for commit ${headSha}. Latest run #${latestRun.run_number} concluded with '${latestRun.conclusion}'.`,
+                  `CI did not succeed for commit ${headSha}. Most recent completed run #${completedRun.run_number} concluded with '${completedRun.conclusion}'.`,
                 );
                 return;
               }

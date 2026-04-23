@@ -128,6 +128,53 @@ def test_verify_tmpfs_storage_skips_when_tiering_not_enabled(
     assert result.reason == "skipped: tmpfs storage tiering is not enabled"
 
 
+def test_verify_tmpfs_storage_skips_when_run_path_used_without_explicit_opt_in(
+    tmp_path: Path,
+) -> None:
+    cfg = make_app_config(
+        global_overrides={
+            "state_file": Path("/run/raspi-sentinel/state.volatile.json"),
+            "state_durable_file": None,
+            "state_durable_fields": (),
+            "storage_require_tmpfs": False,
+        }
+    )
+    result = verify_tmpfs_storage(config=cfg)
+    assert result.ok is True
+    assert result.reason == "skipped: tmpfs storage tiering is not enabled"
+
+
+def test_verify_tmpfs_storage_runs_when_durable_tier_is_configured(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    mount_dir = tmp_path / "run" / "raspi-sentinel"
+    mount_dir.mkdir(parents=True)
+    cfg = make_app_config(
+        global_overrides={
+            "state_file": mount_dir / "state.volatile.json",
+            "state_durable_file": tmp_path / "var" / "lib" / "state.durable.json",
+            "storage_verify_cooldown_sec": 0,
+            "storage_require_tmpfs": False,
+        }
+    )
+    monkeypatch.setattr(
+        "raspi_sentinel.storage_verify._lookup_mount_info",
+        lambda path: (mount_dir, "ext4"),
+    )
+    monkeypatch.setattr(
+        "raspi_sentinel.storage_verify.shutil.disk_usage",
+        lambda path: SimpleNamespace(total=1024 * 1024, used=512, free=1024 * 1024),
+    )
+    result = verify_tmpfs_storage(
+        config=cfg,
+        expected_mode=None,
+        expected_owner_uid=None,
+        expected_owner_gid=None,
+    )
+    assert result.ok is True
+    assert result.mount_fs_type == "ext4"
+
+
 def test_verify_tmpfs_storage_rejects_low_free_space(tmp_path: Path, monkeypatch: Any) -> None:
     mount_dir = tmp_path / "run" / "raspi-sentinel"
     mount_dir.mkdir(parents=True)
@@ -218,14 +265,13 @@ def test_verify_tmpfs_storage_rejects_write_probe_failure(tmp_path: Path, monkey
         "raspi_sentinel.storage_verify._lookup_mount_info",
         lambda path: (mount_dir, "tmpfs"),
     )
-    original_write_bytes = Path.write_bytes
+    def fail_mkstemp(**_kwargs: Any) -> tuple[int, str]:
+        raise OSError("no space left")
 
-    def fail_probe_write(self: Path, data: bytes) -> int:
-        if self == mount_dir / ".tmpfs-write-check.bin":
-            raise OSError("no space left")
-        return original_write_bytes(self, data)
-
-    monkeypatch.setattr(Path, "write_bytes", fail_probe_write)
+    monkeypatch.setattr(
+        "raspi_sentinel.storage_verify.tempfile.mkstemp",
+        fail_mkstemp,
+    )
     result = verify_tmpfs_storage(
         config=cfg,
         expected_mode=None,
@@ -260,7 +306,7 @@ def test_verify_tmpfs_storage_rejects_write_probe_readback_mismatch(
     original_read_bytes = Path.read_bytes
 
     def read_mismatch(self: Path) -> bytes:
-        if self == mount_dir / ".tmpfs-write-check.bin":
+        if self.parent == mount_dir and self.name.startswith(".tmpfs-write-check-"):
             return b"mismatch"
         return original_read_bytes(self)
 
