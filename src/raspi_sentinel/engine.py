@@ -584,6 +584,7 @@ def run_cycle_collect(
         volatile_path=config.global_config.state_file,
         durable_path=config.global_config.state_durable_file,
         durable_fields=config.global_config.state_durable_fields,
+        require_tmpfs=config.global_config.storage_require_tmpfs,
     )
     try:
         with store.exclusive_lock(timeout_sec=config.global_config.state_lock_timeout_sec):

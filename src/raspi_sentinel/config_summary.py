@@ -24,10 +24,10 @@ def _config_permission_warning(config_path: Path) -> str | None:
 def _stats_rules_enabled(target: TargetConfig) -> bool:
     return any(
         (
-            target.stats_updated_max_age_sec is not None,
-            target.stats_last_input_max_age_sec is not None,
-            target.stats_last_success_max_age_sec is not None,
-            target.stats_records_stall_cycles is not None,
+            target.stats.stats_updated_max_age_sec is not None,
+            target.stats.stats_last_input_max_age_sec is not None,
+            target.stats.stats_last_success_max_age_sec is not None,
+            target.stats.stats_records_stall_cycles is not None,
         )
     )
 
@@ -35,9 +35,9 @@ def _stats_rules_enabled(target: TargetConfig) -> bool:
 def _external_status_rules_enabled(target: TargetConfig) -> bool:
     return any(
         (
-            target.external_status_updated_max_age_sec is not None,
-            target.external_status_last_progress_max_age_sec is not None,
-            target.external_status_last_success_max_age_sec is not None,
+            target.external.external_status_updated_max_age_sec is not None,
+            target.external.external_status_last_progress_max_age_sec is not None,
+            target.external.external_status_last_success_max_age_sec is not None,
         )
     )
 
@@ -56,23 +56,23 @@ def _enabled_rules(target: TargetConfig) -> list[str]:
         rules.append("semantic_stats")
     if _external_status_rules_enabled(target):
         rules.append("external_status")
-    if target.dns_check_command is not None:
+    if target.deps.dns_check_command is not None:
         rules.append("dns_dependency")
-    if target.dns_server_check_command is not None:
+    if target.deps.dns_server_check_command is not None:
         rules.append("dns_server_dependency")
-    if target.gateway_check_command is not None:
+    if target.deps.gateway_check_command is not None:
         rules.append("gateway_dependency")
-    if target.link_check_command is not None:
+    if target.deps.link_check_command is not None:
         rules.append("link_dependency")
-    if target.default_route_check_command is not None:
+    if target.deps.default_route_check_command is not None:
         rules.append("default_route_dependency")
-    if target.internet_ip_check_command is not None:
+    if target.deps.internet_ip_check_command is not None:
         rules.append("internet_ip_dependency")
-    if target.wan_vs_target_check_command is not None:
+    if target.deps.wan_vs_target_check_command is not None:
         rules.append("wan_target_dependency")
-    if target.network_probe_enabled:
+    if target.network.network_probe_enabled:
         rules.append("network_probe")
-    if target.time_health_enabled:
+    if target.time_health.time_health_enabled:
         rules.append("time_health")
     return rules
 
@@ -81,22 +81,22 @@ def _shell_commands(target: TargetConfig) -> dict[str, str]:
     commands: dict[str, str] = {}
     if target.command is not None:
         commands["command"] = target.command
-    if target.dns_check_command is not None:
-        commands["dns_check_command"] = target.dns_check_command
-    if target.dns_server_check_command is not None:
-        commands["dns_server_check_command"] = target.dns_server_check_command
-    if target.gateway_check_command is not None:
-        commands["gateway_check_command"] = target.gateway_check_command
-    if target.link_check_command is not None:
-        commands["link_check_command"] = target.link_check_command
-    if target.default_route_check_command is not None:
-        commands["default_route_check_command"] = target.default_route_check_command
-    if target.internet_ip_check_command is not None:
-        commands["internet_ip_check_command"] = target.internet_ip_check_command
-    if target.wan_vs_target_check_command is not None:
-        commands["wan_vs_target_check_command"] = target.wan_vs_target_check_command
-    if target.maintenance_mode_command is not None:
-        commands["maintenance_mode_command"] = target.maintenance_mode_command
+    if target.deps.dns_check_command is not None:
+        commands["dns_check_command"] = target.deps.dns_check_command
+    if target.deps.dns_server_check_command is not None:
+        commands["dns_server_check_command"] = target.deps.dns_server_check_command
+    if target.deps.gateway_check_command is not None:
+        commands["gateway_check_command"] = target.deps.gateway_check_command
+    if target.deps.link_check_command is not None:
+        commands["link_check_command"] = target.deps.link_check_command
+    if target.deps.default_route_check_command is not None:
+        commands["default_route_check_command"] = target.deps.default_route_check_command
+    if target.deps.internet_ip_check_command is not None:
+        commands["internet_ip_check_command"] = target.deps.internet_ip_check_command
+    if target.deps.wan_vs_target_check_command is not None:
+        commands["wan_vs_target_check_command"] = target.deps.wan_vs_target_check_command
+    if target.maintenance.maintenance_mode_command is not None:
+        commands["maintenance_mode_command"] = target.maintenance.maintenance_mode_command
     return commands
 
 
@@ -104,21 +104,33 @@ def _shell_opt_in_checks(target: TargetConfig) -> list[str]:
     checks: list[str] = []
     if target.command is not None and target.command_use_shell:
         checks.append("command")
-    if target.dns_check_command is not None and target.dns_check_use_shell:
+    if target.deps.dns_check_command is not None and target.deps.dns_check_use_shell:
         checks.append("dns_check_command")
-    if target.dns_server_check_command is not None and target.dns_server_check_use_shell:
+    if target.deps.dns_server_check_command is not None and target.deps.dns_server_check_use_shell:
         checks.append("dns_server_check_command")
-    if target.gateway_check_command is not None and target.gateway_check_use_shell:
+    if target.deps.gateway_check_command is not None and target.deps.gateway_check_use_shell:
         checks.append("gateway_check_command")
-    if target.link_check_command is not None and target.link_check_use_shell:
+    if target.deps.link_check_command is not None and target.deps.link_check_use_shell:
         checks.append("link_check_command")
-    if target.default_route_check_command is not None and target.default_route_check_use_shell:
+    if (
+        target.deps.default_route_check_command is not None
+        and target.deps.default_route_check_use_shell
+    ):
         checks.append("default_route_check_command")
-    if target.internet_ip_check_command is not None and target.internet_ip_check_use_shell:
+    if (
+        target.deps.internet_ip_check_command is not None
+        and target.deps.internet_ip_check_use_shell
+    ):
         checks.append("internet_ip_check_command")
-    if target.wan_vs_target_check_command is not None and target.wan_vs_target_check_use_shell:
+    if (
+        target.deps.wan_vs_target_check_command is not None
+        and target.deps.wan_vs_target_check_use_shell
+    ):
         checks.append("wan_vs_target_check_command")
-    if target.maintenance_mode_command is not None and target.maintenance_mode_use_shell:
+    if (
+        target.maintenance.maintenance_mode_command is not None
+        and target.maintenance.maintenance_mode_use_shell
+    ):
         checks.append("maintenance_mode_command")
     return checks
 
@@ -148,8 +160,8 @@ def _target_paths(target: TargetConfig) -> list[dict[str, Any]]:
     for field_name, path in (
         ("heartbeat_file", target.heartbeat_file),
         ("output_file", target.output_file),
-        ("stats_file", target.stats_file),
-        ("external_status_file", target.external_status_file),
+        ("stats_file", target.stats.stats_file),
+        ("external_status_file", target.external.external_status_file),
     ):
         if path is None:
             continue
@@ -173,9 +185,9 @@ def _target_warnings(
     if target.service_active and not target.services:
         warnings.append("service_active=true but services is empty")
 
-    if _stats_rules_enabled(target) and target.stats_file is None:
+    if _stats_rules_enabled(target) and target.stats.stats_file is None:
         warnings.append("stats_* rules enabled but stats_file is unset")
-    if _external_status_rules_enabled(target) and target.external_status_file is None:
+    if _external_status_rules_enabled(target) and target.external.external_status_file is None:
         warnings.append("external_status_* rules enabled but external_status_file is unset")
 
     for path_entry in path_entries:
@@ -206,8 +218,11 @@ def _target_warnings(
         warnings.append("reboot_threshold is lower than restart_threshold")
 
     if (
-        target.time_health_enabled
-        and target.check_interval_threshold_sec > target.wall_clock_freeze_min_monotonic_sec
+        target.time_health.time_health_enabled
+        and (
+            target.time_health.check_interval_threshold_sec
+            > target.time_health.wall_clock_freeze_min_monotonic_sec
+        )
     ):
         warnings.append(
             (
@@ -248,39 +263,47 @@ def _target_summary(
             "reboot_threshold": target.reboot_threshold or config.global_config.reboot_threshold,
         },
         "time_health": {
-            "enabled": target.time_health_enabled,
-            "check_interval_threshold_sec": target.check_interval_threshold_sec,
-            "wall_clock_freeze_min_monotonic_sec": target.wall_clock_freeze_min_monotonic_sec,
-            "wall_clock_freeze_max_wall_advance_sec": target.wall_clock_freeze_max_wall_advance_sec,
-            "wall_clock_drift_threshold_sec": target.wall_clock_drift_threshold_sec,
-            "http_time_probe_url": target.http_time_probe_url,
-            "http_time_probe_timeout_sec": target.http_time_probe_timeout_sec,
-            "clock_skew_threshold_sec": target.clock_skew_threshold_sec,
-            "clock_anomaly_reboot_consecutive": target.clock_anomaly_reboot_consecutive,
+            "enabled": target.time_health.time_health_enabled,
+            "check_interval_threshold_sec": target.time_health.check_interval_threshold_sec,
+            "wall_clock_freeze_min_monotonic_sec": (
+                target.time_health.wall_clock_freeze_min_monotonic_sec
+            ),
+            "wall_clock_freeze_max_wall_advance_sec": (
+                target.time_health.wall_clock_freeze_max_wall_advance_sec
+            ),
+            "wall_clock_drift_threshold_sec": target.time_health.wall_clock_drift_threshold_sec,
+            "http_time_probe_url": target.time_health.http_time_probe_url,
+            "http_time_probe_timeout_sec": target.time_health.http_time_probe_timeout_sec,
+            "clock_skew_threshold_sec": target.time_health.clock_skew_threshold_sec,
+            "clock_anomaly_reboot_consecutive": target.time_health.clock_anomaly_reboot_consecutive,
         },
         "network_probe": {
-            "enabled": target.network_probe_enabled,
-            "network_interface": target.network_interface,
-            "gateway_probe_timeout_sec": target.gateway_probe_timeout_sec,
-            "internet_ip_targets": target.internet_ip_targets,
-            "dns_query_target": target.dns_query_target,
-            "http_probe_target": target.http_probe_target,
-            "consecutive_failure_thresholds": target.consecutive_failure_thresholds,
-            "latency_thresholds_ms": target.latency_thresholds_ms,
-            "packet_loss_thresholds_pct": target.packet_loss_thresholds_pct,
+            "enabled": target.network.network_probe_enabled,
+            "network_interface": target.network.network_interface,
+            "gateway_probe_timeout_sec": target.network.gateway_probe_timeout_sec,
+            "internet_ip_targets": target.network.internet_ip_targets,
+            "dns_query_target": target.network.dns_query_target,
+            "http_probe_target": target.network.http_probe_target,
+            "consecutive_failure_thresholds": target.network.consecutive_failure_thresholds,
+            "latency_thresholds_ms": target.network.latency_thresholds_ms,
+            "packet_loss_thresholds_pct": target.network.packet_loss_thresholds_pct,
         },
         "maintenance_mode": {
-            "enabled": target.maintenance_mode_command is not None,
-            "timeout_sec": target.maintenance_mode_timeout_sec,
-            "grace_sec": target.maintenance_grace_sec,
+            "enabled": target.maintenance.maintenance_mode_command is not None,
+            "timeout_sec": target.maintenance.maintenance_mode_timeout_sec,
+            "grace_sec": target.maintenance.maintenance_grace_sec,
         },
         "external_status": {
-            "file": str(target.external_status_file) if target.external_status_file else None,
-            "updated_max_age_sec": target.external_status_updated_max_age_sec,
-            "last_progress_max_age_sec": target.external_status_last_progress_max_age_sec,
-            "last_success_max_age_sec": target.external_status_last_success_max_age_sec,
-            "startup_grace_sec": target.external_status_startup_grace_sec,
-            "unhealthy_values": list(target.external_status_unhealthy_values),
+            "file": (
+                str(target.external.external_status_file)
+                if target.external.external_status_file
+                else None
+            ),
+            "updated_max_age_sec": target.external.external_status_updated_max_age_sec,
+            "last_progress_max_age_sec": target.external.external_status_last_progress_max_age_sec,
+            "last_success_max_age_sec": target.external.external_status_last_success_max_age_sec,
+            "startup_grace_sec": target.external.external_status_startup_grace_sec,
+            "unhealthy_values": list(target.external.external_status_unhealthy_values),
         },
         "shell_commands": shell_commands,
         "shell_opt_in_checks": shell_opt_in_checks,

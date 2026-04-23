@@ -21,6 +21,15 @@ from .state_models import GlobalState, RebootRecord
 LOG = logging.getLogger(__name__)
 
 
+def is_storage_tiering_enabled(
+    *,
+    storage_require_tmpfs: bool,
+    state_durable_file: Path | None,
+    state_durable_fields: tuple[str, ...],
+) -> bool:
+    return storage_require_tmpfs or state_durable_file is not None or bool(state_durable_fields)
+
+
 def ensure_directory(path: Path, mode: int = 0o755) -> bool:
     """Ensure a directory exists, and set mode when newly created."""
     try:
@@ -208,14 +217,22 @@ class TieredStateStore:
         volatile_path: Path,
         durable_path: Path | None = None,
         durable_fields: tuple[str, ...] = (),
+        require_tmpfs: bool = False,
     ) -> None:
         self.volatile_store = StateStore(volatile_path)
         self.durable_store = StateStore(durable_path) if durable_path is not None else None
         self.durable_fields = tuple(dict.fromkeys(durable_fields))
+        self.require_tmpfs = require_tmpfs
 
     @property
     def _tiered_enabled(self) -> bool:
-        return self.durable_store is not None and bool(self.durable_fields)
+        if self.durable_store is None:
+            return False
+        return is_storage_tiering_enabled(
+            storage_require_tmpfs=self.require_tmpfs,
+            state_durable_file=self.durable_store.path,
+            state_durable_fields=self.durable_fields,
+        )
 
     @property
     def _lock_stores(self) -> list[StateStore]:

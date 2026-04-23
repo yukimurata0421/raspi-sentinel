@@ -453,6 +453,34 @@ def test_tiered_state_store_splits_durable_fields(tmp_path: Path) -> None:
     assert loaded["notify"]["delivery_backlog"]["total_failures"] == 2
 
 
+def test_tiered_state_store_keeps_tiered_mode_when_durable_file_is_configured(
+    tmp_path: Path,
+) -> None:
+    volatile = tmp_path / "state.volatile.json"
+    durable = tmp_path / "state.durable.json"
+    store = TieredStateStore(
+        volatile_path=volatile,
+        durable_path=durable,
+        durable_fields=(),
+    )
+    payload = {
+        "targets": {"demo": {"consecutive_failures": 2}},
+        "reboots": [{"ts": 10.0, "target": "demo", "reason": "failed"}],
+        "followups": {},
+        "notify": {},
+        "monitor_stats": {},
+    }
+
+    assert store.save(payload, max_file_bytes=1_000_000, max_reboots_entries=256)
+    assert volatile.exists()
+    assert durable.exists()
+    assert durable.read_text(encoding="utf-8").strip() == "{}"
+
+    loaded = store.load()
+    assert loaded["targets"]["demo"]["consecutive_failures"] == 2
+    assert loaded["reboots"][0]["target"] == "demo"
+
+
 def test_tiered_state_store_returns_false_when_durable_save_fails(tmp_path: Path) -> None:
     volatile = tmp_path / "state.volatile.json"
     durable = tmp_path / "state.durable.json"

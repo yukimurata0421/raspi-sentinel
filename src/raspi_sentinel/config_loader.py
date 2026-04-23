@@ -116,6 +116,13 @@ def _parse_state_durable_fields(storage_raw: Mapping[str, object]) -> tuple[str,
 
 
 def _validate_target_rules(target: TargetConfig) -> None:
+    deps = target.deps
+    network = target.network
+    stats = target.stats
+    time_health = target.time_health
+    maintenance = target.maintenance
+    external = target.external
+
     has_heartbeat = target.heartbeat_file is not None or target.heartbeat_max_age_sec is not None
     if has_heartbeat and (target.heartbeat_file is None or target.heartbeat_max_age_sec is None):
         raise ValueError(
@@ -142,22 +149,22 @@ def _validate_target_rules(target: TargetConfig) -> None:
             f"target '{target.name}': command_use_shell=true requires command to be set"
         )
 
-    if target.dns_check_use_shell and target.dns_check_command is None:
+    if deps.dns_check_use_shell and deps.dns_check_command is None:
         raise ValueError(
             f"target '{target.name}': dns_check_use_shell=true requires dns_check_command"
         )
 
-    if target.gateway_check_use_shell and target.gateway_check_command is None:
+    if deps.gateway_check_use_shell and deps.gateway_check_command is None:
         raise ValueError(
             (f"target '{target.name}': gateway_check_use_shell=true requires gateway_check_command")
         )
 
-    if target.link_check_use_shell and target.link_check_command is None:
+    if deps.link_check_use_shell and deps.link_check_command is None:
         raise ValueError(
             f"target '{target.name}': link_check_use_shell=true requires link_check_command"
         )
 
-    if target.default_route_check_use_shell and target.default_route_check_command is None:
+    if deps.default_route_check_use_shell and deps.default_route_check_command is None:
         raise ValueError(
             (
                 f"target '{target.name}': default_route_check_use_shell=true requires "
@@ -165,7 +172,7 @@ def _validate_target_rules(target: TargetConfig) -> None:
             )
         )
 
-    if target.internet_ip_check_use_shell and target.internet_ip_check_command is None:
+    if deps.internet_ip_check_use_shell and deps.internet_ip_check_command is None:
         raise ValueError(
             (
                 f"target '{target.name}': internet_ip_check_use_shell=true requires "
@@ -173,7 +180,7 @@ def _validate_target_rules(target: TargetConfig) -> None:
             )
         )
 
-    if target.dns_server_check_use_shell and target.dns_server_check_command is None:
+    if deps.dns_server_check_use_shell and deps.dns_server_check_command is None:
         raise ValueError(
             (
                 f"target '{target.name}': dns_server_check_use_shell=true requires "
@@ -181,7 +188,7 @@ def _validate_target_rules(target: TargetConfig) -> None:
             )
         )
 
-    if target.wan_vs_target_check_use_shell and target.wan_vs_target_check_command is None:
+    if deps.wan_vs_target_check_use_shell and deps.wan_vs_target_check_command is None:
         raise ValueError(
             (
                 f"target '{target.name}': wan_vs_target_check_use_shell=true requires "
@@ -189,20 +196,20 @@ def _validate_target_rules(target: TargetConfig) -> None:
             )
         )
 
-    if target.network_probe_enabled:
-        if target.network_interface is None:
+    if network.network_probe_enabled:
+        if network.network_interface is None:
             raise ValueError(
                 f"target '{target.name}': network_probe_enabled=true requires network_interface"
             )
-        if target.gateway_probe_timeout_sec <= 0:
+        if network.gateway_probe_timeout_sec <= 0:
             raise ValueError(f"target '{target.name}': gateway_probe_timeout_sec must be > 0")
-        if not target.internet_ip_targets:
+        if not network.internet_ip_targets:
             raise ValueError(
                 f"target '{target.name}': internet_ip_targets must have at least one target"
             )
 
-    degraded_threshold = target.consecutive_failure_thresholds.get("degraded", 2)
-    failed_threshold = target.consecutive_failure_thresholds.get("failed", 6)
+    degraded_threshold = network.consecutive_failure_thresholds.get("degraded", 2)
+    failed_threshold = network.consecutive_failure_thresholds.get("failed", 6)
     if degraded_threshold <= 0 or failed_threshold <= 0:
         raise ValueError(
             f"target '{target.name}': consecutive_failure_thresholds values must be > 0"
@@ -212,13 +219,19 @@ def _validate_target_rules(target: TargetConfig) -> None:
             f"target '{target.name}': consecutive_failure_thresholds.failed must be >= degraded"
         )
 
-    if target.dependency_check_timeout_sec is not None and target.dependency_check_timeout_sec <= 0:
+    if (
+        deps.dependency_check_timeout_sec is not None
+        and deps.dependency_check_timeout_sec <= 0
+    ):
         raise ValueError(f"target '{target.name}': dependency_check_timeout_sec must be > 0")
 
-    if target.maintenance_mode_timeout_sec is not None and target.maintenance_mode_timeout_sec <= 0:
+    if (
+        maintenance.maintenance_mode_timeout_sec is not None
+        and maintenance.maintenance_mode_timeout_sec <= 0
+    ):
         raise ValueError(f"target '{target.name}': maintenance_mode_timeout_sec must be > 0")
 
-    if target.maintenance_mode_use_shell and target.maintenance_mode_command is None:
+    if maintenance.maintenance_mode_use_shell and maintenance.maintenance_mode_command is None:
         raise ValueError(
             (
                 f"target '{target.name}': maintenance_mode_use_shell=true requires "
@@ -226,7 +239,7 @@ def _validate_target_rules(target: TargetConfig) -> None:
             )
         )
 
-    if target.maintenance_grace_sec is not None and target.maintenance_grace_sec < 0:
+    if maintenance.maintenance_grace_sec is not None and maintenance.maintenance_grace_sec < 0:
         raise ValueError(f"target '{target.name}': maintenance_grace_sec must be >= 0")
 
     if target.restart_threshold is not None and target.restart_threshold <= 0:
@@ -241,51 +254,51 @@ def _validate_target_rules(target: TargetConfig) -> None:
                 f"target '{target.name}': reboot_threshold must be >= restart_threshold"
             )
 
-    if target.stats_updated_max_age_sec is not None and target.stats_updated_max_age_sec <= 0:
+    if stats.stats_updated_max_age_sec is not None and stats.stats_updated_max_age_sec <= 0:
         raise ValueError(f"target '{target.name}': stats_updated_max_age_sec must be > 0")
 
-    if target.stats_last_input_max_age_sec is not None and target.stats_last_input_max_age_sec <= 0:
+    if stats.stats_last_input_max_age_sec is not None and stats.stats_last_input_max_age_sec <= 0:
         raise ValueError(f"target '{target.name}': stats_last_input_max_age_sec must be > 0")
 
     if (
-        target.stats_last_success_max_age_sec is not None
-        and target.stats_last_success_max_age_sec <= 0
+        stats.stats_last_success_max_age_sec is not None
+        and stats.stats_last_success_max_age_sec <= 0
     ):
         raise ValueError(f"target '{target.name}': stats_last_success_max_age_sec must be > 0")
 
-    if target.stats_records_stall_cycles is not None and target.stats_records_stall_cycles <= 0:
+    if stats.stats_records_stall_cycles is not None and stats.stats_records_stall_cycles <= 0:
         raise ValueError(f"target '{target.name}': stats_records_stall_cycles must be > 0")
 
     if (
-        target.external_status_updated_max_age_sec is not None
-        and target.external_status_updated_max_age_sec <= 0
+        external.external_status_updated_max_age_sec is not None
+        and external.external_status_updated_max_age_sec <= 0
     ):
         raise ValueError(f"target '{target.name}': external_status_updated_max_age_sec must be > 0")
     if (
-        target.external_status_last_progress_max_age_sec is not None
-        and target.external_status_last_progress_max_age_sec <= 0
+        external.external_status_last_progress_max_age_sec is not None
+        and external.external_status_last_progress_max_age_sec <= 0
     ):
         raise ValueError(
             f"target '{target.name}': external_status_last_progress_max_age_sec must be > 0"
         )
     if (
-        target.external_status_last_success_max_age_sec is not None
-        and target.external_status_last_success_max_age_sec <= 0
+        external.external_status_last_success_max_age_sec is not None
+        and external.external_status_last_success_max_age_sec <= 0
     ):
         raise ValueError(
             f"target '{target.name}': external_status_last_success_max_age_sec must be > 0"
         )
-    if target.external_status_startup_grace_sec < 0:
+    if external.external_status_startup_grace_sec < 0:
         raise ValueError(f"target '{target.name}': external_status_startup_grace_sec must be >= 0")
 
     has_external_status_rule = any(
         [
-            target.external_status_updated_max_age_sec is not None,
-            target.external_status_last_progress_max_age_sec is not None,
-            target.external_status_last_success_max_age_sec is not None,
+            external.external_status_updated_max_age_sec is not None,
+            external.external_status_last_progress_max_age_sec is not None,
+            external.external_status_last_success_max_age_sec is not None,
         ]
     )
-    if has_external_status_rule and target.external_status_file is None:
+    if has_external_status_rule and external.external_status_file is None:
         raise ValueError(
             (
                 f"target '{target.name}': external_status_file is required when "
@@ -299,38 +312,38 @@ def _validate_target_rules(target: TargetConfig) -> None:
             "services must list at least one unit"
         )
 
-    if target.wall_clock_freeze_min_monotonic_sec <= 0:
+    if time_health.wall_clock_freeze_min_monotonic_sec <= 0:
         raise ValueError(f"target '{target.name}': wall_clock_freeze_min_monotonic_sec must be > 0")
 
-    if target.check_interval_threshold_sec <= 0:
+    if time_health.check_interval_threshold_sec <= 0:
         raise ValueError(f"target '{target.name}': check_interval_threshold_sec must be > 0")
 
-    if target.wall_clock_freeze_max_wall_advance_sec < 0:
+    if time_health.wall_clock_freeze_max_wall_advance_sec < 0:
         raise ValueError(
             f"target '{target.name}': wall_clock_freeze_max_wall_advance_sec must be >= 0"
         )
 
-    if target.wall_clock_drift_threshold_sec <= 0:
+    if time_health.wall_clock_drift_threshold_sec <= 0:
         raise ValueError(f"target '{target.name}': wall_clock_drift_threshold_sec must be > 0")
 
-    if target.http_time_probe_timeout_sec <= 0:
+    if time_health.http_time_probe_timeout_sec <= 0:
         raise ValueError(f"target '{target.name}': http_time_probe_timeout_sec must be > 0")
 
-    if target.clock_skew_threshold_sec <= 0:
+    if time_health.clock_skew_threshold_sec <= 0:
         raise ValueError(f"target '{target.name}': clock_skew_threshold_sec must be > 0")
 
-    if target.clock_anomaly_reboot_consecutive <= 0:
+    if time_health.clock_anomaly_reboot_consecutive <= 0:
         raise ValueError(f"target '{target.name}': clock_anomaly_reboot_consecutive must be > 0")
 
     has_stats_rule = any(
         [
-            target.stats_updated_max_age_sec is not None,
-            target.stats_last_input_max_age_sec is not None,
-            target.stats_last_success_max_age_sec is not None,
-            target.stats_records_stall_cycles is not None,
+            stats.stats_updated_max_age_sec is not None,
+            stats.stats_last_input_max_age_sec is not None,
+            stats.stats_last_success_max_age_sec is not None,
+            stats.stats_records_stall_cycles is not None,
         ]
     )
-    if has_stats_rule and target.stats_file is None:
+    if has_stats_rule and stats.stats_file is None:
         raise ValueError(
             f"target '{target.name}': stats_file is required when stats_* checks are configured"
         )
@@ -341,17 +354,17 @@ def _validate_target_rules(target: TargetConfig) -> None:
             target.heartbeat_file is not None,
             target.output_file is not None,
             target.command is not None,
-            target.stats_file is not None,
-            target.external_status_file is not None,
-            target.dns_check_command is not None,
-            target.dns_server_check_command is not None,
-            target.gateway_check_command is not None,
-            target.link_check_command is not None,
-            target.default_route_check_command is not None,
-            target.internet_ip_check_command is not None,
-            target.wan_vs_target_check_command is not None,
-            target.network_probe_enabled,
-            target.time_health_enabled,
+            stats.stats_file is not None,
+            external.external_status_file is not None,
+            deps.dns_check_command is not None,
+            deps.dns_server_check_command is not None,
+            deps.gateway_check_command is not None,
+            deps.link_check_command is not None,
+            deps.default_route_check_command is not None,
+            deps.internet_ip_check_command is not None,
+            deps.wan_vs_target_check_command is not None,
+            network.network_probe_enabled,
+            time_health.time_health_enabled,
         ]
     )
     if not has_rule:

@@ -6,6 +6,15 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ## [Unreleased]
 
+### Changed
+
+- Internal config consumers now prefer grouped target access (`deps/network/stats/time_health/maintenance/external`)
+  in `config_loader` and `config_summary`, reducing reliance on flat-attribute shim paths.
+- Storage-tier enablement logic is now centralized via a shared helper and reused by storage verify
+  and tiered state store paths.
+- `TieredStateStore` now treats configured durable path as tiered mode even when durable field selection
+  is empty, aligning runtime behavior with storage-tier verification expectations.
+
 ## [0.7.1] - 2026-04-23
 
 ### Changed

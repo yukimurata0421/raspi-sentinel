@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .config import AppConfig
-from .state import ensure_directory
+from .state import ensure_directory, is_storage_tiering_enabled
 
 LOG = logging.getLogger(__name__)
 
@@ -281,8 +281,8 @@ def verify_tmpfs_storage(
 
 
 def _is_tmpfs_tiering_enabled(config: AppConfig) -> bool:
-    return (
-        config.global_config.storage_require_tmpfs
-        or config.global_config.state_durable_file is not None
-        or bool(config.global_config.state_durable_fields)
+    return is_storage_tiering_enabled(
+        storage_require_tmpfs=config.global_config.storage_require_tmpfs,
+        state_durable_file=config.global_config.state_durable_file,
+        state_durable_fields=config.global_config.state_durable_fields,
     )
