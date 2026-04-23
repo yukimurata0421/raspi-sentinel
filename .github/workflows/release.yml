@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Require successful CI on tagged commit
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const headSha = context.sha;
@@ -76,8 +76,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: verify-ci
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Build distributions
@@ -97,7 +97,7 @@ jobs:
             exit 1
           fi
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: Release ${{ github.ref_name }}
           # Curated notes; add docs/release-notes/vX.Y.Z.md before tagging (see docs/VERSIONING.md).
