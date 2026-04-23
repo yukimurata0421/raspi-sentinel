@@ -11,8 +11,7 @@ from raspi_sentinel import config_models
 def _read_target_attr_from_internal_module(target: Any) -> Any:
     namespace: dict[str, Any] = {}
     exec(
-        "def _inner(t):\n"
-        "    return t.dns_check_command\n",
+        "def _inner(t):\n    return t.dns_check_command\n",
         {"__name__": "raspi_sentinel.internal_test"},
         namespace,
     )

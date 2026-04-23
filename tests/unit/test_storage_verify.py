@@ -265,6 +265,7 @@ def test_verify_tmpfs_storage_rejects_write_probe_failure(tmp_path: Path, monkey
         "raspi_sentinel.storage_verify._lookup_mount_info",
         lambda path: (mount_dir, "tmpfs"),
     )
+
     def fail_mkstemp(**_kwargs: Any) -> tuple[int, str]:
         raise OSError("no space left")
 
