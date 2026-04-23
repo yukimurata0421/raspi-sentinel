@@ -255,8 +255,12 @@ def apply_time_health_checks(
         )
         http_probe_ok = probe_error is None and http_epoch is not None
         result.observations["http_time_probe_ok"] = http_probe_ok
-        if not isinstance(result.observations.get("http_probe_ok"), bool):
+        existing_http_probe_ok = safe_bool(result.observations.get("http_probe_ok"))
+        if existing_http_probe_ok is None:
             result.observations["http_probe_ok"] = http_probe_ok
+        else:
+            # Keep network-probe result authoritative when it already produced a bool value.
+            http_probe_ok = existing_http_probe_ok
         if probe_error is not None:
             result.observations["http_time_probe_error"] = probe_error
         if http_epoch is not None:

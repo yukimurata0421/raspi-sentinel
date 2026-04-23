@@ -41,7 +41,10 @@ def test_network_http_probe_non_2xx_is_failure(monkeypatch: Any) -> None:
     def fake_run_command_capture(args: list[str], timeout_sec: int) -> tuple[Any, Any]:
         return None, "unavailable"
 
-    monkeypatch.setattr(checks, "_run_command_capture", fake_run_command_capture)
+    monkeypatch.setattr(
+        "raspi_sentinel.checks.command_checks.run_command_capture",
+        fake_run_command_capture,
+    )
     monkeypatch.setattr(
         checks.urllib_request,
         "urlopen",
@@ -95,8 +98,7 @@ def test_network_http_error_kind_distinguishes_dns_connect_read_timeout_refused_
                 raising=False,
             )
             m.setattr(
-                checks,
-                "_run_command_capture",
+                "raspi_sentinel.checks.command_checks.run_command_capture",
                 lambda args, timeout_sec: (None, "unavailable"),
             )
             if expected_kind == "dns_resolution_failed":
@@ -173,8 +175,7 @@ def test_network_dns_error_kind_classifies_resolver_missing_no_server_unreachabl
     for expected_kind, resolv_conf_text, injected_error in cases:
         with monkeypatch.context() as m:
             m.setattr(
-                checks,
-                "_run_command_capture",
+                "raspi_sentinel.checks.command_checks.run_command_capture",
                 lambda args, timeout_sec: (None, "unavailable"),
             )
 
@@ -226,7 +227,10 @@ def test_network_link_ok_exposes_iface_up_wifi_associated_ip_assigned(monkeypatc
             return "nameserver 1.1.1.1\n"
         raise OSError("unavailable")
 
-    monkeypatch.setattr(checks, "_run_command_capture", fake_run_command_capture)
+    monkeypatch.setattr(
+        "raspi_sentinel.checks.command_checks.run_command_capture",
+        fake_run_command_capture,
+    )
     monkeypatch.setattr(checks.Path, "read_text", fake_read_text, raising=False)
     monkeypatch.setattr(
         checks.socket,
@@ -340,7 +344,10 @@ def test_network_probe_route_gateway_and_internet_branches(monkeypatch: Any) -> 
         return None, "unavailable"
 
     monkeypatch.setattr(checks.Path, "read_text", fake_read_text, raising=False)
-    monkeypatch.setattr(checks, "_run_command_capture", fake_run_command_capture)
+    monkeypatch.setattr(
+        "raspi_sentinel.checks.command_checks.run_command_capture",
+        fake_run_command_capture,
+    )
     monkeypatch.setattr(
         checks.urllib_request,
         "urlopen",
@@ -391,7 +398,10 @@ def test_network_probe_handles_empty_route_and_gateway_timeout(monkeypatch: Any)
         return None, "unavailable"
 
     monkeypatch.setattr(checks.Path, "read_text", fake_read_text, raising=False)
-    monkeypatch.setattr(checks, "_run_command_capture", fake_run_command_capture)
+    monkeypatch.setattr(
+        "raspi_sentinel.checks.command_checks.run_command_capture",
+        fake_run_command_capture,
+    )
     monkeypatch.setattr(
         checks.socket,
         "getaddrinfo",
@@ -451,7 +461,10 @@ def test_network_probe_sets_route_and_gateway_error_kinds(monkeypatch: Any) -> N
         return None, "unavailable"
 
     monkeypatch.setattr(checks.Path, "read_text", fake_read_text, raising=False)
-    monkeypatch.setattr(checks, "_run_command_capture", fake_run_command_capture)
+    monkeypatch.setattr(
+        "raspi_sentinel.checks.command_checks.run_command_capture",
+        fake_run_command_capture,
+    )
     monkeypatch.setattr(
         checks.socket,
         "getaddrinfo",

@@ -167,7 +167,10 @@ def test_stats_schema_validates_extended_dependency_fields(tmp_path: Path) -> No
 
 
 def test_stats_checks_handles_none_payload(monkeypatch: Any) -> None:
-    monkeypatch.setattr(checks, "_load_stats", lambda path: (None, None))
+    monkeypatch.setattr(
+        "raspi_sentinel.checks.semantic_stats.load_stats",
+        lambda path: (None, None),
+    )
     failures: list[checks.CheckFailure] = []
     obs: dict[str, Any] = {}
     checks._stats_checks(

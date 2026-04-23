@@ -145,16 +145,11 @@ class StateStore:
 
     def save(
         self,
-        state: GlobalState | dict[str, Any],
+        state: GlobalState,
         max_file_bytes: int = 0,
         max_reboots_entries: int = 256,
     ) -> bool:
-        if isinstance(state, GlobalState):
-            state_model = state
-            raw_state: dict[str, Any] | None = None
-        else:
-            state_model = GlobalState.from_dict(state)
-            raw_state = state
+        state_model = state
 
         if max_reboots_entries > 0 and len(state_model.reboots) > max_reboots_entries:
             original_count = len(state_model.reboots)
@@ -166,9 +161,6 @@ class StateStore:
             )
 
         payload = state_model.to_dict()
-        if raw_state is not None:
-            raw_state.clear()
-            raw_state.update(payload)
 
         if max_file_bytes > 0:
             try:
@@ -341,16 +333,11 @@ class TieredStateStore:
 
     def save(
         self,
-        state: GlobalState | dict[str, Any],
+        state: GlobalState,
         max_file_bytes: int = 0,
         max_reboots_entries: int = 256,
     ) -> bool:
-        if isinstance(state, GlobalState):
-            state_model = state
-            raw_state: dict[str, Any] | None = None
-        else:
-            state_model = GlobalState.from_dict(state)
-            raw_state = state
+        state_model = state
 
         if max_reboots_entries > 0 and len(state_model.reboots) > max_reboots_entries:
             original_count = len(state_model.reboots)
@@ -388,9 +375,6 @@ class TieredStateStore:
         if not durable_ok:
             return False
 
-        if raw_state is not None:
-            raw_state.clear()
-            raw_state.update(state_model.to_dict())
         return True
 
     def _save_raw_payload(

@@ -29,6 +29,14 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - `_lookup_mount_info` now logs warning when `/proc/mounts` cannot be read.
 - semantic stats clarification:
   - added comment in `age_check_from_stats` that `ts is None` guard is kept for type narrowing.
+- state persistence API cleanup:
+  - `StateStore.save` / `TieredStateStore.save` now accept `GlobalState` only; legacy `dict` in-place mutation path removed.
+- checks package cleanup:
+  - removed per-call monkeypatch compatibility rebinding in `checks.__init__.run_checks` and `_stats_checks`;
+    tests now patch `command_checks` / `semantic_stats` directly.
+- time-health observation precedence:
+  - when `http_probe_ok` is already a bool from network probe, time-health keeps that value and records
+    its own result in `http_time_probe_ok`.
 
 ## [0.7.1] - 2026-04-23
 

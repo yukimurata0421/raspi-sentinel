@@ -296,6 +296,36 @@ def test_time_health_http_probe_failed_reason(monkeypatch: Any) -> None:
     assert result.observations["clock_reason"] == "http_error"
 
 
+def test_time_health_keeps_existing_http_probe_ok_from_network_probe(monkeypatch: Any) -> None:
+    monkeypatch.setattr("raspi_sentinel.time_health.time.monotonic", lambda: 20.0)
+    monkeypatch.setattr(
+        "raspi_sentinel.time_health._fetch_http_date_epoch",
+        lambda url, timeout_sec: (1010.0, None),
+    )
+    monkeypatch.setattr("raspi_sentinel.time_health._query_ntp_sync_ok", lambda timeout_sec=3: None)
+
+    state = _make_ts(
+        clock_prev_wall_time_epoch=1000.0,
+        clock_prev_monotonic_sec=10.0,
+    )
+    result = CheckResult(
+        target="clock_target",
+        healthy=True,
+        failures=[],
+        observations={"http_probe_ok": False},
+    )
+    apply_time_health_checks(
+        target=_target(http_time_probe_url="https://www.google.com"),
+        target_state=state,
+        result=result,
+        now_wall_ts=1010.0,
+    )
+
+    assert result.observations["http_time_probe_ok"] is True
+    assert result.observations["http_probe_ok"] is False
+    assert result.observations["clock_reason"] == "http_error"
+
+
 def test_time_health_accepts_injected_monotonic_time(monkeypatch: Any) -> None:
     monkeypatch.setattr("raspi_sentinel.time_health._query_ntp_sync_ok", lambda timeout_sec=3: None)
 

@@ -7,7 +7,6 @@ import time as _time
 import urllib.error as _urllib_error
 import urllib.request as _urllib_request
 from pathlib import Path as _Path
-from typing import Any, cast
 
 from ..config import TargetConfig
 from .command_checks import command_check, run_command_capture, service_active_check
@@ -48,10 +47,8 @@ def _stats_checks(
     observations: ObservationMap,
     now_wall_ts: float,
 ) -> None:
-    # Keep monkeypatch-based tests stable: package-level alias should control the implementation.
     from . import semantic_stats as _semantic_stats
 
-    _semantic_stats.load_stats = _load_stats
     _semantic_stats.stats_checks(
         target=target,
         failures=failures,
@@ -61,17 +58,7 @@ def _stats_checks(
 
 
 def run_checks(target: TargetConfig, now_wall_ts: float | None = None) -> CheckResult:
-    # Keep monkeypatch-based tests stable: package-level alias should control the implementation.
-    from . import command_checks as _command_checks
-    from . import network_probes as _network_probes
     from . import runner as _runner
-    from . import semantic_stats as _semantic_stats
-
-    _command_checks.run_command_capture = _run_command_capture
-    _network_probes_any = cast(Any, _network_probes)
-    _network_probes_any.urllib_request = urllib_request
-    _network_probes_any.urllib_error = urllib_error
-    _semantic_stats.load_stats = _load_stats
     return _runner.run_checks(target=target, now_wall_ts=now_wall_ts)
 
 

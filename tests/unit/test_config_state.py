@@ -7,6 +7,7 @@ import pytest
 from raspi_sentinel.config import load_config
 from raspi_sentinel.state import StateStore, TieredStateStore
 from raspi_sentinel.state_helpers import maybe_rotate_file
+from raspi_sentinel.state_models import GlobalState
 
 
 def _write(path: Path, text: str) -> None:
@@ -334,7 +335,7 @@ def test_state_store_round_trip_preserves_monitor_stats(tmp_path: Path) -> None:
         "notify": {},
         "monitor_stats": {"last_written_ts": 123.0},
     }
-    store.save(payload)
+    store.save(GlobalState.from_dict(payload))
     loaded = store.load()
     assert loaded["monitor_stats"]["last_written_ts"] == 123.0
 
@@ -349,7 +350,11 @@ def test_state_store_save_blocks_oversized_payload(tmp_path: Path) -> None:
         "notify": {"big": "x" * 5000},
         "monitor_stats": {},
     }
-    ok = store.save(payload, max_file_bytes=128, max_reboots_entries=256)
+    ok = store.save(
+        GlobalState.from_dict(payload),
+        max_file_bytes=128,
+        max_reboots_entries=256,
+    )
     assert not ok
     assert not state_file.exists()
 
@@ -364,7 +369,11 @@ def test_state_store_save_trims_reboots_list(tmp_path: Path) -> None:
         "notify": {},
         "monitor_stats": {},
     }
-    ok = store.save(payload, max_file_bytes=10_000, max_reboots_entries=3)
+    ok = store.save(
+        GlobalState.from_dict(payload),
+        max_file_bytes=10_000,
+        max_reboots_entries=3,
+    )
     assert ok
     loaded = store.load()
     assert len(loaded["reboots"]) == 3
@@ -432,7 +441,11 @@ def test_tiered_state_store_splits_durable_fields(tmp_path: Path) -> None:
         },
         "monitor_stats": {"last_written_ts": 9.0},
     }
-    assert store.save(payload, max_file_bytes=1_000_000, max_reboots_entries=256)
+    assert store.save(
+        GlobalState.from_dict(payload),
+        max_file_bytes=1_000_000,
+        max_reboots_entries=256,
+    )
 
     volatile_raw = volatile.read_text(encoding="utf-8")
     assert '"reboots"' not in volatile_raw
@@ -471,7 +484,11 @@ def test_tiered_state_store_keeps_tiered_mode_when_durable_file_is_configured(
         "monitor_stats": {},
     }
 
-    assert store.save(payload, max_file_bytes=1_000_000, max_reboots_entries=256)
+    assert store.save(
+        GlobalState.from_dict(payload),
+        max_file_bytes=1_000_000,
+        max_reboots_entries=256,
+    )
     assert volatile.exists()
     assert durable.exists()
     assert durable.read_text(encoding="utf-8").strip() == "{}"
@@ -508,7 +525,11 @@ def test_tiered_state_store_returns_false_when_durable_save_fails(tmp_path: Path
         return original(path=path, payload=payload, max_file_bytes=max_file_bytes)
 
     store._save_raw_payload = fake_save_raw_payload  # type: ignore[method-assign]
-    ok = store.save(payload, max_file_bytes=1_000_000, max_reboots_entries=256)
+    ok = store.save(
+        GlobalState.from_dict(payload),
+        max_file_bytes=1_000_000,
+        max_reboots_entries=256,
+    )
     assert ok is False
     assert calls == [volatile, durable]
     assert volatile.exists()
