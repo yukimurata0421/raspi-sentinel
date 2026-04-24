@@ -44,3 +44,18 @@ def test_target_flat_attr_warning_is_suppressed_for_internal_callers() -> None:
         warnings.simplefilter("always", DeprecationWarning)
         assert _read_target_attr_from_internal_module(target) == "dig +short example.com"
     assert captured == []
+
+
+def test_target_flat_attr_second_access_skips_frame_lookup(monkeypatch: Any) -> None:
+    config_models._reset_deprecated_attr_warnings_for_tests()
+    target = make_target(dns_check_command="dig +short example.com")
+
+    with warnings.catch_warnings(record=True):
+        warnings.simplefilter("always", DeprecationWarning)
+        assert target.dns_check_command == "dig +short example.com"
+
+    def _unexpected_currentframe() -> Any:
+        raise AssertionError("inspect.currentframe must not be called for already warned attrs")
+
+    monkeypatch.setattr(config_models.inspect, "currentframe", _unexpected_currentframe)
+    assert target.dns_check_command == "dig +short example.com"

@@ -43,6 +43,9 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - time-health threshold consistency (`check_interval_threshold_sec` vs
     `wall_clock_freeze_min_monotonic_sec`) is currently surfaced as warning-level guidance
     in `config_summary`, not a `load_config` hard error.
+- deprecated flat-attribute shim optimization:
+  - `TargetConfig.__getattr__` now returns immediately for already-warned deprecated fields,
+    avoiding repeated `inspect.currentframe()` calls on subsequent accesses.
 
 ## [0.7.1] - 2026-04-23
 

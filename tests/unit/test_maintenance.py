@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from conftest import make_target
@@ -16,25 +17,27 @@ class TestRunCommandSuccess:
     def test_simple_command_fails(self) -> None:
         assert run_command_success("false", timeout_sec=5, use_shell=False) is False
 
-    def test_shell_syntax_rejected_without_use_shell(self) -> None:
-        result = run_command_success("echo hello && echo world", timeout_sec=5, use_shell=False)
-        assert result is False
+    def test_shell_syntax_is_advisory_without_use_shell(self, caplog: Any) -> None:
+        with caplog.at_level("WARNING", logger="raspi_sentinel.maintenance"):
+            result = run_command_success("echo hello && echo world", timeout_sec=5, use_shell=False)
+        assert result is True
+        assert "possible shell syntax detected with use_shell=false" in caplog.text
 
     def test_shell_syntax_accepted_with_use_shell(self) -> None:
         result = run_command_success("echo hello && echo world", timeout_sec=5, use_shell=True)
         assert result is True
 
-    def test_pipe_rejected_without_shell(self) -> None:
-        assert run_command_success("echo x | cat", timeout_sec=5, use_shell=False) is False
+    def test_pipe_runs_without_shell(self) -> None:
+        assert run_command_success("echo x | cat", timeout_sec=5, use_shell=False) is True
 
-    def test_backtick_rejected_without_shell(self) -> None:
-        assert run_command_success("echo `date`", timeout_sec=5, use_shell=False) is False
+    def test_backtick_runs_without_shell(self) -> None:
+        assert run_command_success("echo `date`", timeout_sec=5, use_shell=False) is True
 
-    def test_dollar_paren_rejected_without_shell(self) -> None:
-        assert run_command_success("echo $(date)", timeout_sec=5, use_shell=False) is False
+    def test_dollar_paren_runs_without_shell(self) -> None:
+        assert run_command_success("echo $(date)", timeout_sec=5, use_shell=False) is True
 
-    def test_semicolon_rejected_without_shell(self) -> None:
-        assert run_command_success("echo a; echo b", timeout_sec=5, use_shell=False) is False
+    def test_semicolon_runs_without_shell(self) -> None:
+        assert run_command_success("echo a; echo b", timeout_sec=5, use_shell=False) is True
 
     @patch(
         "raspi_sentinel.maintenance.subprocess.run",

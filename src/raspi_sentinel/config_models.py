@@ -158,6 +158,8 @@ class TargetConfig:
                 continue
             try:
                 value = getattr(sub, name)
+                if name in _DEPRECATED_ATTR_WARNED:
+                    return value
                 current = inspect.currentframe()
                 caller = current.f_back if current is not None else None
                 caller_mod = caller.f_globals.get("__name__", "") if caller is not None else ""

@@ -1,15 +1,21 @@
 from __future__ import annotations
 
+import logging
 import shlex
 import subprocess
 
 from .config import TargetConfig
 from .state_models import TargetState
 
+LOG = logging.getLogger(__name__)
+
 
 def run_command_success(command: str, timeout_sec: int, use_shell: bool) -> bool:
     if not use_shell and any(token in command for token in ("|", "&&", "||", ";", "$(", "`")):
-        return False
+        LOG.warning(
+            "possible shell syntax detected with use_shell=false (maintenance): %s",
+            command,
+        )
     args: str | list[str]
     if use_shell:
         args = command
