@@ -1,0 +1,17 @@
+{
+  "state_schema_version": 1,
+  "targets": {
+    "demo": {
+      "consecutive_failures": 0,
+      "last_status": "ok",
+      "last_reason": "healthy",
+      "records_stalled_cycles": 0,
+      "consecutive_clock_freeze_count": 0,
+      "clock_anomaly_consecutive": 0
+    }
+  },
+  "reboots": [],
+  "followups": {},
+  "notify": {},
+  "monitor_stats": {}
+}

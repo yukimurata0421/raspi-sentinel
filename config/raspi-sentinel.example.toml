@@ -158,7 +158,7 @@ http_time_probe_timeout_sec = 5
 clock_skew_threshold_sec = 300
 clock_anomaly_reboot_consecutive = 3
 # DNS-only failures are classified and reboot is suppressed.
-# Gateway failures can still escalate by threshold/cooldown guards.
+# Network-only failures are kept at warn/restart scope and do not trigger reboot.
 restart_threshold = 5
 reboot_threshold = 10
 

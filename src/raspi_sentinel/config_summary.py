@@ -181,6 +181,7 @@ def _target_warnings(
     config_permission_warning: str | None,
 ) -> list[str]:
     warnings: list[str] = []
+    shell_tokens = ("|", "&&", "||", ";", "$(", "`")
 
     if target.service_active and not target.services:
         warnings.append("service_active=true but services is empty")
@@ -228,6 +229,32 @@ def _target_warnings(
             )
         )
 
+    for command_field, command in _shell_commands(target).items():
+        if any(token in command for token in shell_tokens):
+            if command_field in _shell_opt_in_checks(target):
+                continue
+            warnings.append(
+                (
+                    f"{command_field} contains shell tokens but *_use_shell is false; "
+                    "command may behave unexpectedly"
+                )
+            )
+
+    return warnings
+
+
+def _global_warnings(config: AppConfig) -> list[str]:
+    warnings: list[str] = []
+    gc = config.global_config
+    if gc.restart_threshold >= gc.reboot_threshold:
+        warnings.append("global restart_threshold should be lower than reboot_threshold")
+    if gc.storage_require_tmpfs and gc.state_file.parent == Path("/var/lib/raspi-sentinel"):
+        warnings.append(
+            (
+                "storage.require_tmpfs=true but state_file is under /var/lib; "
+                "verify volatile path intent"
+            )
+        )
     return warnings
 
 
@@ -310,6 +337,7 @@ def _target_summary(
 
 def build_config_validation_report(config_path: Path, config: AppConfig) -> dict[str, Any]:
     permission_warning = _config_permission_warning(config_path)
+    global_warnings = _global_warnings(config)
     target_summaries = [
         _target_summary(target, config, permission_warning) for target in config.targets
     ]
@@ -322,6 +350,7 @@ def build_config_validation_report(config_path: Path, config: AppConfig) -> dict
     return {
         "config_path": str(config_path),
         "config_permission_warning": permission_warning,
+        "global_warnings": global_warnings,
         "global": {
             "state_file": str(config.global_config.state_file),
             "state_durable_file": (
@@ -350,6 +379,7 @@ def build_config_validation_report(config_path: Path, config: AppConfig) -> dict
         "warning_count": _count_warnings_from_target_summaries(
             target_summaries,
             permission_warning,
+            global_warnings,
         ),
     }
 
@@ -357,8 +387,9 @@ def build_config_validation_report(config_path: Path, config: AppConfig) -> dict
 def _count_warnings_from_target_summaries(
     target_summaries: list[dict[str, Any]],
     config_permission_warning: str | None,
+    global_warnings: list[str],
 ) -> int:
-    count = 1 if config_permission_warning else 0
+    count = (1 if config_permission_warning else 0) + len(global_warnings)
     for summary in target_summaries:
         warnings = summary.get("warnings", [])
         if isinstance(warnings, list):
@@ -374,6 +405,10 @@ def format_config_validation_report(report: dict[str, Any]) -> str:
     permission_warning = report.get("config_permission_warning")
     if isinstance(permission_warning, str):
         lines.append(f"warning: {permission_warning}")
+    global_warnings = report.get("global_warnings", [])
+    if isinstance(global_warnings, list):
+        for warning in global_warnings:
+            lines.append(f"warning: {warning}")
 
     targets = report.get("targets", [])
     lines.append(f"targets: {len(targets)}")

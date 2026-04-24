@@ -6,7 +6,7 @@ from typing import Any
 from conftest import make_global_config, make_target
 
 from raspi_sentinel.checks import CheckFailure, CheckResult
-from raspi_sentinel.recovery import apply_recovery
+from raspi_sentinel.recovery import apply_recovery, network_only_failures_can_reboot
 from raspi_sentinel.state_models import GlobalState
 
 
@@ -77,7 +77,7 @@ def test_dns_only_failure_does_not_reboot_even_when_threshold_reached() -> None:
     assert state.reboots == []
 
 
-def test_gateway_failure_can_request_reboot(monkeypatch: Any) -> None:
+def test_gateway_failure_does_not_request_reboot_even_when_policy_failed(monkeypatch: Any) -> None:
     monkeypatch.setattr("raspi_sentinel.recovery.read_uptime_sec", lambda: 999999.0)
     result = CheckResult(
         target="demo",
@@ -93,8 +93,8 @@ def test_gateway_failure_can_request_reboot(monkeypatch: Any) -> None:
         state=state,
         dry_run=True,
     )
-    assert outcome.action == "reboot"
-    assert outcome.requested_reboot
+    assert outcome.action == "warn"
+    assert not outcome.requested_reboot
 
 
 def test_recovery_reboot_requires_policy_failed_for_network_uplink(monkeypatch: Any) -> None:
@@ -129,8 +129,8 @@ def test_recovery_reboot_requires_policy_failed_for_network_uplink(monkeypatch: 
         state=GlobalState(),
         dry_run=True,
     )
-    assert outcome_failed.action == "reboot"
-    assert outcome_failed.requested_reboot
+    assert outcome_failed.action == "warn"
+    assert not outcome_failed.requested_reboot
 
 
 def test_external_status_failed_integrates_restart_then_reboot(monkeypatch: Any) -> None:
@@ -209,3 +209,7 @@ def test_reboot_is_suppressed_immediately_after_restart(monkeypatch: Any) -> Non
     )
     assert outcome.action == "warn"
     assert not outcome.requested_reboot
+
+
+def test_network_only_failure_reboot_flag_is_disabled_by_policy() -> None:
+    assert network_only_failures_can_reboot() is False

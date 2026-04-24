@@ -38,6 +38,11 @@
 
 - 詳細: [docs/storage-tiers.md](docs/storage-tiers.md)
 - 設定例: `config/raspi-sentinel.example.toml` の `[storage]`
+- プロファイル別設定例:
+  - `config/examples/production.toml`
+  - `config/examples/lightweight-pi.toml`
+  - `config/examples/no-discord.toml`
+  - `config/examples/tmpfs-tiered.toml`
 - 検証コマンド: `raspi-sentinel -c /etc/raspi-sentinel/config.toml verify-storage --json`
 
 ## Non-goals（非目標）
@@ -77,6 +82,8 @@ bash scripts/prepush_check.sh
 - 単発実行: `raspi-sentinel ... run-once`
 - ループ実行: `raspi-sentinel ... loop`
 - 設定検証: `raspi-sentinel ... validate-config`
+- 運用事前診断: `raspi-sentinel ... doctor`
+- 状態説明: `raspi-sentinel ... explain-state`
 
 JSONログが必要な場合:
 
@@ -89,6 +96,7 @@ raspi-sentinel --structured-logging -c /etc/raspi-sentinel/config.toml run-once
 - 英語版詳細: [README.md](README.md)
 - 運用手順: [docs/facts/operations-runbook.md](docs/facts/operations-runbook.md)
 - データ契約: [docs/facts/data-contracts.md](docs/facts/data-contracts.md)
+- 出力契約: [docs/output-contract.md](docs/output-contract.md)
 - テストマップ: [docs/facts/test-map.md](docs/facts/test-map.md)
 - 終了コード: [docs/facts/exit-codes.md](docs/facts/exit-codes.md)
 - リリースノート: [docs/release-notes/v0.7.1.md](docs/release-notes/v0.7.1.md)

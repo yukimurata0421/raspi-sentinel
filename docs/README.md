@@ -11,6 +11,7 @@ This index is the entry point for operational and design documentation of `raspi
 
 - [Operations Runbook](facts/operations-runbook.md)
 - [Data Contracts](facts/data-contracts.md)
+- [Output Contract](output-contract.md)
 - [Test Map](facts/test-map.md)
 - [Exit Codes](facts/exit-codes.md)
 - [Time Health Decision Table](time-health-decision-table.md)

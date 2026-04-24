@@ -87,3 +87,5 @@ def test_global_state_edge_parsing() -> None:
     assert state.followups == {}
     assert state.notify.to_dict() == {}
     assert state.monitor_stats.to_dict() == {}
+    assert state.state_schema_version == 1
+    assert state.to_dict()["state_schema_version"] == 1

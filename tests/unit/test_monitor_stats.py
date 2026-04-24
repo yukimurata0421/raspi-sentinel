@@ -6,6 +6,7 @@ from conftest import make_global_config, make_target
 
 from raspi_sentinel.checks import CheckResult
 from raspi_sentinel.config import AppConfig, DiscordNotifyConfig, NotifyConfig, TargetConfig
+from raspi_sentinel.contracts import STATS_SCHEMA_VERSION
 from raspi_sentinel.monitor_stats import build_monitor_stats_snapshot
 from raspi_sentinel.state_models import GlobalState
 
@@ -112,6 +113,7 @@ def test_monitor_stats_unknown_target_status_is_not_counted_as_health_bucket() -
         target_results={},
         now_ts=1_000_000.0,
     )
+    assert snapshot["stats_schema_version"] == STATS_SCHEMA_VERSION
     assert snapshot["status"] == "unknown"
     assert snapshot["targets_ok"] == 0
     assert snapshot["targets_degraded"] == 0

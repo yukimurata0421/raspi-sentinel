@@ -16,6 +16,7 @@ Recovery is deliberately staged:
 3. `reboot` (guarded, last resort)
 
 A reboot is never treated as a first response to a single weak signal.
+`v0.8.x` hardening uses an explicit reboot allowlist by policy reason.
 
 Reboot execution is deferred until `state.json` persistence completes, so reboot-loop safeguards keep accurate history even when the process is terminated by reboot.
 
@@ -28,6 +29,19 @@ Operationally, these failures are different classes and need different actions:
 - clock anomalies (`clock_frozen`, `clock_jump`, `clock_skewed`): require persistence and corroboration.
 
 Mixing these classes leads to noisy and destructive recovery behavior.
+Network-only failures (`dns_error`, `gateway_error`, and related path failures) are not reboot-eligible in the allowlist.
+
+## Action Matrix Contract
+
+`reason -> policy_status -> allowed action` is treated as a compatibility surface:
+
+| reason class | status | restart | reboot |
+|---|---|---|---|
+| process/service/app stale | failed | yes | guarded yes |
+| external_status_failed | failed | yes | guarded yes |
+| dns/gateway/network-only | degraded/failed | warn/restart | no |
+| clock anomalies | degraded/failed | warn | only `clock_frozen_confirmed` |
+| state load issues | degraded (limited mode) | no disruptive action | no |
 
 ## Time-Health Principle
 

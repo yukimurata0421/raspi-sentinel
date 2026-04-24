@@ -195,6 +195,11 @@ Reboot loop guards:
 
 - docs: `docs/storage-tiers.md`
 - config: optional `[storage]` section in `config/raspi-sentinel.example.toml`
+- profile examples:
+  - `config/examples/production.toml`
+  - `config/examples/lightweight-pi.toml`
+  - `config/examples/no-discord.toml`
+  - `config/examples/tmpfs-tiered.toml`
 - verify command: `raspi-sentinel -c /etc/raspi-sentinel/config.toml verify-storage --json`
 - `require_tmpfs` default: `false` (opt-in)
 
@@ -535,6 +540,18 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml verify-storage --json
 `verify-storage` creates `/run/raspi-sentinel` when missing, then validates mount type,
 permissions, writability, and free space.
 
+Operator preflight checks (permissions/timer/tmpfs/threshold sanity):
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json
+```
+
+State introspection (schema version, counters, last actions):
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml explain-state --json
+```
+
 Fail validation when warnings exist:
 
 ```bash
@@ -562,6 +579,7 @@ Use `0` vs `1` / `2` in systemd `ExecStart=` or scripts if you alert on unhealth
 
 - `stats.json`: current snapshot ("now"), overwritten atomically.
 - `events.jsonl`: append-only transition/history log ("what changed"), written only on status/reason/action changes.
+- contract details and schema-version policy: [docs/output-contract.md](docs/output-contract.md)
 
 Example `events.jsonl` lines:
 

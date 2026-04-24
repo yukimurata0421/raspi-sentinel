@@ -15,6 +15,7 @@ Notes:
 - internal control-plane state
 - schema may evolve across releases
 - should not be used as the primary external observability API
+- includes `state_schema_version` for compatibility tracking
 
 Current notification-related internal fields (under `notify`):
 
@@ -66,6 +67,7 @@ Purpose:
 
 - current aggregate health of sentinel itself
 - quick dashboard view (`targets_ok`, `targets_degraded`, `targets_failed`)
+- includes `stats_schema_version` for compatibility tracking
 
 Write policy:
 
@@ -99,3 +101,7 @@ Includes:
 - shell command usage
 - path existence checks
 - config permission warning
+
+## 6. Compatibility policy
+
+- output compatibility and schema-version rules are defined in [../output-contract.md](../output-contract.md)

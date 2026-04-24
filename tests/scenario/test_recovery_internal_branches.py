@@ -272,8 +272,8 @@ def test_apply_recovery_reboot_is_deferred_and_not_executed(monkeypatch: Any) ->
         check_result=CheckResult(
             target="demo",
             healthy=False,
-            failures=[CheckFailure("dependency_gateway", "gw")],
-            observations={"policy_status": "failed"},
+            failures=[CheckFailure("service_active", "down")],
+            observations={"policy_status": "failed", "policy_reason": "process_error"},
         ),
         global_config=_global(
             min_uptime_for_reboot_sec=0, restart_cooldown_sec=0, reboot_cooldown_sec=0

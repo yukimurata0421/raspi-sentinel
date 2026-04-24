@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/raspi-sentinel/stats.schema.json",
+  "title": "raspi-sentinel stats.json",
+  "type": "object",
+  "required": [
+    "stats_schema_version",
+    "service",
+    "updated_at",
+    "status",
+    "targets_total",
+    "targets_ok",
+    "targets_degraded",
+    "targets_failed",
+    "targets"
+  ],
+  "properties": {
+    "stats_schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "service": {
+      "type": "string"
+    },
+    "updated_at": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ok", "degraded", "failed", "unknown"]
+    },
+    "targets_total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "targets_ok": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "targets_degraded": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "targets_failed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "targets": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

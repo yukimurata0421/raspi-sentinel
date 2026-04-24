@@ -254,6 +254,18 @@ Locations: [src/raspi_sentinel/monitor_stats.py](../../src/raspi_sentinel/monito
 
 Rationale: Snapshot and history serve different query patterns. Split surfaces keep both cheap and clear.
 
+### 6-3. Treat output files as contract surfaces with explicit schema version fields
+
+Locations: [docs/output-contract.md](../output-contract.md), [docs/schemas/stats.schema.json](../schemas/stats.schema.json), [docs/schemas/state.schema.json](../schemas/state.schema.json), [src/raspi_sentinel/monitor_stats.py](../../src/raspi_sentinel/monitor_stats.py), [src/raspi_sentinel/state_models.py](../../src/raspi_sentinel/state_models.py)
+
+Rationale: `stats.json`, `state.json`, and `events.jsonl` are consumed by external tooling; compatibility must be deliberate, not incidental.
+
+### 6-4. Keep events readable under flap/noisy conditions
+
+Locations: [src/raspi_sentinel/status_events.py](../../src/raspi_sentinel/status_events.py), [docs/facts/data-contracts.md](../facts/data-contracts.md)
+
+Rationale: Even when runtime behavior is correct, unreadable event streams cause operator disengagement and false trust loss.
+
 ---
 
 ## 7. Safety and Security
@@ -295,6 +307,18 @@ Cooldown intent:
 - allow kernel/mount state to settle after mount activation
 - ensure systemd dependency ordering has completed
 - create a short human intervention window before monitor actions begin
+
+### 7-4. Reboot requires policy-reason allowlist, not only threshold crossing
+
+Locations: [src/raspi_sentinel/recovery.py](../../src/raspi_sentinel/recovery.py), [docs/principles/recovery-philosophy.md](recovery-philosophy.md)
+
+Decision:
+
+- reaching reboot threshold is necessary but not sufficient
+- reboot is gated by `policy_status=failed` and `policy_reason` allowlist
+- network-only failure classes are excluded from reboot allowlist
+
+Rationale: threshold-only reboot logic is too brittle under heterogeneous user configs and third-party deployments.
 
 ---
 

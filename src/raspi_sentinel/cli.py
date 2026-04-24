@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .config import AppConfig, load_config
 from .config_summary import build_config_validation_report, format_config_validation_report
+from .diagnostics import build_doctor_report, build_explain_state_report
 from .engine import CycleReport, run_cycle_collect
 from .exit_codes import (
     CONFIG_LOAD_FAILED,
@@ -119,6 +120,24 @@ def _build_parser() -> argparse.ArgumentParser:
         default=0,
         help="Expected mount directory owner gid (default: 0)",
     )
+    doctor_parser = sub.add_parser(
+        "doctor",
+        help="Run operator-facing environment checks (config, storage, systemd, thresholds)",
+    )
+    doctor_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print doctor checks as JSON",
+    )
+    explain_state_parser = sub.add_parser(
+        "explain-state",
+        help="Print a concise view of persisted runtime state and diagnostics",
+    )
+    explain_state_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print state explanation as JSON",
+    )
 
     return parser
 
@@ -167,6 +186,20 @@ def main(argv: list[str] | None = None) -> int:
         else:
             LOG.info("storage verify result: %s", verify_result.to_dict())
         return 0 if verify_result.ok else STORAGE_VERIFY_FAILED
+    if args.command == "doctor":
+        doctor_report = build_doctor_report(config_path=args.config, config=config)
+        if args.json:
+            print(json.dumps(doctor_report, indent=2, sort_keys=True))
+        else:
+            print(json.dumps(doctor_report, indent=2, sort_keys=True))
+        return 0
+    if args.command == "explain-state":
+        state_report = build_explain_state_report(config=config)
+        if args.json:
+            print(json.dumps(state_report, indent=2, sort_keys=True))
+        else:
+            print(json.dumps(state_report, indent=2, sort_keys=True))
+        return 0
 
     # args.command == "validate-config" (only remaining subcommand)
     config_report = build_config_validation_report(config_path=args.config, config=config)

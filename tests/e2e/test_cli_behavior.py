@@ -381,6 +381,119 @@ def test_validate_config_strict_returns_nonzero_on_warnings(
     assert rc == 15
 
 
+def test_doctor_json_reports_core_operational_checks(
+    tmp_path: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    conf = tmp_path / "config.toml"
+    _write(
+        conf,
+        """
+        [global]
+        state_file = "/tmp/state.json"
+        restart_threshold = 2
+        reboot_threshold = 3
+        restart_cooldown_sec = 10
+        reboot_cooldown_sec = 20
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 60
+        default_command_timeout_sec = 5
+        loop_interval_sec = 30
+
+        [notify.discord]
+        enabled = false
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "demo"
+        services = []
+        service_active = false
+        command = "true"
+        """,
+    )
+    monkeypatch.setattr(
+        "raspi_sentinel.diagnostics._systemd_state",
+        lambda unit, timeout_sec=3: "active" if unit.endswith(".timer") else "inactive",
+    )
+    monkeypatch.setattr(
+        "raspi_sentinel.diagnostics.verify_tmpfs_storage",
+        lambda config: StorageVerifyResult(
+            ok=True,
+            mount_path=Path("/run/raspi-sentinel"),
+            mount_fs_type="tmpfs",
+            owner_uid=0,
+            owner_gid=0,
+            mode=0o755,
+            free_bytes=1024 * 1024,
+        ),
+    )
+
+    rc = cli.main(["-c", str(conf), "doctor", "--json"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["config_permissions"]["status"] in ("ok", "warn")
+    assert payload["systemd"]["timer_state"] == "active"
+    assert payload["network_only_failures_can_reboot"] is False
+
+
+def test_explain_state_json_includes_schema_and_target_view(
+    tmp_path: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    conf = tmp_path / "config.toml"
+    state_file = tmp_path / "state.json"
+    state_file.write_text(
+        json.dumps(
+            {
+                "state_schema_version": 1,
+                "targets": {"demo": {"last_status": "degraded", "consecutive_failures": 2}},
+                "reboots": [],
+                "followups": {},
+                "notify": {},
+                "monitor_stats": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    _write(
+        conf,
+        f"""
+        [global]
+        state_file = "{state_file}"
+        restart_threshold = 2
+        reboot_threshold = 3
+        restart_cooldown_sec = 10
+        reboot_cooldown_sec = 20
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 60
+        default_command_timeout_sec = 5
+        loop_interval_sec = 30
+
+        [notify.discord]
+        enabled = false
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "demo"
+        services = []
+        service_active = false
+        command = "true"
+        """,
+    )
+
+    rc = cli.main(["-c", str(conf), "explain-state", "--json"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["state_schema_version"] == 1
+    assert payload["targets"]["demo"]["consecutive_failures"] == 2
+
+
 def test_full_cycle_unhealthy_target_restarts_and_logs(tmp_path: Path, monkeypatch: Any) -> None:
     conf = tmp_path / "config.toml"
     state_file = tmp_path / "state.json"

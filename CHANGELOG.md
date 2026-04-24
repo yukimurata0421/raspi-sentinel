@@ -8,6 +8,29 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ### Changed
 
+- added output contract hardening surfaces:
+  - `stats.json` now includes `stats_schema_version`
+  - `state.json` now includes `state_schema_version`
+  - compatibility fixtures added under `tests/fixtures/contracts/`
+- recovery safety tightened:
+  - reboot now requires `policy_reason` allowlist membership
+  - network-only failure reasons are excluded from reboot allowlist
+- CLI operational tooling expanded:
+  - new `doctor` command for operator preflight checks
+  - new `explain-state` command for state diagnostics
+- config validation summary hardening:
+  - global invariant warnings now include `restart_threshold < reboot_threshold`
+  - warns when shell-like tokens are present but `*_use_shell=false`
+- added profile-based example configs:
+  - `config/examples/production.toml`
+  - `config/examples/lightweight-pi.toml`
+  - `config/examples/no-discord.toml`
+  - `config/examples/tmpfs-tiered.toml`
+- added contract documentation:
+  - `docs/output-contract.md`
+  - `docs/schemas/stats.schema.json`
+  - `docs/schemas/state.schema.json`
+
 - Internal config consumers now prefer grouped target access (`deps/network/stats/time_health/maintenance/external`)
   in `config_loader` and `config_summary`, reducing reliance on flat-attribute shim paths.
 - Storage-tier enablement logic is now centralized via a shared helper and reused by storage verify

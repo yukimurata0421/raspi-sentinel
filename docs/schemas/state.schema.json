@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/raspi-sentinel/state.schema.json",
+  "title": "raspi-sentinel state.json",
+  "type": "object",
+  "required": ["state_schema_version", "targets", "reboots", "followups", "notify", "monitor_stats"],
+  "properties": {
+    "state_schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "targets": {
+      "type": "object"
+    },
+    "reboots": {
+      "type": "array"
+    },
+    "followups": {
+      "type": "object"
+    },
+    "notify": {
+      "type": "object"
+    },
+    "monitor_stats": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

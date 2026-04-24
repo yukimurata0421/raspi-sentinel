@@ -1,0 +1,19 @@
+{
+  "stats_schema_version": 1,
+  "service": "raspi-sentinel",
+  "updated_at": "2026-04-25T12:00:00+09:00",
+  "status": "ok",
+  "targets_total": 1,
+  "targets_ok": 1,
+  "targets_degraded": 0,
+  "targets_failed": 0,
+  "targets": {
+    "demo": {
+      "status": "ok",
+      "reason": "healthy",
+      "last_action": "none",
+      "consecutive_failures": 0,
+      "last_failure_reason": ""
+    }
+  }
+}

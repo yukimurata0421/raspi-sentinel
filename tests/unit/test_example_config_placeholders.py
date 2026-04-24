@@ -5,6 +5,11 @@ from pathlib import Path
 
 def test_example_config_webhook_url_is_placeholder_literal() -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    config_path = repo_root / "config" / "raspi-sentinel.example.toml"
-    text = config_path.read_text(encoding="utf-8")
-    assert 'webhook_url = "https://discord.com/api/webhooks/..."' in text
+    config_paths = [
+        repo_root / "config" / "raspi-sentinel.example.toml",
+        repo_root / "config" / "examples" / "production.toml",
+        repo_root / "config" / "examples" / "lightweight-pi.toml",
+    ]
+    for config_path in config_paths:
+        text = config_path.read_text(encoding="utf-8")
+        assert 'webhook_url = "https://discord.com/api/webhooks/..."' in text

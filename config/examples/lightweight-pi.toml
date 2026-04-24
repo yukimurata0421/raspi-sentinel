@@ -1,0 +1,43 @@
+[global]
+state_file = "/var/lib/raspi-sentinel/state.json"
+events_file = "/var/lib/raspi-sentinel/events.jsonl"
+monitor_stats_file = "/var/lib/raspi-sentinel/stats.json"
+state_max_file_bytes = 1000000
+events_max_file_bytes = 2000000
+events_backup_generations = 2
+restart_threshold = 3
+reboot_threshold = 7
+restart_cooldown_sec = 180
+reboot_cooldown_sec = 3600
+reboot_window_sec = 21600
+max_reboots_in_window = 2
+min_uptime_for_reboot_sec = 900
+default_command_timeout_sec = 10
+loop_interval_sec = 60
+
+[notify.discord]
+enabled = true
+webhook_url = "https://discord.com/api/webhooks/..."
+username = "raspi-sentinel"
+timeout_sec = 5
+followup_delay_sec = 300
+retry_interval_sec = 60
+heartbeat_interval_sec = 0
+notify_on_recovery = false
+
+[[targets]]
+name = "network_uplink"
+services = []
+service_active = false
+network_probe_enabled = true
+network_interface = "wlan0"
+gateway_probe_timeout_sec = 2
+internet_ip_targets = ["1.1.1.1", "8.8.8.8"]
+dns_query_target = "example.com"
+http_probe_target = "https://www.google.com/generate_204"
+restart_threshold = 5
+reboot_threshold = 10
+
+[targets.consecutive_failure_thresholds]
+degraded = 2
+failed = 6

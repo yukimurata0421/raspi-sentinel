@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
+from .contracts import STATE_SCHEMA_VERSION
 from .state_helpers import safe_float, safe_int, safe_optional_int
 
 
@@ -303,6 +304,7 @@ class MonitorStatsRuntimeState:
 
 @dataclass(slots=True)
 class GlobalState:
+    state_schema_version: int = STATE_SCHEMA_VERSION
     targets: dict[str, TargetState] = field(default_factory=dict)
     reboots: list[RebootRecord] = field(default_factory=list)
     followups: dict[str, FollowupRecord] = field(default_factory=dict)
@@ -352,6 +354,7 @@ class GlobalState:
         )
 
         return cls(
+            state_schema_version=safe_int(data.get("state_schema_version"), STATE_SCHEMA_VERSION),
             targets=targets,
             reboots=reboots,
             followups=followups,
@@ -361,6 +364,7 @@ class GlobalState:
 
     def to_dict(self) -> dict[str, object]:
         return {
+            "state_schema_version": self.state_schema_version,
             "targets": {name: target.to_dict() for name, target in self.targets.items()},
             "reboots": [entry.to_dict() for entry in self.reboots],
             "followups": {

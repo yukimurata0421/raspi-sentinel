@@ -21,6 +21,21 @@ CLOCK_FAILURE_CHECKS = frozenset(
     }
 )
 
+REBOOT_ALLOWED_POLICY_REASONS = frozenset(
+    {
+        "process_error",
+        "external_status_failed",
+        "clock_frozen_confirmed",
+    }
+)
+NETWORK_ONLY_FAILED_REASONS = frozenset(
+    {
+        "link_error",
+        "route_missing",
+        "multi_factor_network_outage",
+    }
+)
+
 
 @dataclass(slots=True)
 class RecoveryOutcome:
@@ -76,6 +91,24 @@ def _clock_reboot_confirmed(result: CheckResult) -> bool:
 
 def _policy_failed(result: CheckResult) -> bool:
     return result.observations.get("policy_status") == "failed"
+
+
+def _policy_reason(result: CheckResult) -> str | None:
+    reason = result.observations.get("policy_reason")
+    return reason if isinstance(reason, str) else None
+
+
+def network_only_failures_can_reboot() -> bool:
+    return bool(NETWORK_ONLY_FAILED_REASONS & REBOOT_ALLOWED_POLICY_REASONS)
+
+
+def _reboot_reason_allowed(result: CheckResult) -> bool:
+    reason = _policy_reason(result)
+    if reason is None:
+        # Backward-compatible fallback for old state/tests that still populate
+        # failures without policy_reason.
+        return _has_non_dependency_failure(result)
+    return reason in REBOOT_ALLOWED_POLICY_REASONS
 
 
 def _can_reboot(global_config: GlobalConfig, state: GlobalState, now_ts: float) -> tuple[bool, str]:
@@ -331,6 +364,15 @@ def apply_recovery(
                     "or dependency confirmation is incomplete"
                 ),
                 target.name,
+            )
+        elif not _reboot_reason_allowed(check_result):
+            LOG.error(
+                (
+                    "target '%s': reboot blocked because policy_reason is not in reboot allowlist "
+                    "(policy_reason=%s)"
+                ),
+                target.name,
+                _policy_reason(check_result),
             )
         else:
             can_reboot, guard_reason = _can_reboot(global_config, state, effective_now)

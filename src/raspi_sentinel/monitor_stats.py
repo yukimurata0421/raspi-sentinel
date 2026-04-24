@@ -7,6 +7,7 @@ from typing import Literal
 
 from .checks import CheckResult
 from .config import AppConfig
+from .contracts import STATS_SCHEMA_VERSION
 from .state_helpers import safe_int, safe_optional_int, write_json_atomic
 from .state_models import GlobalState
 from .status_events import classify_target_reason, classify_target_status
@@ -178,6 +179,7 @@ def build_monitor_stats_snapshot(
         overall_status = "unknown"
 
     return {
+        "stats_schema_version": STATS_SCHEMA_VERSION,
         "service": "raspi-sentinel",
         "updated_at": ts_text,
         "status": overall_status,
