@@ -214,11 +214,27 @@ Reboot loop guards:
 
 ### 1. Install package
 
+Option A: source checkout (current default)
+
 ```bash
 git clone https://github.com/<your-account>/raspi-sentinel.git
 cd raspi-sentinel
 git config core.hooksPath .githooks
 python3 -m pip install .
+```
+
+Option B: `pipx` from GitHub (no local clone required)
+
+```bash
+pipx install "git+https://github.com/yukimurata0421/raspi-sentinel.git@main"
+```
+
+Option C: PyPI (after package publish)
+
+```bash
+pipx install raspi-sentinel
+# or
+python3 -m pip install raspi-sentinel
 ```
 
 Before push, run:
@@ -270,6 +286,26 @@ On low-memory models, cap tmpfs footprint with systemd controls such as
 ```bash
 sudo raspi-sentinel -c /etc/raspi-sentinel/config.toml --dry-run --verbose run-once
 ```
+
+### Docker dry-run only (quick-check profile)
+
+Build:
+
+```bash
+docker build -f docker/Dockerfile.dryrun -t raspi-sentinel:dryrun .
+```
+
+Run (`run-once --dry-run --json` by default):
+
+```bash
+docker run --rm \
+  -v /etc/raspi-sentinel:/config:ro \
+  -v /var/lib/raspi-sentinel:/var/lib/raspi-sentinel \
+  raspi-sentinel:dryrun
+```
+
+The dry-run image only accepts `run-once` and always enforces `--dry-run`.
+`loop` / `verify-storage` are intentionally blocked.
 
 ## Watchdog Integration (Optional)
 

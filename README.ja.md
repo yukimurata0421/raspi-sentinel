@@ -54,11 +54,27 @@
 
 ## クイックスタート
 
+### インストール方法 A（ソースから）
+
 ```bash
 git clone https://github.com/<your-account>/raspi-sentinel.git
 cd raspi-sentinel
 git config core.hooksPath .githooks
 python3 -m pip install .
+```
+
+### インストール方法 B（`pipx` + GitHub）
+
+```bash
+pipx install "git+https://github.com/yukimurata0421/raspi-sentinel.git@main"
+```
+
+### インストール方法 C（PyPI 公開後）
+
+```bash
+pipx install raspi-sentinel
+# または
+python3 -m pip install raspi-sentinel
 ```
 
 ```bash
@@ -70,6 +86,18 @@ sudo install -d -m 0755 /var/lib/raspi-sentinel
 ```bash
 sudo raspi-sentinel -c /etc/raspi-sentinel/config.toml --dry-run --verbose run-once
 ```
+
+### Docker（dry-run 専用の簡易チェック）
+
+```bash
+docker build -f docker/Dockerfile.dryrun -t raspi-sentinel:dryrun .
+docker run --rm \
+  -v /etc/raspi-sentinel:/config:ro \
+  -v /var/lib/raspi-sentinel:/var/lib/raspi-sentinel \
+  raspi-sentinel:dryrun
+```
+
+このイメージは `run-once` のみ許可し、常に `--dry-run` を強制します。
 
 push 前チェック:
 

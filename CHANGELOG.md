@@ -8,6 +8,10 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ### Changed
 
+- added dry-run-only Docker profile for quick evaluation:
+  - `docker/Dockerfile.dryrun`
+  - `docker/entrypoint-dryrun.sh` (enforces `run-once --dry-run`)
+- install docs now include simplified `pipx` flow from GitHub and PyPI-ready commands.
 - added output contract hardening surfaces:
   - `stats.json` now includes `stats_schema_version`
   - `state.json` now includes `state_schema_version`

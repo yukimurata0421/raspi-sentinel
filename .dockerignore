@@ -1,0 +1,15 @@
+.git
+.github
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.venv
+build
+dist
+coverage.xml
+.coverage
+tests
+docs
+examples
+scripts
+systemd
