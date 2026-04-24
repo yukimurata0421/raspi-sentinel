@@ -9,6 +9,7 @@ from conftest import make_discord_config
 
 from raspi_sentinel.checks import CheckFailure, CheckResult
 from raspi_sentinel.cycle_notifications import (
+    MAX_NOTIFY_BACKLOG_CONTEXTS,
     DeliveryBacklogManager,
     schedule_followup,
     send_delivery_backlog_summary,
@@ -512,6 +513,17 @@ class TestDeferredNotificationSummary:
         # Explicit defer branch.
         manager.defer_summary_retry(now_ts=1020.0)
         assert state.notify.retry_due_ts == 1080.0
+
+    def test_delivery_backlog_contexts_are_capped_with_overflow_bucket(self) -> None:
+        state = GlobalState()
+        manager = DeliveryBacklogManager(state=state, retry_interval_sec=60)
+        manager.record_network_failure(context="seed", now_ts=1000.0)
+        for idx in range(MAX_NOTIFY_BACKLOG_CONTEXTS + 10):
+            manager.record_network_failure(context=f"ctx-{idx}", now_ts=1001.0 + idx)
+        backlog = state.notify.delivery_backlog
+        assert backlog is not None
+        assert len(backlog.contexts) <= MAX_NOTIFY_BACKLOG_CONTEXTS + 1
+        assert "__other__" in backlog.contexts
 
     @patch.object(DiscordNotifier, "send_lines", return_value=False)
     def test_summary_non_network_failure_records_event_and_defers_retry(

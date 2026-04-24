@@ -16,6 +16,9 @@ from .state_helpers import safe_int
 from .state_models import FollowupRecord, GlobalState, NotifyDeliveryBacklog
 from .status_events import record_notify_failure_event
 
+MAX_NOTIFY_BACKLOG_CONTEXTS = 64
+_OVERFLOW_CONTEXT = "__other__"
+
 
 @dataclass(slots=True)
 class NotificationSendResult:
@@ -42,7 +45,12 @@ class DeliveryBacklogManager:
         else:
             backlog.last_failed_ts = max(backlog.last_failed_ts, now_ts)
             backlog.total_failures += 1
-            backlog.contexts[context] = backlog.contexts.get(context, 0) + 1
+            if context in backlog.contexts:
+                backlog.contexts[context] += 1
+            elif len(backlog.contexts) >= MAX_NOTIFY_BACKLOG_CONTEXTS:
+                backlog.contexts[_OVERFLOW_CONTEXT] = backlog.contexts.get(_OVERFLOW_CONTEXT, 0) + 1
+            else:
+                backlog.contexts[context] = 1
 
         if notify_state.retry_due_ts is None or notify_state.retry_due_ts <= now_ts:
             notify_state.retry_due_ts = now_ts + self.retry_interval_sec
