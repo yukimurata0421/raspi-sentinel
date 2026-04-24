@@ -92,14 +92,14 @@ def _build_network_signals(observations: Observations) -> NetworkSignals:
         internet_ip_ok=safe_bool(observations.get("internet_ip_ok")),
         wan_vs_target_ok=safe_bool(observations.get("wan_vs_target_ok")),
         http_probe_ok=safe_bool(observations.get("http_probe_ok")),
-        degraded_threshold=safe_int(observations.get("network_degraded_threshold"), 2) or 2,
-        failed_threshold=safe_int(observations.get("network_failed_threshold"), 6) or 6,
-        link_failures=safe_int(observations.get("link_fail_consecutive"), 0) or 0,
-        route_failures=safe_int(observations.get("route_fail_consecutive"), 0) or 0,
-        gateway_failures=safe_int(observations.get("gateway_fail_consecutive"), 0) or 0,
-        internet_failures=safe_int(observations.get("internet_fail_consecutive"), 0) or 0,
-        dns_failures=safe_int(observations.get("dns_fail_consecutive"), 0) or 0,
-        http_failures=safe_int(observations.get("http_fail_consecutive"), 0) or 0,
+        degraded_threshold=safe_int(observations.get("network_degraded_threshold"), 2),
+        failed_threshold=safe_int(observations.get("network_failed_threshold"), 6),
+        link_failures=safe_int(observations.get("link_fail_consecutive"), 0),
+        route_failures=safe_int(observations.get("route_fail_consecutive"), 0),
+        gateway_failures=safe_int(observations.get("gateway_fail_consecutive"), 0),
+        internet_failures=safe_int(observations.get("internet_fail_consecutive"), 0),
+        dns_failures=safe_int(observations.get("dns_fail_consecutive"), 0),
+        http_failures=safe_int(observations.get("http_fail_consecutive"), 0),
         route_error_kind=(
             observations.get("route_error_kind")
             if isinstance(observations.get("route_error_kind"), str)
@@ -128,8 +128,7 @@ def _build_clock_signals(observations: Observations) -> ClockSignals:
         jump_detected=observations.get("clock_jump_detected") is True,
         skew_detected=observations.get("clock_skew_detected") is True,
         frozen_confirmed=observations.get("clock_frozen_confirmed") is True,
-        consecutive_freeze_count=safe_int(observations.get("consecutive_clock_freeze_count"), 0)
-        or 0,
+        consecutive_freeze_count=safe_int(observations.get("consecutive_clock_freeze_count"), 0),
         skew_abs=skew_abs,
         skew_threshold=skew_threshold,
     )

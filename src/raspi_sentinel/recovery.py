@@ -13,14 +13,6 @@ from .state_models import GlobalState, RebootRecord, TargetState
 
 LOG = logging.getLogger(__name__)
 
-CLOCK_FAILURE_CHECKS = frozenset(
-    {
-        "semantic_clock_frozen",
-        "semantic_clock_jump",
-        "semantic_clock_skew",
-    }
-)
-
 REBOOT_ALLOWED_POLICY_REASONS = frozenset(
     {
         "process_error",
@@ -73,16 +65,6 @@ def _has_failure(result: CheckResult, check_name: str) -> bool:
 
 def _has_non_dependency_failure(result: CheckResult) -> bool:
     return any(not f.check.startswith("dependency_") for f in result.failures)
-
-
-def _is_clock_only_failure(result: CheckResult) -> bool:
-    if not result.failures:
-        return False
-    return all(f.check in CLOCK_FAILURE_CHECKS for f in result.failures)
-
-
-def _clock_reboot_ready(result: CheckResult) -> bool:
-    return result.observations.get("clock_reboot_ready") is True
 
 
 def _clock_reboot_confirmed(result: CheckResult) -> bool:
@@ -353,15 +335,6 @@ def apply_recovery(
                 (
                     "target '%s': reboot blocked because failure is classified as "
                     "DNS-only dependency issue"
-                ),
-                target.name,
-            )
-        # Clock-only anomalies must pass additional persistence/dependency evidence before reboot.
-        elif _is_clock_only_failure(check_result) and not _clock_reboot_ready(check_result):
-            LOG.error(
-                (
-                    "target '%s': reboot blocked because clock anomaly is not persistent "
-                    "or dependency confirmation is incomplete"
                 ),
                 target.name,
             )

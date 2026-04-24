@@ -287,7 +287,7 @@ def test_apply_recovery_reboot_is_deferred_and_not_executed(monkeypatch: Any) ->
     assert state.reboots
 
 
-def test_apply_recovery_clock_only_blocks_reboot_without_ready() -> None:
+def test_apply_recovery_clock_reason_not_in_allowlist_falls_back_to_restart() -> None:
     state = GlobalState()
     outcome = recovery.apply_recovery(
         target=make_target(
@@ -298,8 +298,11 @@ def test_apply_recovery_clock_only_blocks_reboot_without_ready() -> None:
         check_result=CheckResult(
             target="demo",
             healthy=False,
-            failures=[CheckFailure("semantic_clock_skew", "clock skew")],
-            observations={"clock_reboot_ready": False},
+            failures=[],
+            observations={
+                "policy_status": "failed",
+                "policy_reason": "clock_frozen_persistent",
+            },
         ),
         global_config=_global(
             min_uptime_for_reboot_sec=0, reboot_cooldown_sec=0, restart_cooldown_sec=0
@@ -311,7 +314,7 @@ def test_apply_recovery_clock_only_blocks_reboot_without_ready() -> None:
     assert not outcome.requested_reboot
 
 
-def test_apply_recovery_clock_only_allows_reboot_when_ready(monkeypatch: Any) -> None:
+def test_apply_recovery_clock_confirmed_allows_reboot(monkeypatch: Any) -> None:
     monkeypatch.setattr(recovery, "read_uptime_sec", lambda: 1000.0)
     state = GlobalState()
     outcome = recovery.apply_recovery(
@@ -319,8 +322,12 @@ def test_apply_recovery_clock_only_allows_reboot_when_ready(monkeypatch: Any) ->
         check_result=CheckResult(
             target="demo",
             healthy=False,
-            failures=[CheckFailure("semantic_clock_frozen", "clock frozen")],
-            observations={"clock_reboot_ready": True, "policy_status": "failed"},
+            failures=[],
+            observations={
+                "clock_frozen_confirmed": True,
+                "policy_status": "failed",
+                "policy_reason": "clock_frozen_confirmed",
+            },
         ),
         global_config=_global(
             min_uptime_for_reboot_sec=0, reboot_cooldown_sec=0, restart_cooldown_sec=0
@@ -391,10 +398,11 @@ def test_apply_recovery_confirmed_clock_blocked_by_reboot_guard(monkeypatch: Any
         check_result=CheckResult(
             target="demo",
             healthy=False,
-            failures=[CheckFailure("semantic_clock_frozen", "clock")],
+            failures=[],
             observations={
                 "clock_frozen_confirmed": True,
                 "policy_status": "failed",
+                "policy_reason": "clock_frozen_confirmed",
             },
         ),
         global_config=_global(min_uptime_for_reboot_sec=60),

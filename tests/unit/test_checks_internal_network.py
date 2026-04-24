@@ -7,6 +7,11 @@ from typing import Any
 from checks_internal_branches_helpers import target
 
 from raspi_sentinel import checks
+from raspi_sentinel.checks.network_probes import (
+    classify_dns_gaierror,
+    classify_dns_oserror,
+    classify_http_oserror,
+)
 
 
 def test_network_probe_unavailable_commands_are_graceful(monkeypatch: Any) -> None:
@@ -256,36 +261,36 @@ def test_network_link_ok_exposes_iface_up_wifi_associated_ip_assigned(monkeypatc
 
 def test_dns_and_http_error_classifier_helpers() -> None:
     assert (
-        checks._classify_dns_gaierror(
+        classify_dns_gaierror(
             checks.socket.gaierror(checks.socket.EAI_NONAME, "name or service not known")
         )
         == "nxdomain"
     )
     assert (
-        checks._classify_dns_gaierror(
+        classify_dns_gaierror(
             checks.socket.gaierror(checks.socket.EAI_AGAIN, "temporary failure in name resolution")
         )
         == "timeout"
     )
-    assert checks._classify_dns_gaierror(
-        checks.socket.gaierror(-9999, "no servers could be reached")
-    ) == ("no_server")
-    assert checks._classify_dns_gaierror(checks.socket.gaierror(-9999, "network unreachable")) == (
+    assert classify_dns_gaierror(checks.socket.gaierror(-9999, "no servers could be reached")) == (
+        "no_server"
+    )
+    assert classify_dns_gaierror(checks.socket.gaierror(-9999, "network unreachable")) == (
         "unreachable"
     )
-    assert checks._classify_dns_gaierror(checks.socket.gaierror(-9999, "boom")) == "unknown"
+    assert classify_dns_gaierror(checks.socket.gaierror(-9999, "boom")) == "unknown"
 
-    assert checks._classify_dns_oserror(TimeoutError("x")) == "timeout"
-    assert checks._classify_dns_oserror(OSError(errno.ENETUNREACH, "x")) == "unreachable"
-    assert checks._classify_dns_oserror(OSError(errno.EPERM, "x")) == "unknown"
+    assert classify_dns_oserror(TimeoutError("x")) == "timeout"
+    assert classify_dns_oserror(OSError(errno.ENETUNREACH, "x")) == "unreachable"
+    assert classify_dns_oserror(OSError(errno.EPERM, "x")) == "unknown"
 
     assert (
-        checks._classify_http_oserror(ConnectionRefusedError(errno.ECONNREFUSED, "x"), False)
+        classify_http_oserror(ConnectionRefusedError(errno.ECONNREFUSED, "x"), False)
         == "connection_refused"
     )
-    assert checks._classify_http_oserror(TimeoutError("x"), False) == "connect_timeout"
-    assert checks._classify_http_oserror(TimeoutError("x"), True) == "read_timeout"
-    assert checks._classify_http_oserror(OSError(errno.EPERM, "x"), True) == "unknown"
+    assert classify_http_oserror(TimeoutError("x"), False) == "connect_timeout"
+    assert classify_http_oserror(TimeoutError("x"), True) == "read_timeout"
+    assert classify_http_oserror(OSError(errno.EPERM, "x"), True) == "unknown"
 
 
 def test_network_probe_route_gateway_and_internet_branches(monkeypatch: Any) -> None:
@@ -370,6 +375,66 @@ def test_network_probe_route_gateway_and_internet_branches(monkeypatch: Any) -> 
     assert obs["internet_ip_ok"] is True
     assert obs["internet_ip_target"] == "8.8.8.8"
     assert obs["http_probe_ok"] is True
+
+
+def test_network_probe_patch_isolation_between_targets(monkeypatch: Any) -> None:
+    class DummyHttpResponse:
+        def __init__(self, status: int) -> None:
+            self.status = status
+            self.headers = {"Date": "Fri, 10 Apr 2026 01:00:00 GMT"}
+
+        def __enter__(self) -> "DummyHttpResponse":
+            return self
+
+        def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+            return False
+
+        def getcode(self) -> int:
+            return self.status
+
+    base_target = target(
+        network_probe_enabled=True,
+        network_interface="wlan0",
+        dns_query_target="dns.example",
+        http_probe_target="http://probe.example/health",
+    )
+
+    monkeypatch.setattr(
+        "raspi_sentinel.checks.command_checks.run_command_capture",
+        lambda args, timeout_sec: (None, "unavailable"),
+    )
+    monkeypatch.setattr(
+        checks.Path,
+        "read_text",
+        lambda self, encoding="utf-8": "nameserver 1.1.1.1\n",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        checks.socket,
+        "getaddrinfo",
+        lambda host, port, type=0: [
+            (checks.socket.AF_INET, checks.socket.SOCK_STREAM, 6, "", ("127.0.0.1", port))
+        ],
+    )
+
+    with monkeypatch.context() as m:
+        m.setattr(
+            checks.urllib_request,
+            "urlopen",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                checks.urllib_error.URLError(TimeoutError("connect timeout"))
+            ),
+        )
+        first = checks.run_checks(base_target)
+        assert first.observations["http_probe_ok"] is False
+
+    monkeypatch.setattr(
+        checks.urllib_request,
+        "urlopen",
+        lambda *args, **kwargs: DummyHttpResponse(200),
+    )
+    second = checks.run_checks(base_target)
+    assert second.observations["http_probe_ok"] is True
 
 
 def test_network_probe_handles_empty_route_and_gateway_timeout(monkeypatch: Any) -> None:

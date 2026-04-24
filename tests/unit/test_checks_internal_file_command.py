@@ -7,21 +7,29 @@ from typing import Any
 from checks_internal_branches_helpers import target
 
 from raspi_sentinel import checks
+from raspi_sentinel.checks import command_checks, file_checks
+from raspi_sentinel.checks.command_checks import (
+    command_check,
+    run_command_capture,
+    service_active_check,
+)
+from raspi_sentinel.checks.file_checks import file_freshness_check
+from raspi_sentinel.checks.network_probes import parse_ping_stats
 
 
 def test_file_freshness_missing_and_stale(tmp_path: Path, monkeypatch: Any) -> None:
-    missing = checks._file_freshness_check(tmp_path / "missing.txt", 10, "heartbeat_file")
+    missing = file_freshness_check(tmp_path / "missing.txt", 10, "heartbeat_file")
     assert missing is not None and "missing" in missing.message
 
     p = tmp_path / "f.txt"
     p.write_text("x", encoding="utf-8")
     st = p.stat()
-    monkeypatch.setattr(checks.time, "time", lambda: st.st_mtime + 100)
-    stale = checks._file_freshness_check(p, 10, "heartbeat_file")
+    monkeypatch.setattr(file_checks.time, "time", lambda: st.st_mtime + 100)
+    stale = file_freshness_check(p, 10, "heartbeat_file")
     assert stale is not None and "stale" in stale.message
 
-    monkeypatch.setattr(checks.time, "time", lambda: st.st_mtime + 1)
-    assert checks._file_freshness_check(p, 10, "heartbeat_file") is None
+    monkeypatch.setattr(file_checks.time, "time", lambda: st.st_mtime + 1)
+    assert file_freshness_check(p, 10, "heartbeat_file") is None
 
 
 def test_file_freshness_oserror_branch() -> None:
@@ -32,7 +40,7 @@ def test_file_freshness_oserror_branch() -> None:
         def __str__(self) -> str:
             return "/dummy"
 
-    failure = checks._file_freshness_check(DummyPath(), 10, "heartbeat_file")  # type: ignore[arg-type]
+    failure = file_freshness_check(DummyPath(), 10, "heartbeat_file")  # type: ignore[arg-type]
     assert failure is not None and "cannot stat file" in failure.message
 
 
@@ -40,31 +48,31 @@ def test_command_check_timeout_oserror_nonzero_and_success(monkeypatch: Any) -> 
     def timeout_run(*_: Any, **__: Any) -> Any:
         raise subprocess.TimeoutExpired(cmd="x", timeout=1)
 
-    monkeypatch.setattr(checks.subprocess, "run", timeout_run)
-    assert checks._command_check("x", 1, "command") is not None
+    monkeypatch.setattr(command_checks.subprocess, "run", timeout_run)
+    assert command_check("x", 1, "command") is not None
 
     def os_run(*_: Any, **__: Any) -> Any:
         raise OSError("boom")
 
-    monkeypatch.setattr(checks.subprocess, "run", os_run)
-    assert checks._command_check("x", 1, "command") is not None
+    monkeypatch.setattr(command_checks.subprocess, "run", os_run)
+    assert command_check("x", 1, "command") is not None
 
     def bad_run(*_: Any, **__: Any) -> Any:
         return subprocess.CompletedProcess(args=["x"], returncode=2, stdout="", stderr="err")
 
-    monkeypatch.setattr(checks.subprocess, "run", bad_run)
-    failure = checks._command_check("x", 1, "command")
+    monkeypatch.setattr(command_checks.subprocess, "run", bad_run)
+    failure = command_check("x", 1, "command")
     assert failure is not None and "exit code" in failure.message
 
     def ok_run(*_: Any, **__: Any) -> Any:
         return subprocess.CompletedProcess(args=["x"], returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(checks.subprocess, "run", ok_run)
-    assert checks._command_check("x", 1, "command") is None
+    monkeypatch.setattr(command_checks.subprocess, "run", ok_run)
+    assert command_check("x", 1, "command") is None
 
 
 def test_command_check_shell_syntax_is_advisory_without_shell_opt_in() -> None:
-    failure = checks._command_check("echo ok | cat", 1, "command", use_shell=False)
+    failure = command_check("echo ok | cat", 1, "command", use_shell=False)
     assert failure is None
 
 
@@ -72,28 +80,28 @@ def test_service_active_check_all_branches(monkeypatch: Any) -> None:
     def timeout_run(*_: Any, **__: Any) -> Any:
         raise subprocess.TimeoutExpired(cmd="systemctl", timeout=10)
 
-    monkeypatch.setattr(checks.subprocess, "run", timeout_run)
-    assert checks._service_active_check("svc") is not None
+    monkeypatch.setattr(command_checks.subprocess, "run", timeout_run)
+    assert service_active_check("svc") is not None
 
     def os_run(*_: Any, **__: Any) -> Any:
         raise OSError("no systemctl")
 
-    monkeypatch.setattr(checks.subprocess, "run", os_run)
-    assert checks._service_active_check("svc") is not None
+    monkeypatch.setattr(command_checks.subprocess, "run", os_run)
+    assert service_active_check("svc") is not None
 
     def inactive_run(*_: Any, **__: Any) -> Any:
         return subprocess.CompletedProcess(
             args=["systemctl"], returncode=3, stdout="inactive", stderr=""
         )
 
-    monkeypatch.setattr(checks.subprocess, "run", inactive_run)
-    assert checks._service_active_check("svc") is not None
+    monkeypatch.setattr(command_checks.subprocess, "run", inactive_run)
+    assert service_active_check("svc") is not None
 
     def active_run(*_: Any, **__: Any) -> Any:
         return subprocess.CompletedProcess(args=["systemctl"], returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(checks.subprocess, "run", active_run)
-    assert checks._service_active_check("svc") is None
+    monkeypatch.setattr(command_checks.subprocess, "run", active_run)
+    assert service_active_check("svc") is None
 
 
 def test_run_checks_with_command_dns_gateway_and_service(monkeypatch: Any) -> None:
@@ -179,25 +187,25 @@ def test_run_command_capture_and_ping_parser_branches(monkeypatch: Any) -> None:
     def timeout_run(*_: Any, **__: Any) -> Any:
         raise subprocess.TimeoutExpired(cmd="x", timeout=1)
 
-    monkeypatch.setattr(checks.subprocess, "run", timeout_run)
-    result, error = checks._run_command_capture(["echo", "x"], timeout_sec=1)
+    monkeypatch.setattr(command_checks.subprocess, "run", timeout_run)
+    result, error = run_command_capture(["echo", "x"], timeout_sec=1)
     assert result is None and error == "timeout"
 
     def os_run(*_: Any, **__: Any) -> Any:
         raise OSError("missing")
 
-    monkeypatch.setattr(checks.subprocess, "run", os_run)
-    result, error = checks._run_command_capture(["echo", "x"], timeout_sec=1)
+    monkeypatch.setattr(command_checks.subprocess, "run", os_run)
+    result, error = run_command_capture(["echo", "x"], timeout_sec=1)
     assert result is None and error == "unavailable"
 
     def ok_run(*_: Any, **__: Any) -> Any:
         return subprocess.CompletedProcess(args=["echo"], returncode=0, stdout="ok", stderr="")
 
-    monkeypatch.setattr(checks.subprocess, "run", ok_run)
-    result, error = checks._run_command_capture(["echo", "x"], timeout_sec=1)
+    monkeypatch.setattr(command_checks.subprocess, "run", ok_run)
+    result, error = run_command_capture(["echo", "x"], timeout_sec=1)
     assert result is not None and error is None
 
-    latency, loss = checks._parse_ping_stats(
+    latency, loss = parse_ping_stats(
         (
             "3 packets transmitted, 3 received, 0% packet loss\n"
             "rtt min/avg/max/mdev = 1.0/2.0/3.0/0.5 ms"

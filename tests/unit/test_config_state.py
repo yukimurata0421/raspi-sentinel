@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -409,6 +410,31 @@ def test_state_store_quarantines_corrupted_json(tmp_path: Path) -> None:
     assert loaded.targets == {}
 
 
+def test_state_store_skips_quarantine_when_candidate_slots_are_exhausted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class _FrozenDateTime:
+        @staticmethod
+        def now() -> datetime:
+            return datetime(2026, 1, 2, 3, 4, 5)
+
+    state_file = tmp_path / "state.json"
+    state_file.write_text("{broken", encoding="utf-8")
+    base_name = f"{state_file.name}.corrupt.20260102T030405"
+    (tmp_path / base_name).write_text("occupied\n", encoding="utf-8")
+    for index in range(1, 100):
+        (tmp_path / f"{base_name}.{index}").write_text("occupied\n", encoding="utf-8")
+
+    monkeypatch.setattr("raspi_sentinel.state.datetime", _FrozenDateTime)
+
+    store = StateStore(state_file)
+    loaded, diagnostics = store.load_with_diagnostics()
+    assert diagnostics.state_corrupted is True
+    assert diagnostics.corrupt_backup_path is None
+    assert state_file.exists()
+    assert loaded.targets == {}
+
+
 def test_tiered_state_store_splits_durable_fields(tmp_path: Path) -> None:
     volatile = tmp_path / "state.volatile.json"
     durable = tmp_path / "state.durable.json"
@@ -465,6 +491,28 @@ def test_tiered_state_store_splits_durable_fields(tmp_path: Path) -> None:
     assert loaded.followups["demo"].initial_action == "restart"
     assert loaded.notify.delivery_backlog is not None
     assert loaded.notify.delivery_backlog.total_failures == 2
+
+
+def test_tiered_state_store_require_tmpfs_without_durable_file_disables_split(
+    tmp_path: Path,
+) -> None:
+    volatile = tmp_path / "state.volatile.json"
+    store = TieredStateStore(
+        volatile_path=volatile,
+        durable_path=None,
+        durable_fields=("reboot_history",),
+        require_tmpfs=True,
+    )
+    assert store._tiered_enabled is False
+
+    payload = {"targets": {"demo": {"consecutive_failures": 2}}, "reboots": [{"ts": 10.0}]}
+    assert store.save(
+        GlobalState.from_dict(payload),
+        max_file_bytes=1_000_000,
+        max_reboots_entries=256,
+    )
+    raw = volatile.read_text(encoding="utf-8")
+    assert '"reboots"' in raw
 
 
 def test_tiered_state_store_keeps_tiered_mode_when_durable_file_is_configured(

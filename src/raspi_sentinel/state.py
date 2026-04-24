@@ -79,6 +79,12 @@ class StateStore:
             if not candidate.exists():
                 break
             candidate = self.path.with_name(f"{base.name}.{index}")
+        if candidate.exists():
+            LOG.error(
+                "too many quarantined state files exist for timestamp %s; skipping quarantine",
+                base.name,
+            )
+            return None
         try:
             self.path.replace(candidate)
             return candidate

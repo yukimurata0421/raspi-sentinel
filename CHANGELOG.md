@@ -73,6 +73,25 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 - deprecated flat-attribute shim optimization:
   - `TargetConfig.__getattr__` now returns immediately for already-warned deprecated fields,
     avoiding repeated `inspect.currentframe()` calls on subsequent accesses.
+- corrupt-state quarantine safety:
+  - `StateStore._quarantine_corrupt_state` now stops when timestamp slot candidates are exhausted
+    and logs an explicit error instead of reusing an occupied quarantine path.
+- clock-recovery path cleanup:
+  - removed legacy `semantic_clock_*` failure-only reboot branch from `recovery`.
+  - reboot gating now stays aligned to policy reason + observation-derived confirmed clock signals.
+- policy integer parsing cleanup:
+  - removed redundant `safe_int(... ) or <default>` patterns in network/clock signal builders.
+- checks compatibility cleanup:
+  - removed underscore compatibility aliases from `checks.__init__`
+    (`_file_freshness_check`, `_command_check`, `_service_active_check`, `_run_command_capture`,
+    `_parse_ping_stats`, `_classify_dns_*`, `_classify_http_oserror`, `_load_stats`).
+  - branch tests now import helper functions from their owning modules directly.
+- tests:
+  - added regression test for `require_tmpfs=true` with no durable state file (`_tiered_enabled` remains `False`).
+  - added regression test for exhausted corrupt-state quarantine slots.
+  - added checks patch-isolation test to ensure one target’s monkeypatch context does not leak into the next run.
+- data-contract note:
+  - documented timestamp semantics (epoch fields are timezone-neutral; human-readable ISO strings are host-local).
 
 ## [0.7.1] - 2026-04-23
 

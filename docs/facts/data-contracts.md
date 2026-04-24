@@ -55,6 +55,12 @@ Common fields:
     - `kind: notify_delivery_failed`
     - `context` (for example `issue_notification:<target>`, `followup:<target>`, `periodic_heartbeat`, `deferred_notification_batch`)
 
+Timestamp display notes:
+
+- `events.jsonl.ts` is epoch seconds (numeric, timezone-neutral).
+- Human-readable ISO timestamps in notifications/events currently use host local timezone.
+- Cross-host consumers should normalize to UTC at ingestion time.
+
 Null semantics:
 
 - `null` means observation unavailable/unknown for that cycle.
