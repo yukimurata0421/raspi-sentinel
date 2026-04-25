@@ -92,6 +92,9 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - added checks patch-isolation test to ensure one target’s monkeypatch context does not leak into the next run.
 - data-contract note:
   - documented timestamp semantics (epoch fields are timezone-neutral; human-readable ISO strings are host-local).
+- rollout verification summary:
+  - same change set was applied and validated in development and deployment environments
+  - validation commands completed with `overall_status: ok` in dry-run and non-dry-run `run-once --json`.
 
 ## [0.7.1] - 2026-04-23
 
