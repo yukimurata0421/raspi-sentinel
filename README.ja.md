@@ -24,7 +24,7 @@ warn -> restart services -> guarded reboot
 - 物理または代替アクセス手段がない環境
 - 複数台集中監視ダッシュボードを求めている環境
 
-## 15分クイックスタート
+## 15分ベータデモ
 
 ### 1. 現行 release tag を clone
 
@@ -42,11 +42,11 @@ git checkout v0.8.0
 python3 -m pip install .
 ```
 
-### 3. config 配置
+### 3. デモ config 配置（restart/rebootなし、通知なし）
 
 ```bash
 sudo install -d -m 0755 /etc/raspi-sentinel
-sudo install -m 0600 -o root -g root config/raspi-sentinel.example.toml /etc/raspi-sentinel/config.toml
+sudo install -m 0600 -o root -g root config/raspi-sentinel.beta-demo.toml /etc/raspi-sentinel/config.toml
 sudo "${EDITOR:-vi}" /etc/raspi-sentinel/config.toml
 ```
 
@@ -71,7 +71,8 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml --dry-run run-once --json
 ### 7. サンプル障害注入
 
 ```bash
-python3 scripts/failure_inject.py stale-file --path /tmp/heartbeat.txt --age-sec 900
+sudo install -d -m 0755 /tmp/raspi-sentinel-demo
+python3 scripts/failure_inject.py stale-file --path /tmp/raspi-sentinel-demo/heartbeat.txt --age-sec 900
 ```
 
 再度 dry-run:
@@ -94,6 +95,22 @@ sudo systemctl disable --now raspi-sentinel.timer
 sudo systemctl disable --now raspi-sentinel.timer
 sudo systemctl stop raspi-sentinel.service
 ```
+
+## systemd timer 有効化（dry-run確認後）
+
+`install_systemd.py` は `raspi-sentinel` の実バイナリパスを検出して unit を描画します。
+
+```bash
+sudo python3 scripts/install_systemd.py --enable-timer
+```
+
+tmpfs tiering を使う場合:
+
+```bash
+sudo python3 scripts/install_systemd.py --include-tmpfs-mount --enable-timer
+```
+
+`--dry-run` は restart/reboot を止め、通知送信もデフォルトで抑制します。通知経路を明示的に試すときだけ `--send-notifications` を付けてください。
 
 ## フィードバックしてほしいこと
 

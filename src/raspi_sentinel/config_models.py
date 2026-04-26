@@ -113,7 +113,7 @@ _DEPRECATED_ATTR_REMOVAL_VERSION = "1.0.0"
 
 
 def _reset_deprecated_attr_warnings_for_tests() -> None:
-    """Clear warned shim attributes for deterministic test assertions."""
+    """Test-only helper for resetting deprecation warning state."""
     _DEPRECATED_ATTR_WARNED.clear()
 
 

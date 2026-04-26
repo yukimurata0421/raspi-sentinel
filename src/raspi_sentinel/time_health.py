@@ -79,7 +79,7 @@ def _update_network_counters(
 
     def _update_counter(counter_name: str, current_state: bool | None) -> int:
         key = f"network_{counter_name}_failures"
-        current = safe_int(model.extra.get(key), 0) or 0
+        current = safe_int(model.extra.get(key), 0)
         if current_state is False:
             current += 1
         elif current_state is True:

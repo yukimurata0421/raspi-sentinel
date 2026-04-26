@@ -37,7 +37,10 @@ Current state:
 
 1. Bump `__version__` in `_version.py` only.
 2. Update `CHANGELOG.md` with the new section and date.
+   - promote `[Unreleased]` items into `[X.Y.Z]` and keep a fresh `[Unreleased]` section.
+   - reconcile changelog section with `docs/release-notes/vX.Y.Z.md` highlights.
 3. Add **`docs/release-notes/vX.Y.Z.md`** with the GitHub Release body (Markdown). The [Release workflow](../.github/workflows/release.yml) uses this path when a tag `vX.Y.Z` is pushed.
+   - remove draft markers such as `# Draft:` and `Planned release:` before tagging.
 4. Run tests (`pytest`) and Ruff (`ruff check src tests`, `ruff format --check src tests`).
 5. Tag: `git tag -a vX.Y.Z -m "Release vX.Y.Z"` (or `git tag -s` if you sign tags).
 6. Push the tag (`git push origin vX.Y.Z`). The workflow creates/updates the GitHub Release with the notes file.

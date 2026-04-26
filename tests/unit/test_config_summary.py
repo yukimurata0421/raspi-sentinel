@@ -141,46 +141,25 @@ def test_format_config_summary_includes_shell_target_and_target_block(
     assert "shell_opt_in_checks: command" in text
 
 
-def test_config_summary_adds_global_threshold_warning(tmp_path: Path, monkeypatch: Any) -> None:
-    conf = tmp_path / "config.toml"
-    _write(
-        conf,
-        """
-        [global]
-        state_file = "/tmp/state.json"
-        restart_threshold = 5
-        reboot_threshold = 5
-        restart_cooldown_sec = 10
-        reboot_cooldown_sec = 20
-        reboot_window_sec = 300
-        max_reboots_in_window = 2
-        min_uptime_for_reboot_sec = 60
-        default_command_timeout_sec = 5
-        loop_interval_sec = 30
+def test_config_summary_adds_global_threshold_warning(monkeypatch: Any) -> None:
+    from conftest import make_app_config
 
-        [notify.discord]
-        enabled = false
-        username = "raspi-sentinel"
-        timeout_sec = 5
-        followup_delay_sec = 300
-        heartbeat_interval_sec = 0
-
-        [[targets]]
-        name = "demo"
-        services = []
-        service_active = false
-        command = "true"
-        """,
+    cfg = make_app_config(
+        global_overrides={
+            "restart_threshold": 5,
+            "reboot_threshold": 5,
+        }
     )
-    cfg = load_config(conf)
     monkeypatch.setattr(
         config_summary,
         "_check_service_unit_load_state",
         lambda unit, timeout_sec=3: "loaded",
     )
-    report = config_summary.build_config_validation_report(config_path=conf, config=cfg)
+    report = config_summary.build_config_validation_report(
+        config_path=Path("/tmp/config.toml"), config=cfg
+    )
     assert any(
-        "restart_threshold should be lower than reboot_threshold" in warning
+        "global reboot_threshold must be greater than restart_threshold" in warning
         for warning in report.get("global_warnings", [])
     )
 

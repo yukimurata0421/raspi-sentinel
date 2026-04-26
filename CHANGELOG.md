@@ -11,17 +11,38 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 - versioning/docs alignment:
   - README/README.ja now describe `v0.9.x` as upcoming beta preview and keep current release on `v0.8.x`.
   - UPGRADE / VERSIONING / docs index now explicitly separate current stable vs next beta draft lines.
+  - README feedback section wording now consistently uses `Upcoming` terminology for `v0.9.x`.
+  - UPGRADE guides now use explicit track split (stable upgrade track vs beta-prep track) and include concrete rollback command examples.
+  - README/README.ja quickstart now uses `config/raspi-sentinel.beta-demo.toml` and matching failure-injection path (`/tmp/raspi-sentinel-demo/heartbeat.txt`) for deterministic beta demo flow.
 - release automation/docs consistency:
   - PyPI workflow now supports explicit TestPyPI rehearsal via manual dispatch target selection.
-  - release workflow now fails if release notes still contain `Planned release:` marker.
+  - release workflow now fails if release notes still contain `Planned release:` marker or `# Draft:` title marker.
 - contract/docs clarifications:
   - output contract now documents startup-grace null tolerance for external status timestamps.
+  - schema wording now clarifies that output schemas introduced in `v0.8.x` are maintained going forward.
   - doctor compatibility note now clarifies lifecycle of `network_only_failures_can_reboot`.
+  - storage-tier docs now explicitly distinguish OR-based verify trigger conditions from durable-path-required runtime split conditions.
 - examples/tests/operator docs:
   - example `dns_query_target` now uses `example.com`.
   - fixed secret scan repository root resolution in `test_public_secret_scan.py`.
-  - `install_systemd.py` help now documents `--include-tmpfs-mount` requirement for tmpfs tiering.
+  - `install_systemd.py` now renders systemd `ExecStart` with detected `raspi-sentinel` binary path (or explicit `--raspi-sentinel-bin`) and configurable `--config-path`.
+  - `install_systemd.py` help documents `--include-tmpfs-mount` requirement for tmpfs tiering.
   - runbook deployment section now documents non-`pi5-guard` host usage via `--host`.
+  - security policy wording now clarifies supported stable tag scope (`v0.8.0` currently) and `main` tracking for interim fixes.
+  - engineering decisions quick index now includes item counts for wildcard sections.
+  - status event append flow now creates parent directory before optional rotation on first write.
+  - added regression coverage for mixed default-route lines so matched interface evidence is not overwritten by fallback routes.
+  - added review follow-up log for 2026-04-26 in `docs/history/review-followup-2026-04-26.md`.
+- recovery/config safety hardening:
+  - `--dry-run` now suppresses external notifications by default; use `--send-notifications` to opt in.
+  - global and per-target config validation now requires `reboot_threshold > restart_threshold`.
+  - target names and service names are normalized (`strip`) during config load; duplicate names after trim and blank service entries are rejected.
+  - cycle reports now include explicit persist-failure reason (`state_persist_failed` / `state_persist_failed_after_reboot_intent`).
+  - reboot guard boundary semantics are documented as inclusive window + strict cooldown.
+- security redaction hardening:
+  - redaction now masks Discord webhook path tokens in command/output text.
+- doctor UX:
+  - `doctor --fix-permissions` now applies permission fixes before building final doctor snapshot, reducing before/after mismatch in output.
 - recovery cooldown hardening:
   - warning-only cycles no longer overwrite `last_action` / `last_action_ts`, so `restart_cooldown_sec`
     remains effective across repeated unhealthy cycles until cooldown expiry.
@@ -48,6 +69,7 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - added `Open Beta: v0.9.x` landing + 15-minute quickstart in README/README.ja.
   - added known limitations/non-goals section for beta entry.
   - added GitHub issue form + label taxonomy files for beta feedback intake.
+  - added label sync workflow (`.github/workflows/sync-labels.yml`) and normalized label color values in `.github/labels.yml`.
   - added `doctor --support-bundle` for sanitized support bundle generation.
 
 ## [0.8.0] - 2026-04-26

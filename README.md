@@ -69,7 +69,7 @@ Why this matters:
 - Recovery actions may restart services or request reboot
 - `shell=False` is default; shell execution is explicit opt-in
 
-## 15-Minute Quickstart
+## 15-Minute Beta Demo
 
 ### 1. Clone current release tag
 
@@ -87,11 +87,11 @@ If you intentionally test the upcoming beta draft work, use `main` instead.
 python3 -m pip install .
 ```
 
-### 3. Install minimal config
+### 3. Install demo config (no restart/reboot, no notifications)
 
 ```bash
 sudo install -d -m 0755 /etc/raspi-sentinel
-sudo install -m 0600 -o root -g root config/raspi-sentinel.example.toml /etc/raspi-sentinel/config.toml
+sudo install -m 0600 -o root -g root config/raspi-sentinel.beta-demo.toml /etc/raspi-sentinel/config.toml
 sudo "${EDITOR:-vi}" /etc/raspi-sentinel/config.toml
 ```
 
@@ -116,7 +116,8 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml --dry-run run-once --json
 ### 7. Inject sample failure
 
 ```bash
-python3 scripts/failure_inject.py stale-file --path /tmp/heartbeat.txt --age-sec 900
+sudo install -d -m 0755 /tmp/raspi-sentinel-demo
+python3 scripts/failure_inject.py stale-file --path /tmp/raspi-sentinel-demo/heartbeat.txt --age-sec 900
 ```
 
 Then run dry-run again:
@@ -142,17 +143,19 @@ sudo systemctl stop raspi-sentinel.service
 
 ## Enable Timer (After Dry-run Verification)
 
+Install units using helper (renders `ExecStart` with detected `raspi-sentinel` binary path):
+
+```bash
+sudo python3 scripts/install_systemd.py --enable-timer
+```
+
+Equivalent manual install:
+
 ```bash
 sudo install -m 0644 systemd/raspi-sentinel.service /etc/systemd/system/raspi-sentinel.service
 sudo install -m 0644 systemd/raspi-sentinel.timer /etc/systemd/system/raspi-sentinel.timer
 sudo systemctl daemon-reload
 sudo systemctl enable --now raspi-sentinel.timer
-```
-
-Optional helper:
-
-```bash
-sudo python3 scripts/install_systemd.py --enable-timer
 ```
 
 If `[storage].require_tmpfs = true` or tmpfs tiering is configured, include mount unit install:
@@ -161,7 +164,10 @@ If `[storage].require_tmpfs = true` or tmpfs tiering is configured, include moun
 sudo python3 scripts/install_systemd.py --include-tmpfs-mount --enable-timer
 ```
 
-## Feedback Wanted (v0.9.x Draft)
+`--dry-run` disables restart/reboot and suppresses external notifications by default.
+Use `--send-notifications` only when you intentionally want notification path testing in dry-run.
+
+## Feedback Wanted (v0.9.x Upcoming)
 
 Please report:
 

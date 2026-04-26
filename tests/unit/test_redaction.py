@@ -25,3 +25,10 @@ def test_redact_text_masks_home_path_segment() -> None:
     redacted = redact_text("/home/yuki/private/config.toml")
     assert "/home/yuki/" not in redacted
     assert "/home/<redacted>/" in redacted
+
+
+def test_redact_text_masks_discord_webhook_path_tokens() -> None:
+    text = "webhook=https://discord.com/api/webhooks/123456/abcdefTOKEN"
+    redacted = redact_text(text)
+    assert "123456/abcdefTOKEN" not in redacted
+    assert "https://discord.com/api/webhooks/<redacted>" in redacted

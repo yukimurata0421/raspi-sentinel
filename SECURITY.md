@@ -4,10 +4,11 @@
 
 Security fixes are applied to:
 
-- latest stable release line (`v0.8.x`)
-- next open beta line (`v0.9.x`) once published
+- the latest released stable tag in the `v0.8.x` line (currently `v0.8.0`)
+- the `v0.9.x` open beta line once published
 
 Older tags may not receive backported fixes.
+For interim fixes before the next release tag, track `main`.
 
 ## Reporting a Vulnerability
 

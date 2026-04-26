@@ -29,18 +29,31 @@ from .storage_verify import verify_tmpfs_storage
 LOG = logging.getLogger(__name__)
 
 
-def _run_cycle_collect(config: AppConfig, dry_run: bool) -> tuple[int, CycleReport]:
+def _run_cycle_collect(
+    config: AppConfig,
+    dry_run: bool,
+    send_notifications_in_dry_run: bool = False,
+) -> tuple[int, CycleReport]:
     rc, report = run_cycle_collect(
         config=config,
         dry_run=dry_run,
         time_provider=time.time,
         mono_provider=time.monotonic,
+        send_notifications_in_dry_run=send_notifications_in_dry_run,
     )
     return rc, report
 
 
-def _run_cycle(config: AppConfig, dry_run: bool) -> int:
-    rc, _ = _run_cycle_collect(config=config, dry_run=dry_run)
+def _run_cycle(
+    config: AppConfig,
+    dry_run: bool,
+    send_notifications_in_dry_run: bool = False,
+) -> int:
+    rc, _ = _run_cycle_collect(
+        config=config,
+        dry_run=dry_run,
+        send_notifications_in_dry_run=send_notifications_in_dry_run,
+    )
     return rc
 
 
@@ -59,6 +72,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="Evaluate and log actions but do not restart/reboot",
+    )
+    parser.add_argument(
+        "--send-notifications",
+        action="store_true",
+        help="Allow notification delivery during --dry-run (default: disabled in dry-run).",
     )
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
     parser.add_argument(
@@ -186,7 +204,11 @@ def main(argv: list[str] | None = None) -> int:
         return CONFIG_LOAD_FAILED
 
     if args.command == "run-once":
-        rc, report = _run_cycle_collect(config=config, dry_run=args.dry_run)
+        rc, report = _run_cycle_collect(
+            config=config,
+            dry_run=args.dry_run,
+            send_notifications_in_dry_run=args.send_notifications,
+        )
         if args.json:
             print(json.dumps(report, indent=2, sort_keys=True))
         return rc
@@ -199,7 +221,11 @@ def main(argv: list[str] | None = None) -> int:
 
         LOG.info("starting loop mode interval=%ss", interval)
         while True:
-            rc = _run_cycle(config=config, dry_run=args.dry_run)
+            rc = _run_cycle(
+                config=config,
+                dry_run=args.dry_run,
+                send_notifications_in_dry_run=args.send_notifications,
+            )
             if rc == REBOOT_REQUESTED:
                 LOG.error("reboot was requested; exiting loop")
                 return 0
@@ -218,12 +244,15 @@ def main(argv: list[str] | None = None) -> int:
             LOG.info("storage verify result: %s", verify_result.to_dict())
         return 0 if verify_result.ok else STORAGE_VERIFY_FAILED
     if args.command == "doctor":
-        doctor_report = build_doctor_report(config_path=args.config, config=config)
+        fix_result: dict[str, object] | None = None
         if args.fix_permissions:
-            doctor_report["fix_permissions"] = fix_config_permissions(
+            fix_result = fix_config_permissions(
                 config_path=args.config,
                 dry_run=args.fix_permissions_dry_run,
             )
+        doctor_report = build_doctor_report(config_path=args.config, config=config)
+        if fix_result is not None:
+            doctor_report["fix_permissions"] = fix_result
         if args.support_bundle is not None:
             bundle = build_support_bundle(config_path=args.config, config=config)
             args.support_bundle.parent.mkdir(parents=True, exist_ok=True)

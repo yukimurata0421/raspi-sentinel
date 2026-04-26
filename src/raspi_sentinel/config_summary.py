@@ -224,9 +224,9 @@ def _target_warnings(
     if (
         restart_threshold is not None
         and reboot_threshold is not None
-        and reboot_threshold < restart_threshold
+        and reboot_threshold <= restart_threshold
     ):
-        warnings.append("reboot_threshold is lower than restart_threshold")
+        warnings.append("reboot_threshold must be greater than restart_threshold")
 
     if target.time_health.time_health_enabled and (
         target.time_health.check_interval_threshold_sec
@@ -257,7 +257,7 @@ def _global_warnings(config: AppConfig, config_mode: int | None = None) -> list[
     warnings: list[str] = []
     gc = config.global_config
     if gc.restart_threshold >= gc.reboot_threshold:
-        warnings.append("global restart_threshold should be lower than reboot_threshold")
+        warnings.append("global reboot_threshold must be greater than restart_threshold")
     if gc.storage_require_tmpfs and not str(gc.state_file).startswith("/run/"):
         warnings.append(
             (

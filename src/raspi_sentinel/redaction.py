@@ -13,6 +13,10 @@ _AUTH_HEADER_RE = re.compile(
 )
 _BEARER_RE = re.compile(r"(bearer\s+)([A-Za-z0-9\-._~+/=]+)", re.IGNORECASE)
 _HOME_PATH_RE = re.compile(r"/home/[^/\s]+")
+_DISCORD_WEBHOOK_RE = re.compile(
+    r"https://(?:discord(?:app)?\.com)/api/webhooks/[^/\s]+/[^/\s]+",
+    re.IGNORECASE,
+)
 
 
 def redact_text(text: str) -> str:
@@ -21,6 +25,7 @@ def redact_text(text: str) -> str:
     redacted = _QUERY_SECRET_RE.sub(r"\1***", redacted)
     redacted = _AUTH_HEADER_RE.sub(r"\1***", redacted)
     redacted = _HOME_PATH_RE.sub("/home/<redacted>", redacted)
+    redacted = _DISCORD_WEBHOOK_RE.sub("https://discord.com/api/webhooks/<redacted>", redacted)
     return redacted
 
 

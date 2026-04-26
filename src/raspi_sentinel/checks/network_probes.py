@@ -238,7 +238,7 @@ def _probe_route(iface: str, timeout_sec: int) -> tuple[ProbeResult, str | None,
                     gateway_ip = cand_gateway
                     route_iface = cand_iface
                     break
-                if gateway_ip is None:
+                if gateway_ip is None and not iface_matched:
                     gateway_ip = cand_gateway
                     route_iface = cand_iface
 

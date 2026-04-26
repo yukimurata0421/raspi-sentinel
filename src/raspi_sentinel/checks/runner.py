@@ -180,6 +180,9 @@ def run_checks(target: TargetConfig, now_wall_ts: float | None = None) -> CheckR
         ("http_probe_ok", "dependency_http_probe"),
     )
     for observation_key, check_name in dependency_observation_checks:
+        # Network probes can populate *_ok=False even when explicit dependency
+        # commands are not configured; convert those observations into policy-
+        # visible dependency failures without duplicating existing check names.
         if observations.get(observation_key) is False:
             _append_dependency_failure(check_name, f"{observation_key}=false")
 

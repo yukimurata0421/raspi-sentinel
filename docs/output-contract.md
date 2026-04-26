@@ -46,7 +46,7 @@ These outputs are treated as semi-public APIs for tooling and integrations.
 - `docs/schemas/stats.schema.json`
 - `docs/schemas/state.schema.json`
 
-These schemas are compatibility guardrails for `v0.8.x` contract hardening.
+These schemas were introduced in `v0.8.x` as compatibility guardrails and are maintained for subsequent lines.
 
 ## Forward Schema Handling
 

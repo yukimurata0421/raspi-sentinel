@@ -71,8 +71,8 @@ def append_event(
     backup_generations: int = 1,
 ) -> None:
     try:
-        maybe_rotate_file(events_file, max_file_bytes, backup_generations=backup_generations)
         events_file.parent.mkdir(parents=True, exist_ok=True)
+        maybe_rotate_file(events_file, max_file_bytes, backup_generations=backup_generations)
         with events_file.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(event, sort_keys=True) + "\n")
     except OSError as exc:

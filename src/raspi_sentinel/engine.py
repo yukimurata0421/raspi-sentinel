@@ -153,8 +153,9 @@ def emit_target_notifications(
     events_max_bytes: int,
     events_backup_generations: int,
     now_ts: float,
+    notifications_enabled: bool,
 ) -> None:
-    if not notifier.enabled:
+    if not notifier.enabled or not notifications_enabled:
         return
 
     if notifier.config.notify_on_recovery and result.healthy and previous_failures > 0:
@@ -294,6 +295,7 @@ def _process_single_target(
     events_file: Path,
     events_max: int,
     events_backups: int,
+    notifications_enabled: bool,
 ) -> ProcessTargetResult:
     before = state.ensure_target(target.name)
     previous_failures = before.consecutive_failures
@@ -353,6 +355,7 @@ def _process_single_target(
         events_max_bytes=events_max,
         events_backup_generations=events_backups,
         now_ts=now_ts,
+        notifications_enabled=notifications_enabled,
     )
 
     return ProcessTargetResult(
@@ -375,6 +378,7 @@ def _evaluate_targets_phase(
     events_file: Path,
     events_max: int,
     events_backups: int,
+    notifications_enabled: bool,
 ) -> TargetEvaluationArtifacts:
     unhealthy_count = 0
     reboot_requested = False
@@ -395,6 +399,7 @@ def _evaluate_targets_phase(
             events_file=events_file,
             events_max=events_max,
             events_backups=events_backups,
+            notifications_enabled=notifications_enabled,
         )
         target_reports[target.name] = processed.report
 
@@ -408,6 +413,8 @@ def _evaluate_targets_phase(
             reboot_requested = True
             reboot_reason = processed.reboot_reason
             LOG.error("reboot requested after evaluating target '%s'", target.name)
+            # Stop evaluating remaining targets once reboot is requested.
+            # Recovery state now represents the reboot-intent cycle.
             break
 
     return TargetEvaluationArtifacts(
@@ -428,8 +435,9 @@ def _run_notification_phase(
     events_file: Path,
     events_max: int,
     events_backups: int,
+    notifications_enabled: bool,
 ) -> None:
-    if not notifier.enabled:
+    if not notifier.enabled or not notifications_enabled:
         return
     send_due_followups(
         notifier=notifier,
@@ -496,10 +504,12 @@ def _run_cycle_collect_locked(
     store: TieredStateStore,
     now_ts: float,
     mono_provider: Callable[[], float],
+    send_notifications_in_dry_run: bool = False,
 ) -> tuple[int, CycleReport]:
     state, state_diagnostics = store.load_with_diagnostics()
     limited_mode = state_diagnostics.limited_mode
     notifier = DiscordNotifier(config.notify_config.discord)
+    notifications_enabled = (not dry_run) or send_notifications_in_dry_run
 
     events_file = config.global_config.events_file
     events_max = config.global_config.events_max_file_bytes
@@ -524,6 +534,7 @@ def _run_cycle_collect_locked(
         events_file=events_file,
         events_max=events_max,
         events_backups=events_backups,
+        notifications_enabled=notifications_enabled,
     )
 
     _run_notification_phase(
@@ -534,6 +545,7 @@ def _run_cycle_collect_locked(
         events_file=events_file,
         events_max=events_max,
         events_backups=events_backups,
+        notifications_enabled=notifications_enabled,
     )
 
     maybe_write_monitor_stats(
@@ -562,6 +574,11 @@ def _run_cycle_collect_locked(
 
     if not persisted:
         LOG.error("cycle state persistence failed")
+        report["reason"] = (
+            "state_persist_failed_after_reboot_intent"
+            if artifacts.reboot_requested
+            else "state_persist_failed"
+        )
         return STATE_PERSIST_FAILED, report
     if artifacts.reboot_requested:
         reason = artifacts.reboot_reason or "reboot_requested"
@@ -580,6 +597,7 @@ def run_cycle_collect(
     dry_run: bool,
     time_provider: Callable[[], float],
     mono_provider: Callable[[], float],
+    send_notifications_in_dry_run: bool = False,
 ) -> tuple[int, CycleReport]:
     store = TieredStateStore(
         volatile_path=config.global_config.state_file,
@@ -596,19 +614,34 @@ def run_cycle_collect(
                 store=store,
                 now_ts=now_ts,
                 mono_provider=mono_provider,
+                send_notifications_in_dry_run=send_notifications_in_dry_run,
             )
-    except (TimeoutError, OSError) as exc:
+    except TimeoutError as exc:
         LOG.error("%s", exc)
         now_ts = time_provider()
         updated_at = datetime.fromtimestamp(now_ts).astimezone().isoformat(timespec="seconds")
-        reason = "state_lock_timeout" if isinstance(exc, TimeoutError) else "state_lock_error"
         report: CycleReport = {
             "updated_at": updated_at,
             "overall_status": "failed",
             "dry_run": dry_run,
             "reboot_requested": False,
             "targets": {},
-            "reason": reason,
+            "reason": "state_lock_timeout",
+            "state_persisted": False,
+            "limited_mode": False,
+        }
+        return STATE_LOCK_ERROR, report
+    except OSError as exc:
+        LOG.error("%s", exc)
+        now_ts = time_provider()
+        updated_at = datetime.fromtimestamp(now_ts).astimezone().isoformat(timespec="seconds")
+        report = {
+            "updated_at": updated_at,
+            "overall_status": "failed",
+            "dry_run": dry_run,
+            "reboot_requested": False,
+            "targets": {},
+            "reason": "state_lock_error",
             "state_persisted": False,
             "limited_mode": False,
         }

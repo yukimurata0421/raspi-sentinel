@@ -100,6 +100,9 @@ def _reboot_reason_allowed(result: CheckResult) -> bool:
 
 
 def _can_reboot(global_config: GlobalConfig, state: GlobalState, now_ts: float) -> tuple[bool, str]:
+    # Time-window boundaries are inclusive for reboot history filtering:
+    # entries where (now_ts - entry.ts) <= reboot_window_sec remain in-window.
+    # Cooldown checks stay strict (< cooldown) so exactly-equal timestamps reopen.
     uptime = read_uptime_sec()
     if uptime < global_config.min_uptime_for_reboot_sec:
         return (

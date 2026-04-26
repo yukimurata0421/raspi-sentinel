@@ -1,0 +1,32 @@
+[global]
+state_file = "/var/lib/raspi-sentinel/state.json"
+events_file = "/var/lib/raspi-sentinel/events.jsonl"
+monitor_stats_file = "/var/lib/raspi-sentinel/stats.json"
+monitor_stats_interval_sec = 30
+restart_threshold = 99
+reboot_threshold = 999
+restart_cooldown_sec = 3600
+reboot_cooldown_sec = 86400
+reboot_window_sec = 21600
+max_reboots_in_window = 2
+min_uptime_for_reboot_sec = 600
+default_command_timeout_sec = 10
+loop_interval_sec = 30
+
+[notify.discord]
+enabled = false
+username = "raspi-sentinel"
+timeout_sec = 5
+followup_delay_sec = 300
+retry_interval_sec = 60
+heartbeat_interval_sec = 0
+notify_on_recovery = false
+
+[[targets]]
+name = "beta_demo_heartbeat"
+services = []
+service_active = false
+heartbeat_file = "/tmp/raspi-sentinel-demo/heartbeat.txt"
+heartbeat_max_age_sec = 60
+restart_threshold = 99
+reboot_threshold = 999

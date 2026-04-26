@@ -7,7 +7,7 @@ Before=raspi-sentinel.service
 Type=oneshot
 User=root
 Group=root
-ExecStart=/opt/raspi-sentinel/.venv/bin/raspi-sentinel -c /etc/raspi-sentinel/config.toml verify-storage --expected-mode 0755 --expected-owner-uid 0 --expected-owner-gid 0
+ExecStart=raspi-sentinel -c /etc/raspi-sentinel/config.toml verify-storage --expected-mode 0755 --expected-owner-uid 0 --expected-owner-gid 0
 RemainAfterExit=yes
 
 [Install]

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -13,6 +14,7 @@ CORE_UNITS = (
     "raspi-sentinel-tmpfs-verify.service",
 )
 OPTIONAL_UNITS = ("run-raspi\\x2dsentinel.mount",)
+_SERVICE_UNITS = {"raspi-sentinel.service", "raspi-sentinel-tmpfs-verify.service"}
 
 
 def _run(cmd: list[str], *, dry_run: bool) -> None:
@@ -30,6 +32,44 @@ def _install_file(src: Path, dst: Path, *, mode: int, dry_run: bool) -> None:
     os.chmod(dst, mode)
 
 
+def _resolve_raspi_sentinel_bin(explicit_path: str | None) -> str:
+    if explicit_path:
+        return explicit_path
+    detected = shutil.which("raspi-sentinel")
+    if detected:
+        return detected
+    raise FileNotFoundError(
+        "could not resolve raspi-sentinel executable from PATH; "
+        "install package first or pass --raspi-sentinel-bin"
+    )
+
+
+def _render_service_unit(
+    *,
+    src: Path,
+    dst: Path,
+    raspi_sentinel_bin: str,
+    config_path: Path,
+    dry_run: bool,
+) -> None:
+    print(f"+ render {src} -> {dst} bin={raspi_sentinel_bin} config={config_path}")
+    text = src.read_text(encoding="utf-8")
+    text = re.sub(
+        r"^(\s*)ExecStart=\S*raspi-sentinel\s+",
+        rf"\1ExecStart={raspi_sentinel_bin} ",
+        text,
+        flags=re.MULTILINE,
+    )
+    text = text.replace(
+        "-c /etc/raspi-sentinel/config.toml ",
+        f"-c {config_path} ",
+    )
+    if dry_run:
+        return
+    dst.write_text(text, encoding="utf-8")
+    os.chmod(dst, 0o644)
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Install raspi-sentinel systemd units.",
@@ -40,6 +80,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--source-dir", type=Path, default=Path("systemd"))
     parser.add_argument("--dest-dir", type=Path, default=Path("/etc/systemd/system"))
+    parser.add_argument(
+        "--raspi-sentinel-bin",
+        type=str,
+        default=None,
+        help=(
+            "Absolute path to raspi-sentinel binary for systemd ExecStart "
+            "(auto-detected by default)."
+        ),
+    )
+    parser.add_argument(
+        "--config-path",
+        type=Path,
+        default=Path("/etc/raspi-sentinel/config.toml"),
+        help="Config path embedded into rendered systemd service units.",
+    )
     parser.add_argument(
         "--include-tmpfs-mount",
         action="store_true",
@@ -53,6 +108,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     unit_names = list(CORE_UNITS)
+    raspi_sentinel_bin = _resolve_raspi_sentinel_bin(args.raspi_sentinel_bin)
     if args.include_tmpfs_mount:
         unit_names.extend(OPTIONAL_UNITS)
 
@@ -61,7 +117,16 @@ def main(argv: list[str] | None = None) -> int:
         dst = args.dest_dir / unit_name
         if not src.exists():
             raise FileNotFoundError(f"missing unit file: {src}")
-        _install_file(src, dst, mode=0o644, dry_run=args.dry_run)
+        if unit_name in _SERVICE_UNITS:
+            _render_service_unit(
+                src=src,
+                dst=dst,
+                raspi_sentinel_bin=raspi_sentinel_bin,
+                config_path=args.config_path,
+                dry_run=args.dry_run,
+            )
+        else:
+            _install_file(src, dst, mode=0o644, dry_run=args.dry_run)
 
     _run(["systemctl", "daemon-reload"], dry_run=args.dry_run)
     if args.enable_timer:

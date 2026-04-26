@@ -175,11 +175,19 @@ def test_validate_consecutive_failure_threshold_order() -> None:
 
 
 def test_validate_reboot_vs_restart_thresholds() -> None:
-    with pytest.raises(ValueError, match="reboot_threshold must be >= restart_threshold"):
+    with pytest.raises(ValueError, match="reboot_threshold must be > restart_threshold"):
         _validate_target_rules(
             make_target(
                 restart_threshold=10,
                 reboot_threshold=5,
+                command="true",
+            )
+        )
+    with pytest.raises(ValueError, match="reboot_threshold must be > restart_threshold"):
+        _validate_target_rules(
+            make_target(
+                restart_threshold=10,
+                reboot_threshold=10,
                 command="true",
             )
         )

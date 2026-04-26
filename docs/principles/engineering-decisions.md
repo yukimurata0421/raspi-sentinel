@@ -7,10 +7,10 @@ The format follows a pragmatic rule: **state the decision, point to implementati
 ## Quick Index
 
 - Recovery safety order: `1-3`, `5-10`
-- Policy mapping and reboot guards: `4-*`, `5-*`
+- Policy mapping and reboot guards: `4-*` (2 items), `5-*` (10 items)
 - Storage tiering and tmpfs verification: `3-4`, `7-3`
-- Notification/backlog behavior: `6-*`
-- Release/documentation boundaries: `0-*`, `8-*`
+- Notification/backlog behavior: `6-*` (4 items)
+- Release/documentation boundaries: `0-*` (2 items), `8-*` (5 items)
 
 ---
 
@@ -61,6 +61,17 @@ Rationale: Reboot is irreversible side effect. Persisting reboot history first p
 Locations: [src/raspi_sentinel/cli.py](../../src/raspi_sentinel/cli.py)
 
 Rationale: `run-once --json` makes the decision result consumable by scripts/Ansible/CI without parsing logs.
+
+### 1-5. Stop target evaluation after first reboot request in a cycle
+
+Locations: [src/raspi_sentinel/engine.py](../../src/raspi_sentinel/engine.py)
+
+Decision:
+
+- Once a target returns `reboot_requested=True`, remaining targets are not evaluated in that cycle.
+- The cycle snapshot is treated as a reboot-intent boundary and persisted before deferred reboot execution.
+
+Rationale: This keeps reboot intent deterministic (single-cycle decision boundary) and avoids mixing post-intent evaluations with pre-intent state.
 
 ---
 
@@ -246,6 +257,17 @@ Decision:
 
 Rationale: Reboot is the heaviest action. Binding reboot to explicit policy failure prevents long-lived `degraded` states from escalating to disruptive recovery.
 
+### 5-11. Keep reboot window boundaries inclusive, cooldown boundaries strict
+
+Locations: [src/raspi_sentinel/recovery.py](../../src/raspi_sentinel/recovery.py), [tests/scenario/test_recovery_internal_branches.py](../../tests/scenario/test_recovery_internal_branches.py)
+
+Decision:
+
+- Reboot history window uses `now - ts <= reboot_window_sec` (inclusive boundary).
+- Cooldown uses `delta < cooldown_sec` (strict boundary).
+
+Rationale: Inclusive window accounting keeps cap semantics stable at exact boundary timestamps, while strict cooldown allows action exactly when cooldown expires.
+
 ---
 
 ## 6. Observability and Auditability
@@ -343,6 +365,39 @@ Rationale: Recovery correctness depends on branch behavior, not only statement e
 Locations: [tests/e2e/test_cli_behavior.py](../../tests/e2e/test_cli_behavior.py), [tests/unit/test_config_summary.py](../../tests/unit/test_config_summary.py)
 
 Rationale: `validate-config` and JSON outputs are operational interfaces and must remain stable.
+
+### 8-3. Gate tagged releases on finalized release-notes text
+
+Locations: [.github/workflows/release.yml](../../.github/workflows/release.yml), [docs/release-notes/](../release-notes/)
+
+Decision:
+
+- tag-triggered release verifies `docs/release-notes/vX.Y.Z.md` exists.
+- release workflow fails if notes still include `Planned release:`.
+
+Rationale: Publishing a tag with draft/planned notes creates operator confusion and weakens release traceability.
+
+### 8-4. Keep TestPyPI rehearsal as a first-class pre-release path
+
+Locations: [.github/workflows/pypi.yml](../../.github/workflows/pypi.yml), [docs/VERSIONING.md](../VERSIONING.md)
+
+Decision:
+
+- production PyPI publish remains release-driven.
+- manual workflow dispatch supports explicit `testpypi` target for rehearsal.
+
+Rationale: Open-beta style onboarding needs low-friction install with low-risk packaging validation before production index publish.
+
+### 8-5. Keep repository-wide secret scan rooted at actual project top
+
+Locations: [tests/unit/test_public_secret_scan.py](../../tests/unit/test_public_secret_scan.py)
+
+Decision:
+
+- secret scan test resolves repository root from test path and runs `git ls-files` from the real root.
+- avoid partial subtree scans caused by incorrect parent-depth assumptions.
+
+Rationale: Secret scanning that silently runs on the wrong root gives false confidence and can leak credential patterns into public history.
 
 ---
 

@@ -491,6 +491,60 @@ def test_doctor_fix_permissions_dry_run_includes_actions(
     assert payload["fix_permissions"]["actions"]
 
 
+def test_doctor_fix_permissions_applies_before_report_snapshot(
+    tmp_path: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    conf = tmp_path / "config.toml"
+    _write(
+        conf,
+        """
+        [global]
+        state_file = "/tmp/state.json"
+        restart_threshold = 2
+        reboot_threshold = 3
+        restart_cooldown_sec = 10
+        reboot_cooldown_sec = 20
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 60
+        default_command_timeout_sec = 5
+        loop_interval_sec = 30
+
+        [notify.discord]
+        enabled = false
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "demo"
+        services = []
+        service_active = false
+        command = "true"
+        """,
+    )
+
+    snapshots: list[dict[str, object]] = []
+
+    def fake_fix(**kwargs: Any) -> dict[str, object]:
+        return {"status": "ok", "actions": ["chmod 0600", "chown 0:0"], "detail": None}
+
+    def fake_doctor(**kwargs: Any) -> dict[str, object]:
+        if snapshots:
+            return {"config_permissions": {"status": "ok"}}
+        snapshots.append({"called": True})
+        return {"config_permissions": {"status": "ok"}}
+
+    monkeypatch.setattr("raspi_sentinel.cli.fix_config_permissions", fake_fix)
+    monkeypatch.setattr("raspi_sentinel.cli.build_doctor_report", fake_doctor)
+    rc = cli.main(["-c", str(conf), "doctor", "--json", "--fix-permissions"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["config_permissions"]["status"] == "ok"
+    assert payload["fix_permissions"]["status"] == "ok"
+
+
 def test_doctor_support_bundle_writes_sanitized_payload(
     tmp_path: Path, monkeypatch: Any, capsys: Any
 ) -> None:

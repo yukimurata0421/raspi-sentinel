@@ -1,6 +1,9 @@
 # Upgrade and Migration Guide
 
-This guide focuses on upgrading from `v0.7.x` to `v0.8.x` and preparing for `v0.9.x` open beta.
+This guide has two tracks:
+
+- Track A: upgrade existing `v0.7.x` installs to current stable (`v0.8.x`)
+- Track B: prepare `v0.8.x` environments for upcoming `v0.9.x` open beta validation
 
 ## Pre-upgrade checklist
 
@@ -29,7 +32,7 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
 - reboot gating now uses `policy_reason` allowlist.
 - config summary now warns for insecure readable config when Discord notify is enabled.
 
-## v0.8.x -> v0.9.x open beta preparation
+## Track B: v0.8.x -> v0.9.x open beta preparation
 
 - `v0.9.x` notes are currently draft-first; validate against `main` before rollout.
 - keep recovery actions conservative until dry-run evidence is stable on your host.
@@ -61,8 +64,18 @@ If validation fails after upgrade:
 sudo systemctl stop raspi-sentinel.timer
 ```
 
-2. Restore previous package/files and config backup.
-3. Run `validate-config --strict` again.
-4. Re-enable timer only after dry-run is healthy.
+2. Restore config backup:
+
+```bash
+sudo cp -a /etc/raspi-sentinel/config.toml.bak /etc/raspi-sentinel/config.toml
+```
+
+3. If package rollback is needed, reinstall the previous version (example):
+
+```bash
+python3 -m pip install 'raspi-sentinel==<previous-version>'
+```
+4. Run `validate-config --strict` again.
+5. Re-enable timer only after dry-run is healthy.
 
 Japanese guide: [UPGRADE.ja.md](UPGRADE.ja.md)

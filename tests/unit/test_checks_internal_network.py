@@ -377,6 +377,59 @@ def test_network_probe_route_gateway_and_internet_branches(monkeypatch: Any) -> 
     assert obs["http_probe_ok"] is True
 
 
+def test_network_probe_does_not_override_iface_match_with_other_default_route(
+    monkeypatch: Any,
+) -> None:
+    class Result:
+        def __init__(self, stdout: str, returncode: int = 0) -> None:
+            self.stdout = stdout
+            self.stderr = ""
+            self.returncode = returncode
+
+    def fake_read_text(self: Path, encoding: str = "utf-8") -> str:
+        if str(self).endswith("/operstate"):
+            return "up\n"
+        if str(self) == "/etc/resolv.conf":
+            return "nameserver 1.1.1.1\n"
+        raise OSError("unavailable")
+
+    def fake_run_command_capture(args: list[str], timeout_sec: int) -> tuple[Any, Any]:
+        if args[:4] == ["ip", "-4", "-o", "addr"]:
+            return Result("2: wlan0    inet 192.168.1.2/24"), None
+        if args[:3] == ["iw", "dev", "wlan0"]:
+            return Result("Connected to aa:bb:cc:dd:ee:ff\nSSID: test\n"), None
+        if args[:5] == ["ip", "-4", "route", "show", "default"]:
+            return Result("default dev wlan0\ndefault via 192.168.1.1 dev eth0\n"), None
+        return None, "unavailable"
+
+    monkeypatch.setattr(checks.Path, "read_text", fake_read_text, raising=False)
+    monkeypatch.setattr(
+        "raspi_sentinel.checks.command_checks.run_command_capture",
+        fake_run_command_capture,
+    )
+    monkeypatch.setattr(
+        checks.socket,
+        "getaddrinfo",
+        lambda host, port, type=0: [
+            (checks.socket.AF_INET, checks.socket.SOCK_STREAM, 6, "", ("127.0.0.1", port))
+        ],
+    )
+
+    result = checks.run_checks(
+        target(
+            network_probe_enabled=True,
+            network_interface="wlan0",
+            http_probe_target=None,
+            dns_query_target="example.com",
+        )
+    )
+    obs = result.observations
+    assert obs["default_route_ok"] is False
+    assert obs["route_error_kind"] == "gateway_ip_missing"
+    assert obs["default_route_iface"] == "wlan0"
+    assert obs.get("gateway_ip") is None
+
+
 def test_network_probe_patch_isolation_between_targets(monkeypatch: Any) -> None:
     class DummyHttpResponse:
         def __init__(self, status: int) -> None:

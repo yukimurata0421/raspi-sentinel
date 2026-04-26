@@ -20,6 +20,7 @@ from .state_helpers import write_json_atomic
 from .state_models import GlobalState, RebootRecord
 
 LOG = logging.getLogger(__name__)
+_QUARANTINE_MAX_SUFFIX = 99
 
 
 def is_storage_tiering_enabled(
@@ -76,14 +77,18 @@ class StateStore:
         ts_label = datetime.now().strftime("%Y%m%dT%H%M%S")
         base = self.path.with_name(f"{self.path.name}.corrupt.{ts_label}")
         candidate = base
-        for index in range(1, 100):
+        for index in range(1, _QUARANTINE_MAX_SUFFIX + 1):
             if not candidate.exists():
                 break
             candidate = self.path.with_name(f"{base.name}.{index}")
         if candidate.exists():
             LOG.error(
-                "too many quarantined state files exist for timestamp %s; skipping quarantine",
+                (
+                    "too many quarantined state files exist for timestamp %s "
+                    "(max suffix=%d); skipping quarantine"
+                ),
                 base.name,
+                _QUARANTINE_MAX_SUFFIX,
             )
             return None
         try:

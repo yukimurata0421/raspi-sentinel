@@ -246,9 +246,9 @@ def _validate_target_rules(target: TargetConfig) -> None:
         raise ValueError(f"target '{target.name}': reboot_threshold must be > 0")
 
     if target.reboot_threshold is not None and target.restart_threshold is not None:
-        if target.reboot_threshold < target.restart_threshold:
+        if target.reboot_threshold <= target.restart_threshold:
             raise ValueError(
-                f"target '{target.name}': reboot_threshold must be >= restart_threshold"
+                f"target '{target.name}': reboot_threshold must be > restart_threshold"
             )
 
     if stats.stats_updated_max_age_sec is not None and stats.stats_updated_max_age_sec <= 0:
@@ -462,8 +462,8 @@ def load_config(path: Path) -> AppConfig:
 
     if global_config.restart_threshold <= 0:
         raise ValueError("global restart_threshold must be > 0")
-    if global_config.reboot_threshold < global_config.restart_threshold:
-        raise ValueError("global reboot_threshold must be >= restart_threshold")
+    if global_config.reboot_threshold <= global_config.restart_threshold:
+        raise ValueError("global reboot_threshold must be > restart_threshold")
     if global_config.reboot_cooldown_sec < 0 or global_config.restart_cooldown_sec < 0:
         raise ValueError("global cooldown values must be >= 0")
     if global_config.reboot_window_sec <= 0:
@@ -549,9 +549,10 @@ def load_config(path: Path) -> AppConfig:
         if not isinstance(item, dict):
             raise ValueError("Each [[targets]] entry must be a table")
 
-        name = item.get("name")
-        if not isinstance(name, str) or not name.strip():
+        name_raw = item.get("name")
+        if not isinstance(name_raw, str) or not name_raw.strip():
             raise ValueError("target name must be a non-empty string")
+        name = name_raw.strip()
         if name in seen_names:
             raise ValueError(f"duplicate target name: {name}")
         seen_names.add(name)
@@ -559,6 +560,9 @@ def load_config(path: Path) -> AppConfig:
         services_raw = item.get("services", [])
         if not isinstance(services_raw, list) or any(not isinstance(s, str) for s in services_raw):
             raise ValueError(f"target '{name}': services must be an array of strings")
+        services = [s.strip() for s in services_raw]
+        if any(not s for s in services):
+            raise ValueError(f"target '{name}': services must not contain empty names")
 
         service_active = item.get("service_active", True)
         if not isinstance(service_active, bool):
@@ -684,7 +688,7 @@ def load_config(path: Path) -> AppConfig:
 
         target = TargetConfig(
             name=name,
-            services=services_raw,
+            services=services,
             service_active=service_active,
             heartbeat_file=_optional_path(item, "heartbeat_file"),
             heartbeat_max_age_sec=_optional_int(item, "heartbeat_max_age_sec"),

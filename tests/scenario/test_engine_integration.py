@@ -10,7 +10,9 @@ from conftest import make_app_config, make_target
 
 from raspi_sentinel.checks import CheckResult
 from raspi_sentinel.engine import (
+    ProcessTargetResult,
     TargetEvaluationArtifacts,
+    _evaluate_targets_phase,
     _overall_status,
     _record_state_load_issue_event,
     _run_cycle_collect_locked,
@@ -191,6 +193,153 @@ def test_run_cycle_reboot_command_failure_returns_unhealthy(
 
     assert rc == UNHEALTHY
     assert report["reason"] == "reboot_command_failed"
+
+
+def test_run_cycle_sets_reason_on_state_persist_failure_after_reboot_intent(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    cfg = make_app_config()
+    store = TieredStateStore(tmp_path / "state.json")
+
+    monkeypatch.setattr(
+        "raspi_sentinel.engine._evaluate_targets_phase",
+        lambda **kwargs: TargetEvaluationArtifacts(
+            target_results={},
+            target_reports={
+                "demo": {
+                    "status": "failed",
+                    "reason": "process_error",
+                    "action": "reboot",
+                    "healthy": False,
+                    "evidence": {},
+                }
+            },
+            unhealthy_count=1,
+            reboot_requested=True,
+            reboot_reason="policy failed",
+        ),
+    )
+    monkeypatch.setattr("raspi_sentinel.engine._run_notification_phase", lambda **kwargs: None)
+    monkeypatch.setattr("raspi_sentinel.engine.maybe_write_monitor_stats", lambda **kwargs: None)
+    monkeypatch.setattr("raspi_sentinel.engine.persist_cycle_outputs", lambda **kwargs: False)
+
+    rc, report = _run_cycle_collect_locked(
+        config=cfg,
+        dry_run=False,
+        store=store,
+        now_ts=1000.0,
+        mono_provider=lambda: 1.0,
+    )
+    assert rc != REBOOT_REQUESTED
+    assert report["state_persisted"] is False
+    assert report["reason"] == "state_persist_failed_after_reboot_intent"
+
+
+def test_evaluate_targets_phase_stops_after_first_reboot_request(monkeypatch: Any) -> None:
+    cfg = make_app_config(
+        targets=[make_target(name="a"), make_target(name="b"), make_target(name="c")]
+    )
+    calls: list[str] = []
+
+    def fake_process_single_target(**kwargs: Any) -> ProcessTargetResult:
+        target = kwargs["target"]
+        calls.append(target.name)
+        if target.name == "b":
+            return ProcessTargetResult(
+                report={"status": "failed", "reason": "process_error", "action": "reboot"},
+                result=CheckResult(target=target.name, healthy=False, failures=[]),
+                policy_status="failed",
+                reboot_requested=True,
+                reboot_reason="failed",
+            )
+        return ProcessTargetResult(
+            report={"status": "ok", "reason": "healthy", "action": "none"},
+            result=CheckResult(target=target.name, healthy=True, failures=[]),
+            policy_status="ok",
+            reboot_requested=False,
+            reboot_reason=None,
+        )
+
+    monkeypatch.setattr("raspi_sentinel.engine._process_single_target", fake_process_single_target)
+
+    artifacts = _evaluate_targets_phase(
+        config=cfg,
+        state=GlobalState(),
+        dry_run=True,
+        now_ts=1000.0,
+        mono_provider=lambda: 1.0,
+        limited_mode=False,
+        notifier=type("DummyNotifier", (), {"enabled": False})(),
+        events_file=Path("/tmp/events.jsonl"),
+        events_max=0,
+        events_backups=1,
+        notifications_enabled=False,
+    )
+    assert calls == ["a", "b"]
+    assert artifacts.reboot_requested is True
+    assert artifacts.reboot_reason == "failed"
+    assert "c" not in artifacts.target_reports
+
+
+def test_run_cycle_suppresses_notifications_in_dry_run_by_default(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    cfg = make_app_config(
+        discord_overrides={
+            "enabled": True,
+            "webhook_url": "https://discord.com/api/webhooks/123/abc",
+            "heartbeat_interval_sec": 0,
+        },
+        targets=[make_target(name="demo", command="false", command_timeout_sec=1)],
+    )
+    store = TieredStateStore(tmp_path / "state.json")
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        "raspi_sentinel.notify.DiscordNotifier.send_lines",
+        lambda *a, **k: calls.append("sent") or True,
+    )
+    rc, report = _run_cycle_collect_locked(
+        config=cfg,
+        dry_run=True,
+        store=store,
+        now_ts=1000.0,
+        mono_provider=lambda: 1.0,
+    )
+    assert rc == UNHEALTHY
+    assert report["dry_run"] is True
+    assert calls == []
+
+
+def test_run_cycle_allows_notifications_in_dry_run_when_opted_in(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    cfg = make_app_config(
+        discord_overrides={
+            "enabled": True,
+            "webhook_url": "https://discord.com/api/webhooks/123/abc",
+            "heartbeat_interval_sec": 0,
+        },
+        targets=[make_target(name="demo", command="false", command_timeout_sec=1)],
+    )
+    store = TieredStateStore(tmp_path / "state.json")
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        "raspi_sentinel.notify.DiscordNotifier.send_lines",
+        lambda *a, **k: calls.append("sent") or True,
+    )
+    rc, report = _run_cycle_collect_locked(
+        config=cfg,
+        dry_run=True,
+        store=store,
+        now_ts=1000.0,
+        mono_provider=lambda: 1.0,
+        send_notifications_in_dry_run=True,
+    )
+    assert rc == UNHEALTHY
+    assert report["dry_run"] is True
+    assert calls
 
 
 def test_record_state_load_issue_event_omits_reason_when_no_detail(tmp_path: Path) -> None:

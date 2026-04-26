@@ -46,6 +46,7 @@ Verification trigger conditions:
 State split conditions:
 
 - `state_durable_path` must be configured for volatile/durable split to activate.
+  (`is_storage_tiering_enabled(...)` is OR-based for verify triggers, but runtime split additionally requires durable store path.)
 - `require_tmpfs = true` alone enables preflight verification only.
 
 ## 2. Write frequency by file
