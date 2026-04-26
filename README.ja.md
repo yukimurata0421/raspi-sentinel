@@ -127,6 +127,6 @@ raspi-sentinel --structured-logging -c /etc/raspi-sentinel/config.toml run-once
 - 出力契約: [docs/output-contract.md](docs/output-contract.md)
 - テストマップ: [docs/facts/test-map.md](docs/facts/test-map.md)
 - 終了コード: [docs/facts/exit-codes.md](docs/facts/exit-codes.md)
-- リリースノート: [docs/release-notes/v0.7.1.md](docs/release-notes/v0.7.1.md)
+- リリースノート: [docs/release-notes/v0.8.0.md](docs/release-notes/v0.8.0.md)
 
 テストは `tests/unit/` `tests/scenario/` `tests/e2e/` の taxonomy で運用します。
