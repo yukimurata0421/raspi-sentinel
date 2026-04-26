@@ -40,6 +40,20 @@ A lightweight git tag **`v0.2.0`** may exist from an intermediate snapshot. Ther
    - `Publish PyPI` workflow runs on GitHub Release publish (or manual dispatch)
    - requires PyPI Trusted Publisher / OIDC setup for this repository.
 
+## PyPI rollout recommendation for beta
+
+For open beta releases, use this order:
+
+1. TestPyPI rehearsal (build + upload + install test)
+2. GitHub Release publish
+3. Production PyPI publish via Trusted Publisher
+
+Why:
+
+- reduces install friction for external testers
+- verifies packaging metadata before production upload
+- avoids long-lived API tokens in repository secrets
+
 ## Existing release without notes
 
 If a tag was pushed before `docs/release-notes/vX.Y.Z.md` existed, edit the release on GitHub or run:

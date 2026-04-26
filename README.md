@@ -13,6 +13,80 @@
 
 Japanese guide: [README.ja.md](README.ja.md)
 
+## Open Beta: v0.9.x
+
+Who should try this:
+
+- You run Raspberry Pi services with `systemd`
+- You can inspect logs and edit TOML
+- You are willing to start with dry-run mode
+
+Do not use yet if:
+
+- You need unattended production recovery from day one
+- Unexpected reboot would be dangerous
+- You cannot access the machine physically or via fallback path
+
+## 15-Minute Quickstart (Beta)
+
+1. install
+
+```bash
+pipx install "git+https://github.com/yukimurata0421/raspi-sentinel.git@main"
+```
+
+2. copy minimal config
+
+```bash
+sudo install -d -m 0755 /etc/raspi-sentinel
+sudo install -m 0600 -o root -g root config/raspi-sentinel.example.toml /etc/raspi-sentinel/config.toml
+```
+
+3. validate config
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
+```
+
+4. run doctor
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json
+```
+
+5. run one dry-run cycle
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml --dry-run run-once --json
+```
+
+6. inject one sample failure
+
+```bash
+python3 scripts/failure_inject.py stale-file --path /tmp/heartbeat.txt --age-sec 900
+```
+
+7. inspect events and state
+
+```bash
+tail -n 20 /var/lib/raspi-sentinel/events.jsonl
+cat /var/lib/raspi-sentinel/state.json
+```
+
+8. disable timer / stop trial
+
+```bash
+sudo systemctl disable --now raspi-sentinel.timer
+```
+
+## Known Limitations / Non-goals
+
+- Not a replacement for hardware watchdog
+- Not a fleet monitoring system
+- Not tested on every Raspberry Pi OS release
+- Reboot action should be enabled only after dry-run verification
+- Discord webhook must be protected
+
 ## Responsibility Boundary
 
 This section defines what `raspi-sentinel` is responsible for and what remains outside of its scope.
@@ -596,6 +670,12 @@ Apply secure config ownership/mode from doctor:
 sudo raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json --fix-permissions
 ```
 
+Write sanitized support bundle for beta issue reports:
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json --support-bundle ./support-bundle.json
+```
+
 `doctor --json` includes `network_only_failures_excluded_from_reboot` (expected `true` in default policy).
 `network_only_failures_can_reboot` is kept as a compatibility field in `v0.8.x` and is planned for removal in `v1.0.0`.
 
@@ -671,6 +751,12 @@ Test ownership map:
 - [docs/facts/test-map.md](docs/facts/test-map.md)
 - [docs/UPGRADE.md](docs/UPGRADE.md)
 - [SECURITY.md](SECURITY.md)
+
+## Beta Feedback
+
+- Use the GitHub issue form: `Beta failure report`
+- Include command history, expected vs actual behavior, and doctor/support-bundle output
+- Do not include secrets (webhook URLs, tokens, private host details)
 
 New test taxonomy (new files only):
 

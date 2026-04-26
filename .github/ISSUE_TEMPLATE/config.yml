@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security issue (private)
+    url: https://github.com/yukimurata0421/raspi-sentinel/security/advisories/new
+    about: Do not post secrets or vulnerabilities in public issues.

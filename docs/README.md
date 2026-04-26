@@ -29,6 +29,9 @@ This index is the entry point for operational and design documentation of `raspi
 - [Upgrade Guide (JA)](UPGRADE.ja.md)
 - [Security Policy](../SECURITY.md)
 - [Security Policy (JA)](SECURITY.ja.md)
+- Beta issue intake:
+  - `.github/ISSUE_TEMPLATE/beta-failure-report.yml`
+  - `.github/labels.yml`
 
 ## Historical Notes
 

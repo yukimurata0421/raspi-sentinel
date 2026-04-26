@@ -30,6 +30,11 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - added `SECURITY.md` (+ `docs/SECURITY.ja.md`).
   - added upgrade guides (`docs/UPGRADE.md`, `docs/UPGRADE.ja.md`).
   - added PyPI publish workflow (`.github/workflows/pypi.yml`).
+- open beta preparation:
+  - added `Open Beta: v0.9.x` landing + 15-minute quickstart in README/README.ja.
+  - added known limitations/non-goals section for beta entry.
+  - added GitHub issue form + label taxonomy files for beta feedback intake.
+  - added `doctor --support-bundle` for sanitized support bundle generation.
 
 ## [0.8.0] - 2026-04-26
 

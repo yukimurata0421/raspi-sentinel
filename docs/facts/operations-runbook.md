@@ -218,7 +218,29 @@ Preview only:
 raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json --fix-permissions --fix-permissions-dry-run
 ```
 
-## 10. Failure Injection (Sample)
+## 10. Support Bundle for Issue Reports
+
+Create sanitized support bundle:
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json \
+  --support-bundle ./support-bundle.json
+```
+
+Bundle includes:
+
+- version/platform/systemd metadata
+- doctor/config validation/state summaries
+- storage tier summary
+- recent events summary
+
+Bundle does not intentionally preserve raw secrets:
+
+- webhook credentials
+- auth headers/bearer token patterns
+- `/home/<user>` style personal path segments
+
+## 11. Failure Injection (Sample)
 
 Use helper script for controlled test scenarios:
 

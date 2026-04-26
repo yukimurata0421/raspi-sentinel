@@ -491,6 +491,73 @@ def test_doctor_fix_permissions_dry_run_includes_actions(
     assert payload["fix_permissions"]["actions"]
 
 
+def test_doctor_support_bundle_writes_sanitized_payload(
+    tmp_path: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    conf = tmp_path / "config.toml"
+    events_file = tmp_path / "events.jsonl"
+    support_bundle = tmp_path / "bundle.json"
+    events_file.write_text(
+        json.dumps(
+            {
+                "kind": "notify_delivery_failed",
+                "reason": "command_failed",
+                "detail": "Authorization: Bearer secret-token",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _write(
+        conf,
+        f"""
+        [global]
+        state_file = "/tmp/state.json"
+        events_file = "{events_file}"
+        restart_threshold = 2
+        reboot_threshold = 3
+        restart_cooldown_sec = 10
+        reboot_cooldown_sec = 20
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 60
+        default_command_timeout_sec = 5
+        loop_interval_sec = 30
+
+        [notify.discord]
+        enabled = true
+        webhook_url = "https://user:pass@example.invalid/hook?token=abcd"
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "demo"
+        services = []
+        service_active = false
+        command = "echo Authorization: Bearer secret-token"
+        """,
+    )
+    rc = cli.main(
+        [
+            "-c",
+            str(conf),
+            "doctor",
+            "--json",
+            "--support-bundle",
+            str(support_bundle),
+        ]
+    )
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["support_bundle_path"] == str(support_bundle)
+    bundle_text = support_bundle.read_text(encoding="utf-8")
+    assert "secret-token" not in bundle_text
+    assert "user:pass" not in bundle_text
+    assert "token=abcd" not in bundle_text
+
+
 def test_explain_state_json_includes_schema_and_target_view(
     tmp_path: Path, monkeypatch: Any, capsys: Any
 ) -> None:

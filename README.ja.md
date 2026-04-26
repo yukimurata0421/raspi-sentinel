@@ -3,6 +3,80 @@
 `raspi-sentinel` は Raspberry Pi 上の `systemd` 管理サービスを監視し、
 `warn -> restart -> reboot` の段階的リカバリを行う小さな監視/復旧レイヤーです。
 
+## Open Beta: v0.9.x
+
+試してほしい人:
+
+- `systemd` で Raspberry Pi サービスを運用している
+- ログ確認と TOML 編集ができる
+- まず dry-run から始められる
+
+まだ使うべきではない人:
+
+- 初日から無人本番復旧が必要
+- 想定外 reboot が危険
+- 物理または代替経路でマシンへアクセスできない
+
+## 15分クイックスタート（beta）
+
+1. install
+
+```bash
+pipx install "git+https://github.com/yukimurata0421/raspi-sentinel.git@main"
+```
+
+2. 最小 config 配置
+
+```bash
+sudo install -d -m 0755 /etc/raspi-sentinel
+sudo install -m 0600 -o root -g root config/raspi-sentinel.example.toml /etc/raspi-sentinel/config.toml
+```
+
+3. validate-config
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
+```
+
+4. doctor
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json
+```
+
+5. run-once --dry-run --json
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml --dry-run run-once --json
+```
+
+6. サンプル障害注入
+
+```bash
+python3 scripts/failure_inject.py stale-file --path /tmp/heartbeat.txt --age-sec 900
+```
+
+7. events/state 確認
+
+```bash
+tail -n 20 /var/lib/raspi-sentinel/events.jsonl
+cat /var/lib/raspi-sentinel/state.json
+```
+
+8. disable
+
+```bash
+sudo systemctl disable --now raspi-sentinel.timer
+```
+
+## 既知の制約 / 非目標
+
+- ハードウェア watchdog の代替ではない
+- フリート監視システムではない
+- すべての Raspberry Pi OS リリースで検証済みではない
+- reboot は dry-run 検証後に有効化すべき
+- Discord webhook は必ず保護する
+
 ## 責務境界
 
 この節では `raspi-sentinel` の責務と、責務外（任意連携）の境界を示します。
@@ -120,6 +194,12 @@ bash scripts/prepush_check.sh
 sudo raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json --fix-permissions
 ```
 
+サポートバンドル出力（beta報告向け、秘匿情報マスク）:
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json --support-bundle ./support-bundle.json
+```
+
 JSONログが必要な場合:
 
 ```bash
@@ -137,5 +217,11 @@ raspi-sentinel --structured-logging -c /etc/raspi-sentinel/config.toml run-once
 - リリースノート: [docs/release-notes/v0.8.0.md](docs/release-notes/v0.8.0.md)
 - アップグレードガイド: [docs/UPGRADE.ja.md](docs/UPGRADE.ja.md)
 - セキュリティポリシー: [docs/SECURITY.ja.md](docs/SECURITY.ja.md)
+
+## Beta フィードバック
+
+- GitHub の `Beta failure report` フォームを使用
+- 実行コマンド、期待結果、実際結果、doctor/support-bundle を添付
+- webhook URL・token・個人識別情報は貼り付けない
 
 テストは `tests/unit/` `tests/scenario/` `tests/e2e/` の taxonomy で運用します。

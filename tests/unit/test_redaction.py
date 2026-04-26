@@ -19,3 +19,9 @@ def test_redact_text_masks_auth_headers_and_bearer_tokens() -> None:
     assert "supersecret" not in redacted
     assert "Authorization: ***" in redacted
     assert "X-API-Key: ***" in redacted
+
+
+def test_redact_text_masks_home_path_segment() -> None:
+    redacted = redact_text("/home/yuki/private/config.toml")
+    assert "/home/yuki/" not in redacted
+    assert "/home/<redacted>/" in redacted

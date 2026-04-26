@@ -6,10 +6,12 @@ import os
 from pathlib import Path
 
 import pytest
+from conftest import make_app_config
 
 from raspi_sentinel.diagnostics import (
     _config_permission_status,
     _load_last_run_status,
+    build_support_bundle,
     fix_config_permissions,
 )
 
@@ -71,3 +73,37 @@ def test_fix_config_permissions_dry_run_no_change(tmp_path: Path) -> None:
     assert result["status"] == "dry-run"
     mode = os.stat(conf).st_mode & 0o777
     assert mode == 0o644
+
+
+def test_build_support_bundle_redacts_sensitive_strings(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("dummy", encoding="utf-8")
+    events_file = tmp_path / "events.jsonl"
+    events_file.write_text(
+        json.dumps(
+            {
+                "kind": "notify_delivery_failed",
+                "reason": "command_failed",
+                "detail": "Authorization: Bearer secret-token /home/yuki/private",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    config = make_app_config(
+        global_overrides={
+            "events_file": events_file,
+            "state_file": tmp_path / "state.json",
+            "monitor_stats_file": tmp_path / "stats.json",
+        },
+        discord_overrides={
+            "enabled": True,
+            "webhook_url": "https://user:pass@example.invalid/hook?token=abcd",
+        },
+    )
+    bundle = build_support_bundle(config_path=config_path, config=config)
+    serialized = json.dumps(bundle, ensure_ascii=False)
+    assert "secret-token" not in serialized
+    assert "user:pass" not in serialized
+    assert "token=abcd" not in serialized
+    assert "/home/yuki/" not in serialized

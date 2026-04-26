@@ -1,0 +1,66 @@
+name: Beta failure report
+description: Report an install, config, runtime, or recovery issue during v0.9.x beta.
+title: "[beta] "
+labels:
+  - beta-feedback
+  - needs-repro
+body:
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - install
+        - validate-config / doctor
+        - dry-run
+        - systemd timer
+        - recovery policy
+        - notification
+        - docs
+        - other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: raspi-sentinel version
+      placeholder: "0.9.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Pi model, OS, Python version, systemd version, install method
+    validations:
+      required: true
+
+  - type: textarea
+    id: commands
+    attributes:
+      label: Commands run
+      description: Paste exact commands
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: doctor / validate-config output
+      description: Redact webhook URLs, tokens, hostnames if needed.

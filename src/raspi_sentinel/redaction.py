@@ -12,6 +12,7 @@ _AUTH_HEADER_RE = re.compile(
     re.IGNORECASE,
 )
 _BEARER_RE = re.compile(r"(bearer\s+)([A-Za-z0-9\-._~+/=]+)", re.IGNORECASE)
+_HOME_PATH_RE = re.compile(r"/home/[^/\s]+")
 
 
 def redact_text(text: str) -> str:
@@ -19,6 +20,7 @@ def redact_text(text: str) -> str:
     redacted = _URL_CREDENTIALS_RE.sub(r"\1***:***@", redacted)
     redacted = _QUERY_SECRET_RE.sub(r"\1***", redacted)
     redacted = _AUTH_HEADER_RE.sub(r"\1***", redacted)
+    redacted = _HOME_PATH_RE.sub("/home/<redacted>", redacted)
     return redacted
 
 

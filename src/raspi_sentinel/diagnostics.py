@@ -3,17 +3,23 @@ from __future__ import annotations
 import json
 import logging
 import os
+import platform
 import stat
 import subprocess
+import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
+from ._version import __version__
 from .config import AppConfig
+from .config_summary import build_config_validation_report
 from .contracts import ALLOWED_TARGET_STATUS, STATS_SCHEMA_VERSION
 from .recovery import (
     network_only_failures_can_reboot,
     network_only_failures_excluded_from_reboot,
 )
+from .redaction import redact_text
 from .state import TieredStateStore, is_storage_tiering_enabled
 from .storage_verify import verify_tmpfs_storage
 
@@ -199,3 +205,119 @@ def build_explain_state_report(config: AppConfig) -> dict[str, object]:
         "followups_count": len(state.followups),
         "targets": targets,
     }
+
+
+def _sanitize_bundle_value(value: object) -> object:
+    if isinstance(value, str):
+        return redact_text(value)
+    if isinstance(value, dict):
+        return {k: _sanitize_bundle_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_bundle_value(v) for v in value]
+    return value
+
+
+def _read_os_release() -> dict[str, str]:
+    os_release = Path("/etc/os-release")
+    if not os_release.exists():
+        return {}
+    data: dict[str, str] = {}
+    for line in os_release.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        data[key] = value.strip().strip('"')
+    return data
+
+
+def _systemd_version() -> str | None:
+    try:
+        result = subprocess.run(
+            ["systemctl", "--version"],
+            check=False,
+            timeout=3,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    first_line = (result.stdout or "").splitlines()
+    if not first_line:
+        return None
+    return first_line[0].strip()
+
+
+def _recent_events_summary(events_file: Path, *, max_lines: int = 200) -> dict[str, object]:
+    if not events_file.exists():
+        return {"events_file_exists": False, "events_sample_count": 0}
+    try:
+        lines = events_file.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        return {
+            "events_file_exists": True,
+            "events_read_error": str(exc),
+            "events_sample_count": 0,
+        }
+    tail = lines[-max_lines:]
+    kind_counts: dict[str, int] = {}
+    reason_counts: dict[str, int] = {}
+    for line in tail:
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        kind = record.get("kind")
+        if isinstance(kind, str):
+            kind_counts[kind] = kind_counts.get(kind, 0) + 1
+        reason = record.get("reason")
+        if isinstance(reason, str):
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+    return {
+        "events_file_exists": True,
+        "events_sample_count": len(tail),
+        "kind_counts": kind_counts,
+        "reason_counts": reason_counts,
+    }
+
+
+def build_support_bundle(config_path: Path, config: AppConfig) -> dict[str, object]:
+    doctor_report = build_doctor_report(config_path=config_path, config=config)
+    explain_state = build_explain_state_report(config=config)
+    validation_report = build_config_validation_report(config_path=config_path, config=config)
+    last_run_result, last_run_schema = _load_last_run_status(
+        config.global_config.monitor_stats_file
+    )
+    bundle: dict[str, object] = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "raspi_sentinel_version": __version__,
+        "python_version": platform.python_version(),
+        "platform": {
+            "system": platform.system(),
+            "release": platform.release(),
+            "machine": platform.machine(),
+            "os_release": _read_os_release(),
+            "systemd_version": _systemd_version(),
+            "argv0": sys.argv[0] if sys.argv else None,
+        },
+        "config_path": str(config_path),
+        "doctor": doctor_report,
+        "config_validation": validation_report,
+        "state": explain_state,
+        "storage_tier": {
+            "require_tmpfs": config.global_config.storage_require_tmpfs,
+            "state_durable_file": (
+                str(config.global_config.state_durable_file)
+                if config.global_config.state_durable_file is not None
+                else None
+            ),
+            "state_durable_fields": list(config.global_config.state_durable_fields),
+        },
+        "events_summary": _recent_events_summary(config.global_config.events_file),
+        "last_result_from_monitor_stats": {
+            "status": last_run_result,
+            "stats_schema_version": last_run_schema,
+            "note": "This reflects monitor stats snapshot, not a newly executed dry-run cycle.",
+        },
+    }
+    return _sanitize_bundle_value(bundle)  # type: ignore[return-value]

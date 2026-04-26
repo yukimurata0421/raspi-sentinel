@@ -8,7 +8,12 @@ from pathlib import Path
 
 from .config import AppConfig, load_config
 from .config_summary import build_config_validation_report, format_config_validation_report
-from .diagnostics import build_doctor_report, build_explain_state_report, fix_config_permissions
+from .diagnostics import (
+    build_doctor_report,
+    build_explain_state_report,
+    build_support_bundle,
+    fix_config_permissions,
+)
 from .engine import CycleReport, run_cycle_collect
 from .exit_codes import (
     CONFIG_LOAD_FAILED,
@@ -139,6 +144,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Show config permission fix actions without applying them",
     )
+    doctor_parser.add_argument(
+        "--support-bundle",
+        type=Path,
+        default=None,
+        help="Write sanitized support bundle JSON to the specified path",
+    )
     explain_state_parser = sub.add_parser(
         "explain-state",
         help="Print a concise view of persisted runtime state and diagnostics",
@@ -213,6 +224,13 @@ def main(argv: list[str] | None = None) -> int:
                 config_path=args.config,
                 dry_run=args.fix_permissions_dry_run,
             )
+        if args.support_bundle is not None:
+            bundle = build_support_bundle(config_path=args.config, config=config)
+            args.support_bundle.parent.mkdir(parents=True, exist_ok=True)
+            args.support_bundle.write_text(
+                json.dumps(bundle, indent=2, sort_keys=True), encoding="utf-8"
+            )
+            doctor_report["support_bundle_path"] = str(args.support_bundle)
         print(json.dumps(doctor_report, indent=2, sort_keys=True))
         return 0
     if args.command == "explain-state":

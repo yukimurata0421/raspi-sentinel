@@ -2,7 +2,11 @@
 
 ## Supported Versions
 
-Security fixes are applied to the latest release line (`v0.8.x` at this time).
+Security fixes are applied to:
+
+- `v0.9.x` open beta line
+- latest stable release line
+
 Older tags may not receive backported fixes.
 
 ## Reporting a Vulnerability
@@ -21,12 +25,17 @@ Include:
 - impact scope
 - logs/sanitized evidence
 
+Do not post webhook URLs or secrets in public issues.
+Public issues are acceptable for non-sensitive functional bugs.
+
 ## Disclosure and Fix Policy
 
 1. Acknowledge report and reproduce.
 2. Prepare fix and regression test.
 3. Publish patched release and release notes.
 4. Disclose details after fix is available.
+
+Response policy: best effort, no formal SLA.
 
 ## Operational Security Notes
 
