@@ -16,10 +16,11 @@ warn -> restart services -> guarded reboot
 
 Japanese guide: [README.ja.md](README.ja.md)
 
-## Open Beta Preview: v0.9.x (Upcoming)
+## Open Beta: v0.9.x
 
-`v0.9.x` is the next planned open beta line before `v1.0.0`.
-Current released line is `v0.8.0`.
+`v0.9.x` is the open beta line before `v1.0.0`.
+Current stable released line is `v0.8.x`.
+Release target for this cycle is `v0.9.0`.
 
 Who should try this:
 
@@ -49,9 +50,9 @@ git checkout v0.8.0
 
 For `v0.8.0` usage details, follow the README included in that tag.
 
-### Upcoming beta preview: `main`
+### Open beta line (`v0.9.x`)
 
-Use this only before `v0.9.0` is tagged:
+Before `v0.9.0` tag is published, use:
 
 ```bash
 git clone https://github.com/yukimurata0421/raspi-sentinel.git
@@ -59,7 +60,7 @@ cd raspi-sentinel
 git checkout main
 ```
 
-After `v0.9.0` is tagged, beta quickstart steps should use `git checkout v0.9.0` for reproducibility.
+After `v0.9.0` is tagged, always use `git checkout v0.9.0` for reproducibility.
 
 ## What This Does
 
@@ -105,7 +106,7 @@ Why this matters:
 
 ## 15-Minute Beta Demo (Non-root Friendly)
 
-### 1. Clone beta preview line
+### 1. Clone beta line
 
 ```bash
 git clone https://github.com/yukimurata0421/raspi-sentinel.git
@@ -113,7 +114,7 @@ cd raspi-sentinel
 git checkout main
 ```
 
-This beta demo relies on files that are in the upcoming beta preview line (`main`) before `v0.9.0` is tagged.
+This beta demo relies on `v0.9.x` line files. Before the `v0.9.0` tag is published, use `main`.
 
 ### 2. Install
 
@@ -250,7 +251,7 @@ Use `--send-notifications` only when you intentionally want notification path te
 When running under the bundled systemd service, `ProtectHome=true` is enabled.
 Paths under `/home` can work in manual CLI dry-run but fail when timer execution starts.
 
-## Feedback Wanted (v0.9.x Upcoming)
+## Feedback Wanted (v0.9.x Open Beta)
 
 Please report:
 
@@ -302,8 +303,8 @@ Tests and CI details: [docs/facts/test-map.md](docs/facts/test-map.md)
 
 ## Versioning
 
-Current line: `v0.8.x` stable release.
-Next planned line: `v0.9.x` open beta.
+Current stable line: `v0.8.x`.
+Open beta line: `v0.9.x`.
 
 See:
 

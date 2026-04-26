@@ -5,7 +5,7 @@
 Security fixes are applied to:
 
 - the latest released stable tag in the `v0.8.x` line (currently `v0.8.0`)
-- the `v0.9.x` open beta line once published
+- the `v0.9.x` open beta line (starting from `v0.9.0`)
 
 Older tags may not receive backported fixes.
 For interim fixes before the next release tag, track `main`.

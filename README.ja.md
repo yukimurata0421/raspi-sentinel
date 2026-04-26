@@ -6,7 +6,8 @@
 warn -> restart services -> guarded reboot
 ```
 
-`v0.9.x` は次期 open beta（準備中）です。現行のリリースラインは `v0.8.0` です。
+`v0.9.x` は open beta ラインです。現行 stable リリースラインは `v0.8.x` です。
+今回のリリース対象は `v0.9.0` です。
 
 詳細仕様は英語 README と `docs/` に分離しています。ここでは「安全に試して報告する入口」に絞ります。
 
@@ -38,9 +39,9 @@ git checkout v0.8.0
 
 `v0.8.0` の運用手順は、そのタグに含まれる README を参照してください。
 
-### 次期 beta プレビュー: `main`
+### open beta ライン（`v0.9.x`）
 
-`v0.9.0` タグ作成前のプレビューを試す場合のみ:
+`v0.9.0` タグ公開前は `main` を利用してください:
 
 ```bash
 git clone https://github.com/yukimurata0421/raspi-sentinel.git
@@ -48,11 +49,11 @@ cd raspi-sentinel
 git checkout main
 ```
 
-`v0.9.0` タグ公開後は、再現性のため `git checkout v0.9.0` を使用してください。
+`v0.9.0` タグ公開後は、再現性のため必ず `git checkout v0.9.0` を使用してください。
 
 ## 15分ベータデモ
 
-### 1. beta プレビューラインを clone
+### 1. beta ラインを clone
 
 ```bash
 git clone https://github.com/yukimurata0421/raspi-sentinel.git
@@ -60,7 +61,7 @@ cd raspi-sentinel
 git checkout main
 ```
 
-このベータデモは、`v0.9.0` タグ前の beta プレビュー資材（`main`）を前提にしています。
+このベータデモは `v0.9.x` ライン前提です。`v0.9.0` タグ公開前は `main` を使います。
 
 ### 2. install
 

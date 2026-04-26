@@ -3,7 +3,7 @@
 このガイドは次の 2 つを対象にしています。
 
 - Track A: `v0.7.x` から現行 stable (`v0.8.x`) への更新
-- Track B: `v0.8.x` 環境で次期 `v0.9.x` open beta の検証準備
+- Track B: `v0.8.x` 環境で `v0.9.x` open beta の検証準備
 
 ## 事前チェック
 
@@ -23,7 +23,7 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
 3. 対象タグのリリースノート確認:
 
 - `docs/release-notes/v0.8.0.md`
-- `docs/release-notes/v0.9.0.md`（次期 beta のドラフト）
+- `docs/release-notes/v0.9.0.md`（open beta リリースノート）
 
 ## v0.8.x の主な変更点
 
@@ -34,7 +34,7 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
 
 ## Track B: v0.8.x -> v0.9.x open beta 準備
 
-- `v0.9.x` はまだドラフト段階なので、導入前に `main` で挙動を検証してから適用
+- `v0.9.0` タグ公開前は、導入前に `main` で挙動を検証してから適用
 - recovery action は dry-run の観測が安定するまで保守的に維持
 - config 権限 (`0600`) を維持し、設定変更後に `doctor --json` を再実行
 

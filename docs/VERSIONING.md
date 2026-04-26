@@ -31,7 +31,7 @@ A lightweight git tag **`v0.2.0`** may exist from an intermediate snapshot. Ther
 Current state:
 
 - latest stable tag line: **`v0.8.x`**
-- working tree/package version: **`0.9.0`** for open beta release preparation
+- open beta line: **`v0.9.x`** (current release target: **`v0.9.0`**)
 
 ## Release checklist
 

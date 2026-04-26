@@ -3,7 +3,7 @@
 This guide has two tracks:
 
 - Track A: upgrade existing `v0.7.x` installs to current stable (`v0.8.x`)
-- Track B: prepare `v0.8.x` environments for upcoming `v0.9.x` open beta validation
+- Track B: prepare `v0.8.x` environments for `v0.9.x` open beta validation
 
 ## Pre-upgrade checklist
 
@@ -23,7 +23,7 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
 3. Confirm release notes for target tag:
 
 - `docs/release-notes/v0.8.0.md`
-- `docs/release-notes/v0.9.0.md` (draft for upcoming beta line)
+- `docs/release-notes/v0.9.0.md` (open beta release notes)
 
 ## Runtime behavior changes in v0.8.x
 
@@ -34,7 +34,7 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
 
 ## Track B: v0.8.x -> v0.9.x open beta preparation
 
-- `v0.9.x` notes are currently draft-first; validate against `main` before rollout.
+- if `v0.9.0` tag is not published yet, validate against `main` before rollout.
 - keep recovery actions conservative until dry-run evidence is stable on your host.
 - preserve `0600` config ownership and rerun `doctor --json` after each config/profile change.
 
