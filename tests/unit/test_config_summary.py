@@ -232,3 +232,34 @@ def test_config_summary_does_not_warn_when_require_tmpfs_uses_run_state_path(
         "storage.require_tmpfs=true but state_volatile path is not under /run" in warning
         for warning in report.get("global_warnings", [])
     )
+
+
+def test_check_service_unit_load_state_returns_none_when_systemctl_missing(
+    monkeypatch: Any,
+) -> None:
+    def raise_not_found(*args: Any, **kwargs: Any) -> None:
+        del args
+        del kwargs
+        raise FileNotFoundError("systemctl not found")
+
+    monkeypatch.setattr(config_summary.subprocess, "run", raise_not_found)
+    assert config_summary._check_service_unit_load_state("demo.service") is None
+
+
+def test_check_service_unit_load_state_returns_unknown_on_oserror(monkeypatch: Any) -> None:
+    def raise_oserror(*args: Any, **kwargs: Any) -> None:
+        del args
+        del kwargs
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(config_summary.subprocess, "run", raise_oserror)
+    assert config_summary._check_service_unit_load_state("demo.service") == "unknown"
+
+
+def test_count_warnings_ignores_non_list_target_warning_field() -> None:
+    count = config_summary._count_warnings_from_target_summaries(
+        target_summaries=[{"warnings": "not-a-list"}, {"warnings": ["a", "b"]}],
+        config_permission_warning="warn",
+        global_warnings=["g1"],
+    )
+    assert count == 4

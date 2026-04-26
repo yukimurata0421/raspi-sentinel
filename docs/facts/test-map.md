@@ -16,6 +16,7 @@ Representative coverage by behavior:
 - policy and state transition tests: classification/escalation behavior, cycle-level transition semantics
 - persistence and snapshot tests: state/event persistence paths and snapshot/status serialization
 - CLI and packaging smoke tests: entrypoint behavior and version/package contract
+- operational tooling tests: deployment helper control flow (`scripts/deploy_pi5_guard.py`) rollback/mode gates
 
 ## Taxonomy Usage
 
