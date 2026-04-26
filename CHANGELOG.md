@@ -8,6 +8,12 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ### Changed
 
+- Nothing yet.
+
+## [0.9.0] - 2026-04-26
+
+### Changed
+
 - versioning/docs alignment:
   - bumped canonical package version to `0.9.0` in `src/raspi_sentinel/_version.py` for open-beta release prep.
   - README/README.ja now describe `v0.9.x` as upcoming beta preview and keep current release on `v0.8.x`.

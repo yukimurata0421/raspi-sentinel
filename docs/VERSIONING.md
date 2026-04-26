@@ -57,6 +57,11 @@ For open beta releases, use this order:
 2. GitHub Release publish
 3. Production PyPI publish via Trusted Publisher
 
+Workflow behavior:
+
+- publishing a GitHub Release triggers production PyPI workflow (`pypi.yml`, `release: published`).
+- manual `workflow_dispatch` supports explicit TestPyPI/PyPI runs for rehearsal or recovery.
+
 Why:
 
 - reduces install friction for external testers
