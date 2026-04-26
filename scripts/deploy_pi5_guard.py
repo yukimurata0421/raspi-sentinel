@@ -125,7 +125,7 @@ def _switch_release(
         "set -euo pipefail; "
         f"sudo -n rm -rf {shlex.quote(backup_dir)}; "
         f"sudo -n cp -a /opt/raspi-sentinel {shlex.quote(backup_dir)}; "
-        f"sudo -n rsync -az --delete {shlex.quote(stage_dir)}/ /opt/raspi-sentinel/"
+        f"sudo -n rsync -az --delete --exclude .venv/ {shlex.quote(stage_dir)}/ /opt/raspi-sentinel/"
     )
     result = _run_ssh(host, remote_cmd, dry_run=dry_run)
     _require_ok(result, what="switch release", command=remote_cmd, dry_run=dry_run)
@@ -138,14 +138,15 @@ def _post_deploy_health_gate(host: str, *, dry_run: bool) -> None:
             "post-deploy validate-config",
             (
                 "cd /opt/raspi-sentinel && "
-                "sudo -n .venv/bin/raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config"
+                "sudo -n .venv/bin/python -m raspi_sentinel "
+                "-c /etc/raspi-sentinel/config.toml validate-config"
             ),
         ),
         (
             "post-deploy dry-run cycle",
             (
                 "cd /opt/raspi-sentinel && "
-                "sudo -n .venv/bin/raspi-sentinel "
+                "sudo -n .venv/bin/python -m raspi_sentinel "
                 "-c /etc/raspi-sentinel/config.toml --dry-run run-once --json"
             ),
         ),
@@ -153,7 +154,7 @@ def _post_deploy_health_gate(host: str, *, dry_run: bool) -> None:
             "post-deploy live cycle",
             (
                 "cd /opt/raspi-sentinel && "
-                "sudo -n .venv/bin/raspi-sentinel "
+                "sudo -n .venv/bin/python -m raspi_sentinel "
                 "-c /etc/raspi-sentinel/config.toml run-once --json"
             ),
         ),
@@ -215,7 +216,9 @@ def main(argv: list[str] | None = None) -> int:
         _preflight(args.host, dry_run=args.dry_run)
         mkdir_cmd = f"mkdir -p {shlex.quote(stage_dir)}"
         result = _run_ssh(args.host, mkdir_cmd, dry_run=args.dry_run)
-        _require_ok(result, what="create staging directory", command=mkdir_cmd, dry_run=args.dry_run)
+        _require_ok(
+            result, what="create staging directory", command=mkdir_cmd, dry_run=args.dry_run
+        )
         _rsync_to_stage(local_root, args.host, stage_dir, dry_run=args.dry_run)
         if args.mode == "safe":
             _run_stage_validation(args.host, stage_dir, dry_run=args.dry_run)

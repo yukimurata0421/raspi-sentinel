@@ -145,6 +145,29 @@ def test_rollback_raises_when_backup_missing(
         deploy_mod._rollback("pi5-guard@pi5-guard", "/opt/missing", dry_run=False)
 
 
+def test_switch_release_excludes_venv_from_delete(
+    deploy_mod: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen_cmd: list[str] = []
+
+    def fake_run_ssh(host: str, remote_cmd: str, *, dry_run: bool) -> Any:
+        del host
+        del dry_run
+        seen_cmd.append(remote_cmd)
+        return deploy_mod.subprocess.CompletedProcess(["ssh"], 0, "", "")
+
+    monkeypatch.setattr(deploy_mod, "_run_ssh", fake_run_ssh)
+    backup_dir = deploy_mod._switch_release(
+        "pi5-guard@pi5-guard",
+        "/tmp/stage",
+        release_id="20260426T111111",
+        dry_run=False,
+    )
+    assert backup_dir == "/opt/raspi-sentinel.rollback.20260426T111111"
+    assert seen_cmd
+    assert "--exclude .venv/" in seen_cmd[0]
+
+
 def test_main_safe_mode_runs_stage_validation(
     deploy_mod: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
