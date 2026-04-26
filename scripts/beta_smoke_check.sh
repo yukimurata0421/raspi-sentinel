@@ -27,7 +27,10 @@ PYTHONPATH=src "${PYTHON_BIN}" -m raspi_sentinel.cli \
   -c config/raspi-sentinel.beta-demo.toml \
   --dry-run run-once --json >/dev/null
 
-BIN_PATH="$("${PYTHON_BIN}" -m shutil which raspi-sentinel)"
+BIN_PATH="$(command -v raspi-sentinel || true)"
+if [[ -n "${BIN_PATH}" && "${BIN_PATH}" != /* ]]; then
+  BIN_PATH="$(cd "$(dirname "${BIN_PATH}")" && pwd)/$(basename "${BIN_PATH}")"
+fi
 if [[ -z "${BIN_PATH}" ]]; then
   BIN_PATH="/usr/bin/raspi-sentinel"
   echo "warning: raspi-sentinel binary not found in PATH, using ${BIN_PATH} for render smoke check"

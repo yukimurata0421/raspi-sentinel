@@ -393,7 +393,7 @@ def test_run_cycle_allows_notifications_in_dry_run_when_opted_in(
     assert calls
 
 
-def test_record_state_load_issue_event_omits_reason_when_no_detail(tmp_path: Path) -> None:
+def test_record_state_load_issue_event_uses_fallback_reason_when_no_detail(tmp_path: Path) -> None:
     events_file = tmp_path / "events.jsonl"
     diagnostics = StateLoadDiagnostics(
         state_corrupted=True,
@@ -408,4 +408,4 @@ def test_record_state_load_issue_event_omits_reason_when_no_detail(tmp_path: Pat
     )
     event = json.loads(events_file.read_text(encoding="utf-8").strip())
     assert event["kind"] == "state_corrupted"
-    assert "reason" not in event
+    assert event["reason"] == "state load issue"

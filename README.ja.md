@@ -24,9 +24,11 @@ warn -> restart services -> guarded reboot
 - 物理または代替アクセス手段がない環境
 - 複数台集中監視ダッシュボードを求めている環境
 
-## 15分ベータデモ
+## どのバージョンを使うか
 
-### 1. 現行 release tag を clone
+### stable: `v0.8.0`
+
+現行のリリース版を使う場合:
 
 ```bash
 git clone https://github.com/yukimurata0421/raspi-sentinel.git
@@ -34,7 +36,31 @@ cd raspi-sentinel
 git checkout v0.8.0
 ```
 
-次期 beta のドラフト動作を試す場合のみ `main` を使用してください。
+`v0.8.0` の運用手順は、そのタグに含まれる README を参照してください。
+
+### 次期 beta プレビュー: `main`
+
+`v0.9.0` タグ作成前のプレビューを試す場合のみ:
+
+```bash
+git clone https://github.com/yukimurata0421/raspi-sentinel.git
+cd raspi-sentinel
+git checkout main
+```
+
+`v0.9.0` タグ公開後は、再現性のため `git checkout v0.9.0` を使用してください。
+
+## 15分ベータデモ
+
+### 1. beta プレビューラインを clone
+
+```bash
+git clone https://github.com/yukimurata0421/raspi-sentinel.git
+cd raspi-sentinel
+git checkout main
+```
+
+このベータデモは、`v0.9.0` タグ前の beta プレビュー資材（`main`）を前提にしています。
 `v0.9.0` タグを切る前には、`docs/release-notes/v0.9.0.md` の `# Draft:` / `Planned release:` マーカーを削除してください（release workflow で検証されます）。
 
 ### 2. install

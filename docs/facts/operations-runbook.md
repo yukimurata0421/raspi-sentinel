@@ -120,6 +120,7 @@ HTTP probe notes:
 - Treat command fields as trusted admin input only.
 - Use `*_use_shell=true` only where shell syntax is required.
 - If `state.json` is corrupt, the cycle runs in limited mode and records `state_corrupted` event.
+- Corrupt state quarantine files use suffix slots up to `.99` per timestamp; if saturated, quarantine is skipped and error is logged.
 
 ## 6. Notification Delivery Outage Runbook
 

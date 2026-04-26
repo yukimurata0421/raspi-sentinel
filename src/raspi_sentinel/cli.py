@@ -143,6 +143,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=0,
         help="Expected mount directory owner gid (default: 0)",
     )
+    verify_storage_parser.add_argument(
+        "--no-cooldown",
+        action="store_true",
+        help="Skip post-verify cooldown sleep for ad-hoc CLI checks",
+    )
     doctor_parser = sub.add_parser(
         "doctor",
         help="Run operator-facing environment checks (config, storage, systemd, thresholds)",
@@ -237,6 +242,7 @@ def main(argv: list[str] | None = None) -> int:
             expected_mode=args.expected_mode,
             expected_owner_uid=args.expected_owner_uid,
             expected_owner_gid=args.expected_owner_gid,
+            apply_cooldown=not args.no_cooldown,
         )
         if args.json:
             print(json.dumps(verify_result.to_dict(), indent=2, sort_keys=True))

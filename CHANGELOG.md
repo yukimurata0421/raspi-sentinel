@@ -10,6 +10,7 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 - versioning/docs alignment:
   - README/README.ja now describe `v0.9.x` as upcoming beta preview and keep current release on `v0.8.x`.
+  - README/README.ja now separate stable (`v0.8.0`) checkout guidance from upcoming beta preview (`main`) so beta-demo files are not referenced from stable-tag flow.
   - UPGRADE / VERSIONING / docs index now explicitly separate current stable vs next beta draft lines.
   - README feedback section wording now consistently uses `Upcoming` terminology for `v0.9.x`.
   - UPGRADE guides now use explicit track split (stable upgrade track vs beta-prep track) and include concrete rollback command examples.
@@ -37,11 +38,16 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
     instead of asserting historical fixed deploy paths.
   - added `scripts/beta_smoke_check.sh` for beta readiness validation
     (lint/type subset/tests + demo config + install helper dry-run).
+  - `beta_smoke_check.sh` now resolves `raspi-sentinel` binary path using shell `command -v` with absolute-path normalization.
+  - added CLI parser contract tests for documented options:
+    `--send-notifications`, `doctor --support-bundle/--fix-permissions*`, and `export-prometheus --textfile-path`.
+  - checks branch tests now patch owning modules directly (`command_checks` / `network_probes`) instead of `checks.__init__` compatibility aliases.
 - recovery/config safety hardening:
   - `--dry-run` now suppresses external notifications by default; use `--send-notifications` to opt in.
   - global and per-target config validation now requires `reboot_threshold > restart_threshold`.
   - target names and service names are normalized (`strip`) during config load; duplicate names after trim and blank service entries are rejected.
   - cycle reports now include explicit persist-failure reason (`state_persist_failed` / `state_persist_failed_after_reboot_intent`).
+  - state-load issue events now always include a `reason` field (fallback: `state load issue`) for consistent incident payloads.
   - reboot guard boundary semantics are documented as inclusive window + strict cooldown.
   - recovery runtime now treats `reboot_threshold <= restart_threshold` as invariant violation
     instead of silent threshold clamping.
@@ -62,6 +68,7 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - `StorageVerifyResult` now uses dataclass defaults for optional fields, reducing repetitive construction.
   - `_read_os_release` parsing now handles quoted/escaped values using `shlex`.
   - `deploy_pi5_guard.py` rsync excludes now include `.coverage`, `coverage.xml`, `dist/`, `build/`, `*.egg-info/`.
+  - `verify-storage` CLI now supports `--no-cooldown` for ad-hoc checks without post-verify sleep.
 - security redaction hardening:
   - redaction now masks Discord webhook path tokens in command/output text.
   - `validate-config` shell command summaries now use redacted command rendering.
@@ -70,6 +77,12 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - README/README.ja beta demo now initializes heartbeat via `fresh-file` before first dry-run.
   - systemd helper docs now recommend explicit absolute `--raspi-sentinel-bin` path to avoid `sudo` PATH drift.
   - added `/home` path safety warnings in `validate-config` and `doctor` for `ProtectHome=true` systemd environments.
+  - README/README.ja now split stable (`v0.8.0`) and upcoming beta preview (`main`) checkout flows to prevent demo-path mismatch.
+  - operations runbook now notes corrupt-state quarantine slot saturation behavior (`.99` max suffix per timestamp).
+- checks/time-health maintainability:
+  - removed test-only stdlib compatibility aliases from `checks.__init__`.
+  - centralized network probe initialization keys in `checks.models.NETWORK_PROBE_INIT_FIELDS`.
+  - refactored `_classify_time_health_reason` to consume `TimeHealthReasonSignals` dataclass instead of wide argument lists.
 - doctor UX:
   - `doctor --fix-permissions` now applies permission fixes before building final doctor snapshot, reducing before/after mismatch in output.
 - recovery cooldown hardening:

@@ -13,6 +13,10 @@
     - `reboot_history`
     - `followup_schedule`
     - `notify_backlog`
+  - accepted compatibility aliases in config:
+    - `reboots` -> `reboot_history`
+    - `followups` -> `followup_schedule`
+    - `notify_delivery_backlog` -> `notify_backlog`
 - Event log tier (disk):
   - `events_path` (`events.jsonl`)
 
@@ -73,6 +77,12 @@ Use:
 
 ```bash
 raspi-sentinel -c /etc/raspi-sentinel/config.toml verify-storage --json
+```
+
+For ad-hoc CLI checks where cooldown delay is not needed:
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml verify-storage --json --no-cooldown
 ```
 
 Cooldown intent:

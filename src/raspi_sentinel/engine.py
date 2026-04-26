@@ -241,9 +241,8 @@ def _record_state_load_issue_event(
     event: dict[str, object] = {
         "ts": ts_text,
         "kind": kind,
+        "reason": diagnostics.state_load_error or "state load issue",
     }
-    if diagnostics.state_load_error is not None:
-        event["reason"] = diagnostics.state_load_error
     if diagnostics.corrupt_backup_path is not None:
         event["backup_path"] = str(diagnostics.corrupt_backup_path)
     append_event(

@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 from ..config import TargetConfig
 from . import command_checks
-from .models import ObservationMap
+from .models import NETWORK_PROBE_INIT_FIELDS, ObservationMap
 
 LOG = logging.getLogger(__name__)
 
@@ -108,46 +108,7 @@ def _init_network_probe_observations(observations: ObservationMap, iface: str) -
     observations["network_probe_enabled"] = True
     observations["network_interface"] = iface
 
-    for key in (
-        "link_ok",
-        "iface_up",
-        "wifi_associated",
-        "ip_assigned",
-        "operstate_raw",
-        "default_route_ok",
-        "gateway_ok",
-        "internet_ip_ok",
-        "dns_ok",
-        "http_probe_ok",
-        "arp_gateway_ok",
-        "neighbor_resolved",
-        "ssid",
-        "bssid",
-        "rssi_dbm",
-        "tx_bitrate_mbps",
-        "rx_bitrate_mbps",
-        "default_route_iface",
-        "gateway_ip",
-        "route_table_snapshot",
-        "gateway_latency_ms",
-        "gateway_packet_loss_pct",
-        "internet_ip_target",
-        "internet_ip_latency_ms",
-        "internet_ip_packet_loss_pct",
-        "dns_server",
-        "dns_query_target",
-        "dns_latency_ms",
-        "dns_error_kind",
-        "route_error_kind",
-        "gateway_error_kind",
-        "wan_error_kind",
-        "http_probe_target",
-        "http_status_code",
-        "http_total_latency_ms",
-        "http_connect_latency_ms",
-        "http_tls_latency_ms",
-        "http_error_kind",
-    ):
+    for key in NETWORK_PROBE_INIT_FIELDS:
         observations.setdefault(key, None)
 
 

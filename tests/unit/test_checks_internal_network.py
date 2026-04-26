@@ -6,7 +6,7 @@ from typing import Any
 
 from checks_internal_branches_helpers import target
 
-from raspi_sentinel import checks
+from raspi_sentinel.checks import command_checks, network_probes, run_checks
 from raspi_sentinel.checks.network_probes import (
     classify_dns_gaierror,
     classify_dns_oserror,
@@ -22,12 +22,12 @@ def test_network_probe_unavailable_commands_are_graceful(monkeypatch: Any) -> No
         raise OSError("dns unavailable")
 
     def unavailable_urlopen(*_: Any, **__: Any) -> Any:
-        raise checks.urllib_error.URLError(OSError("dns unavailable"))
+        raise network_probes.urllib_error.URLError(OSError("dns unavailable"))
 
-    monkeypatch.setattr(checks.subprocess, "run", unavailable_run)
-    monkeypatch.setattr(checks.socket, "getaddrinfo", unavailable_getaddrinfo)
-    monkeypatch.setattr(checks.urllib_request, "urlopen", unavailable_urlopen)
-    result = checks.run_checks(
+    monkeypatch.setattr(command_checks.subprocess, "run", unavailable_run)
+    monkeypatch.setattr(network_probes.socket, "getaddrinfo", unavailable_getaddrinfo)
+    monkeypatch.setattr(network_probes.urllib_request, "urlopen", unavailable_urlopen)
+    result = run_checks(
         target(
             network_probe_enabled=True,
             network_interface="wlan999",
@@ -51,10 +51,10 @@ def test_network_http_probe_non_2xx_is_failure(monkeypatch: Any) -> None:
         fake_run_command_capture,
     )
     monkeypatch.setattr(
-        checks.urllib_request,
+        network_probes.urllib_request,
         "urlopen",
         lambda *args, **kwargs: (_ for _ in ()).throw(
-            checks.urllib_error.HTTPError(
+            network_probes.urllib_error.HTTPError(
                 url="http://probe.example/health",
                 code=503,
                 msg="Service Unavailable",
@@ -64,13 +64,13 @@ def test_network_http_probe_non_2xx_is_failure(monkeypatch: Any) -> None:
         ),
     )
     monkeypatch.setattr(
-        checks.Path,
+        network_probes.Path,
         "read_text",
         lambda self, encoding="utf-8": "nameserver 1.1.1.1\n",
         raising=False,
     )
 
-    result = checks.run_checks(
+    result = run_checks(
         target(
             network_probe_enabled=True,
             network_interface="wlan0",
@@ -97,7 +97,7 @@ def test_network_http_error_kind_distinguishes_dns_connect_read_timeout_refused_
     for expected_kind, http_target in cases:
         with monkeypatch.context() as m:
             m.setattr(
-                checks.Path,
+                network_probes.Path,
                 "read_text",
                 lambda self, encoding="utf-8": "nameserver 1.1.1.1\n",
                 raising=False,
@@ -107,7 +107,9 @@ def test_network_http_error_kind_distinguishes_dns_connect_read_timeout_refused_
                 lambda args, timeout_sec: (None, "unavailable"),
             )
             if expected_kind == "dns_resolution_failed":
-                reason: object = checks.socket.gaierror(checks.socket.EAI_NONAME, "name not known")
+                reason: object = network_probes.socket.gaierror(
+                    network_probes.socket.EAI_NONAME, "name not known"
+                )
             elif expected_kind == "connect_timeout":
                 reason = TimeoutError("connect timeout")
             elif expected_kind == "read_timeout":
@@ -115,15 +117,17 @@ def test_network_http_error_kind_distinguishes_dns_connect_read_timeout_refused_
             elif expected_kind == "connection_refused":
                 reason = ConnectionRefusedError(errno.ECONNREFUSED, "refused")
             else:
-                reason = checks.ssl.SSLError("tls failed")
+                reason = network_probes.ssl.SSLError("tls failed")
 
             m.setattr(
-                checks.urllib_request,
+                network_probes.urllib_request,
                 "urlopen",
-                lambda *args, **kwargs: (_ for _ in ()).throw(checks.urllib_error.URLError(reason)),
+                lambda *args, **kwargs: (_ for _ in ()).throw(
+                    network_probes.urllib_error.URLError(reason)
+                ),
             )
 
-            result = checks.run_checks(
+            result = run_checks(
                 target(
                     network_probe_enabled=True,
                     network_interface="wlan0",
@@ -150,8 +154,8 @@ def test_network_dns_error_kind_classifies_resolver_missing_no_server_unreachabl
         (
             "no_server",
             "nameserver 1.1.1.1\n",
-            checks.socket.gaierror(
-                getattr(checks.socket, "EAI_FAIL", checks.socket.EAI_AGAIN),
+            network_probes.socket.gaierror(
+                getattr(network_probes.socket, "EAI_FAIL", network_probes.socket.EAI_AGAIN),
                 "no servers",
             ),
         ),
@@ -168,12 +172,12 @@ def test_network_dns_error_kind_classifies_resolver_missing_no_server_unreachabl
         (
             "nxdomain",
             "nameserver 1.1.1.1\n",
-            checks.socket.gaierror(checks.socket.EAI_NONAME, "name not known"),
+            network_probes.socket.gaierror(network_probes.socket.EAI_NONAME, "name not known"),
         ),
         (
             "timeout",
             "nameserver 1.1.1.1\n",
-            checks.socket.gaierror(checks.socket.EAI_AGAIN, "temporary failure"),
+            network_probes.socket.gaierror(network_probes.socket.EAI_AGAIN, "temporary failure"),
         ),
     ]
 
@@ -189,24 +193,24 @@ def test_network_dns_error_kind_classifies_resolver_missing_no_server_unreachabl
                     return resolv_conf_text
                 raise OSError("unavailable")
 
-            m.setattr(checks.Path, "read_text", fake_read_text, raising=False)
+            m.setattr(network_probes.Path, "read_text", fake_read_text, raising=False)
 
             def fake_getaddrinfo(host: str, port: int, type: int = 0) -> list[tuple[Any, ...]]:
                 if injected_error is not None:
                     raise injected_error
                 return [
                     (
-                        checks.socket.AF_INET,
-                        checks.socket.SOCK_STREAM,
+                        network_probes.socket.AF_INET,
+                        network_probes.socket.SOCK_STREAM,
                         6,
                         "",
                         ("127.0.0.1", port),
                     )
                 ]
 
-            m.setattr(checks.socket, "getaddrinfo", fake_getaddrinfo)
+            m.setattr(network_probes.socket, "getaddrinfo", fake_getaddrinfo)
 
-            result = checks.run_checks(base_target)
+            result = run_checks(base_target)
             assert result.observations["dns_ok"] is False
             assert result.observations["dns_error_kind"] == expected_kind
 
@@ -236,16 +240,22 @@ def test_network_link_ok_exposes_iface_up_wifi_associated_ip_assigned(monkeypatc
         "raspi_sentinel.checks.command_checks.run_command_capture",
         fake_run_command_capture,
     )
-    monkeypatch.setattr(checks.Path, "read_text", fake_read_text, raising=False)
+    monkeypatch.setattr(network_probes.Path, "read_text", fake_read_text, raising=False)
     monkeypatch.setattr(
-        checks.socket,
+        network_probes.socket,
         "getaddrinfo",
         lambda host, port, type=0: [
-            (checks.socket.AF_INET, checks.socket.SOCK_STREAM, 6, "", ("127.0.0.1", port))
+            (
+                network_probes.socket.AF_INET,
+                network_probes.socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.1", port),
+            )
         ],
     )
 
-    result = checks.run_checks(
+    result = run_checks(
         target(
             network_probe_enabled=True,
             network_interface="wlan0",
@@ -262,23 +272,27 @@ def test_network_link_ok_exposes_iface_up_wifi_associated_ip_assigned(monkeypatc
 def test_dns_and_http_error_classifier_helpers() -> None:
     assert (
         classify_dns_gaierror(
-            checks.socket.gaierror(checks.socket.EAI_NONAME, "name or service not known")
+            network_probes.socket.gaierror(
+                network_probes.socket.EAI_NONAME, "name or service not known"
+            )
         )
         == "nxdomain"
     )
     assert (
         classify_dns_gaierror(
-            checks.socket.gaierror(checks.socket.EAI_AGAIN, "temporary failure in name resolution")
+            network_probes.socket.gaierror(
+                network_probes.socket.EAI_AGAIN, "temporary failure in name resolution"
+            )
         )
         == "timeout"
     )
-    assert classify_dns_gaierror(checks.socket.gaierror(-9999, "no servers could be reached")) == (
-        "no_server"
-    )
-    assert classify_dns_gaierror(checks.socket.gaierror(-9999, "network unreachable")) == (
+    assert classify_dns_gaierror(
+        network_probes.socket.gaierror(-9999, "no servers could be reached")
+    ) == ("no_server")
+    assert classify_dns_gaierror(network_probes.socket.gaierror(-9999, "network unreachable")) == (
         "unreachable"
     )
-    assert classify_dns_gaierror(checks.socket.gaierror(-9999, "boom")) == "unknown"
+    assert classify_dns_gaierror(network_probes.socket.gaierror(-9999, "boom")) == "unknown"
 
     assert classify_dns_oserror(TimeoutError("x")) == "timeout"
     assert classify_dns_oserror(OSError(errno.ENETUNREACH, "x")) == "unreachable"
@@ -348,18 +362,18 @@ def test_network_probe_route_gateway_and_internet_branches(monkeypatch: Any) -> 
             ), None
         return None, "unavailable"
 
-    monkeypatch.setattr(checks.Path, "read_text", fake_read_text, raising=False)
+    monkeypatch.setattr(network_probes.Path, "read_text", fake_read_text, raising=False)
     monkeypatch.setattr(
         "raspi_sentinel.checks.command_checks.run_command_capture",
         fake_run_command_capture,
     )
     monkeypatch.setattr(
-        checks.urllib_request,
+        network_probes.urllib_request,
         "urlopen",
         lambda *args, **kwargs: DummyHttpResponse(),
     )
 
-    result = checks.run_checks(
+    result = run_checks(
         target(
             network_probe_enabled=True,
             network_interface="wlan0",
@@ -402,20 +416,26 @@ def test_network_probe_does_not_override_iface_match_with_other_default_route(
             return Result("default dev wlan0\ndefault via 192.168.1.1 dev eth0\n"), None
         return None, "unavailable"
 
-    monkeypatch.setattr(checks.Path, "read_text", fake_read_text, raising=False)
+    monkeypatch.setattr(network_probes.Path, "read_text", fake_read_text, raising=False)
     monkeypatch.setattr(
         "raspi_sentinel.checks.command_checks.run_command_capture",
         fake_run_command_capture,
     )
     monkeypatch.setattr(
-        checks.socket,
+        network_probes.socket,
         "getaddrinfo",
         lambda host, port, type=0: [
-            (checks.socket.AF_INET, checks.socket.SOCK_STREAM, 6, "", ("127.0.0.1", port))
+            (
+                network_probes.socket.AF_INET,
+                network_probes.socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.1", port),
+            )
         ],
     )
 
-    result = checks.run_checks(
+    result = run_checks(
         target(
             network_probe_enabled=True,
             network_interface="wlan0",
@@ -457,36 +477,42 @@ def test_network_probe_patch_isolation_between_targets(monkeypatch: Any) -> None
         lambda args, timeout_sec: (None, "unavailable"),
     )
     monkeypatch.setattr(
-        checks.Path,
+        network_probes.Path,
         "read_text",
         lambda self, encoding="utf-8": "nameserver 1.1.1.1\n",
         raising=False,
     )
     monkeypatch.setattr(
-        checks.socket,
+        network_probes.socket,
         "getaddrinfo",
         lambda host, port, type=0: [
-            (checks.socket.AF_INET, checks.socket.SOCK_STREAM, 6, "", ("127.0.0.1", port))
+            (
+                network_probes.socket.AF_INET,
+                network_probes.socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.1", port),
+            )
         ],
     )
 
     with monkeypatch.context() as m:
         m.setattr(
-            checks.urllib_request,
+            network_probes.urllib_request,
             "urlopen",
             lambda *args, **kwargs: (_ for _ in ()).throw(
-                checks.urllib_error.URLError(TimeoutError("connect timeout"))
+                network_probes.urllib_error.URLError(TimeoutError("connect timeout"))
             ),
         )
-        first = checks.run_checks(base_target)
+        first = run_checks(base_target)
         assert first.observations["http_probe_ok"] is False
 
     monkeypatch.setattr(
-        checks.urllib_request,
+        network_probes.urllib_request,
         "urlopen",
         lambda *args, **kwargs: DummyHttpResponse(200),
     )
-    second = checks.run_checks(base_target)
+    second = run_checks(base_target)
     assert second.observations["http_probe_ok"] is True
 
 
@@ -515,20 +541,26 @@ def test_network_probe_handles_empty_route_and_gateway_timeout(monkeypatch: Any)
             return None, "timeout"
         return None, "unavailable"
 
-    monkeypatch.setattr(checks.Path, "read_text", fake_read_text, raising=False)
+    monkeypatch.setattr(network_probes.Path, "read_text", fake_read_text, raising=False)
     monkeypatch.setattr(
         "raspi_sentinel.checks.command_checks.run_command_capture",
         fake_run_command_capture,
     )
     monkeypatch.setattr(
-        checks.socket,
+        network_probes.socket,
         "getaddrinfo",
         lambda host, port, type=0: [
-            (checks.socket.AF_INET, checks.socket.SOCK_STREAM, 6, "", ("127.0.0.1", port))
+            (
+                network_probes.socket.AF_INET,
+                network_probes.socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.1", port),
+            )
         ],
     )
 
-    result = checks.run_checks(
+    result = run_checks(
         target(
             network_probe_enabled=True,
             network_interface="wlan0",
@@ -578,20 +610,26 @@ def test_network_probe_sets_route_and_gateway_error_kinds(monkeypatch: Any) -> N
             ), None
         return None, "unavailable"
 
-    monkeypatch.setattr(checks.Path, "read_text", fake_read_text, raising=False)
+    monkeypatch.setattr(network_probes.Path, "read_text", fake_read_text, raising=False)
     monkeypatch.setattr(
         "raspi_sentinel.checks.command_checks.run_command_capture",
         fake_run_command_capture,
     )
     monkeypatch.setattr(
-        checks.socket,
+        network_probes.socket,
         "getaddrinfo",
         lambda host, port, type=0: [
-            (checks.socket.AF_INET, checks.socket.SOCK_STREAM, 6, "", ("127.0.0.1", port))
+            (
+                network_probes.socket.AF_INET,
+                network_probes.socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.1", port),
+            )
         ],
     )
 
-    result = checks.run_checks(
+    result = run_checks(
         target(
             network_probe_enabled=True,
             network_interface="wlan0",

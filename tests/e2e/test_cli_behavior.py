@@ -335,6 +335,59 @@ def test_verify_storage_returns_failure_code(tmp_path: Path, monkeypatch: Any) -
     assert rc == STORAGE_VERIFY_FAILED
 
 
+def test_verify_storage_no_cooldown_passes_apply_cooldown_false(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    conf = tmp_path / "config.toml"
+    _write(
+        conf,
+        """
+        [global]
+        state_file = "/tmp/state.json"
+        restart_threshold = 2
+        reboot_threshold = 3
+        restart_cooldown_sec = 10
+        reboot_cooldown_sec = 20
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 60
+        default_command_timeout_sec = 5
+        loop_interval_sec = 30
+
+        [notify.discord]
+        enabled = false
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "demo"
+        services = []
+        service_active = false
+        command = "true"
+        """,
+    )
+    captured: dict[str, Any] = {}
+
+    def fake_verify_tmpfs_storage(**kwargs: Any) -> StorageVerifyResult:
+        captured.update(kwargs)
+        return StorageVerifyResult(
+            ok=True,
+            mount_path=Path("/run/raspi-sentinel"),
+            mount_fs_type="tmpfs",
+            owner_uid=0,
+            owner_gid=0,
+            mode=0o755,
+            free_bytes=1024 * 1024,
+        )
+
+    monkeypatch.setattr(cli, "verify_tmpfs_storage", fake_verify_tmpfs_storage)
+    rc = cli.main(["-c", str(conf), "verify-storage", "--no-cooldown"])
+    assert rc == 0
+    assert captured["apply_cooldown"] is False
+
+
 def test_validate_config_strict_returns_nonzero_on_warnings(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
@@ -998,7 +1051,7 @@ def test_shell_syntax_without_opt_in_runs_without_shell(tmp_path: Path, monkeypa
         calls.append((args, kwargs))
         return subprocess.CompletedProcess(args=args[0], returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr("raspi_sentinel.checks.subprocess.run", fake_run)
+    monkeypatch.setattr("raspi_sentinel.checks.command_checks.subprocess.run", fake_run)
 
     rc, report = cli._run_cycle_collect(config=cfg, dry_run=False)
     assert rc == 0

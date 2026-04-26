@@ -6,8 +6,7 @@ from typing import Any
 
 from checks_internal_branches_helpers import target
 
-from raspi_sentinel import checks
-from raspi_sentinel.checks import command_checks, file_checks
+from raspi_sentinel.checks import command_checks, file_checks, run_checks
 from raspi_sentinel.checks.command_checks import (
     command_check,
     run_command_capture,
@@ -135,8 +134,8 @@ def test_run_checks_with_command_dns_gateway_and_service(monkeypatch: Any) -> No
             return subprocess.CompletedProcess(cmd, 0, "", "")
         return subprocess.CompletedProcess([cmd], 0, "", "")
 
-    monkeypatch.setattr(checks.subprocess, "run", fake_run)
-    result = checks.run_checks(
+    monkeypatch.setattr(command_checks.subprocess, "run", fake_run)
+    result = run_checks(
         target(
             services=["svc"],
             service_active=True,
@@ -155,8 +154,8 @@ def test_run_checks_with_extended_dependency_commands(monkeypatch: Any) -> None:
     def fake_run(cmd: Any, **_: Any) -> Any:
         return subprocess.CompletedProcess([cmd], 0, "", "")
 
-    monkeypatch.setattr(checks.subprocess, "run", fake_run)
-    result = checks.run_checks(
+    monkeypatch.setattr(command_checks.subprocess, "run", fake_run)
+    result = run_checks(
         target(
             link_check_command="true",
             default_route_check_command="true",
@@ -185,8 +184,8 @@ def test_run_checks_heartbeat_output_and_service_failure(tmp_path: Path, monkeyp
             return subprocess.CompletedProcess(cmd, 1, "inactive", "")
         return subprocess.CompletedProcess([cmd], 0, "", "")
 
-    monkeypatch.setattr(checks.subprocess, "run", fake_run)
-    result = checks.run_checks(
+    monkeypatch.setattr(command_checks.subprocess, "run", fake_run)
+    result = run_checks(
         target(
             services=["svc"],
             service_active=True,

@@ -73,6 +73,7 @@ def verify_tmpfs_storage(
     expected_mode: int | None = 0o755,
     expected_owner_uid: int | None = 0,
     expected_owner_gid: int | None = 0,
+    apply_cooldown: bool = True,
 ) -> StorageVerifyResult:
     if not _is_tmpfs_tiering_enabled(config):
         return StorageVerifyResult(
@@ -239,7 +240,7 @@ def verify_tmpfs_storage(
         )
 
     cooldown_sec = config.global_config.storage_verify_cooldown_sec
-    if cooldown_sec > 0:
+    if apply_cooldown and cooldown_sec > 0:
         LOG.info("storage verify cooldown: %ss", cooldown_sec)
         time.sleep(cooldown_sec)
 

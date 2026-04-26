@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import subprocess
 import time
+from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
 from urllib import error, request
 
@@ -13,6 +14,26 @@ from .state_helpers import safe_bool, safe_float, safe_int
 from .state_models import TargetState
 
 LOG = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class TimeHealthReasonSignals:
+    freeze_detected: bool
+    jump_detected: bool
+    skew_detected: bool
+    insufficient_interval: bool
+    clock_frozen_confirmed: bool
+    consecutive_clock_freeze_count: int
+    ntp_sync_ok: bool | None
+    http_probe_ok: bool | None
+    link_ok: bool | None
+    default_route_ok: bool | None
+    gateway_ok: bool | None
+    internet_ip_ok: bool | None
+    dns_server_reachable: bool | None
+    dns_ok: bool | None
+    wan_vs_target_ok: bool | None
+    skew_abs: float
 
 
 def _fetch_http_date_epoch(url: str, timeout_sec: int) -> tuple[float | None, str | None]:
@@ -142,62 +163,43 @@ def _update_network_counters(
     )
 
 
-def _classify_time_health_reason(
-    *,
-    freeze_detected: bool,
-    jump_detected: bool,
-    skew_detected: bool,
-    insufficient_interval: bool,
-    clock_frozen_confirmed: bool,
-    consecutive_clock_freeze_count: int,
-    ntp_sync_ok: bool | None,
-    http_probe_ok: bool | None,
-    link_ok: bool | None,
-    default_route_ok: bool | None,
-    gateway_ok: bool | None,
-    internet_ip_ok: bool | None,
-    dns_server_reachable: bool | None,
-    dns_ok: bool | None,
-    wan_vs_target_ok: bool | None,
-    skew_abs: float,
-    target: TargetConfig,
-) -> str:
+def _classify_time_health_reason(*, signals: TimeHealthReasonSignals, target: TargetConfig) -> str:
     """Derive the single clock_reason string from the observation signals."""
-    if freeze_detected:
-        if clock_frozen_confirmed:
+    if signals.freeze_detected:
+        if signals.clock_frozen_confirmed:
             return "clock_frozen_confirmed"
-        if consecutive_clock_freeze_count >= 2:
+        if signals.consecutive_clock_freeze_count >= 2:
             return "clock_frozen_persistent"
         return "clock_frozen"
-    if jump_detected:
+    if signals.jump_detected:
         return "clock_jump"
-    if skew_detected:
-        if ntp_sync_ok is False:
+    if signals.skew_detected:
+        if signals.ntp_sync_ok is False:
             return "time_sync_broken_skewed"
         return "clock_skewed"
-    if http_probe_ok is False:
+    if signals.http_probe_ok is False:
         return "http_error"
-    if link_ok is False:
+    if signals.link_ok is False:
         return "link_error"
-    if default_route_ok is False:
+    if signals.default_route_ok is False:
         return "route_missing"
-    if gateway_ok is False:
+    if signals.gateway_ok is False:
         return "gateway_error"
-    if internet_ip_ok is False and gateway_ok is True:
+    if signals.internet_ip_ok is False and signals.gateway_ok is True:
         return "wan_error"
-    if dns_server_reachable is False and internet_ip_ok is True:
+    if signals.dns_server_reachable is False and signals.internet_ip_ok is True:
         return "dns_server_error"
-    if dns_ok is False and gateway_ok is True:
+    if signals.dns_ok is False and signals.gateway_ok is True:
         return "dns_error"
-    if wan_vs_target_ok is False:
+    if signals.wan_vs_target_ok is False:
         return "target_reachability_error"
     if (
-        ntp_sync_ok is False
+        signals.ntp_sync_ok is False
         and target.http_time_probe_url
-        and skew_abs < target.clock_skew_threshold_sec
+        and signals.skew_abs < target.clock_skew_threshold_sec
     ):
         return "time_sync_broken"
-    if insufficient_interval:
+    if signals.insufficient_interval:
         return "insufficient_interval"
     return "healthy"
 
@@ -316,22 +318,24 @@ def apply_time_health_checks(
     result.observations["clock_reboot_ready"] = clock_frozen_confirmed
 
     reason = _classify_time_health_reason(
-        freeze_detected=freeze_detected,
-        jump_detected=jump_detected,
-        skew_detected=skew_detected,
-        insufficient_interval=insufficient_interval,
-        clock_frozen_confirmed=clock_frozen_confirmed,
-        consecutive_clock_freeze_count=consecutive_clock_freeze_count,
-        ntp_sync_ok=ntp_sync_ok,
-        http_probe_ok=http_probe_ok,
-        link_ok=link_ok,
-        default_route_ok=default_route_ok,
-        gateway_ok=gateway_ok,
-        internet_ip_ok=internet_ip_ok,
-        dns_server_reachable=dns_server_reachable,
-        dns_ok=dns_ok,
-        wan_vs_target_ok=wan_vs_target_ok,
-        skew_abs=skew_abs,
+        signals=TimeHealthReasonSignals(
+            freeze_detected=freeze_detected,
+            jump_detected=jump_detected,
+            skew_detected=skew_detected,
+            insufficient_interval=insufficient_interval,
+            clock_frozen_confirmed=clock_frozen_confirmed,
+            consecutive_clock_freeze_count=consecutive_clock_freeze_count,
+            ntp_sync_ok=ntp_sync_ok,
+            http_probe_ok=http_probe_ok,
+            link_ok=link_ok,
+            default_route_ok=default_route_ok,
+            gateway_ok=gateway_ok,
+            internet_ip_ok=internet_ip_ok,
+            dns_server_reachable=dns_server_reachable,
+            dns_ok=dns_ok,
+            wan_vs_target_ok=wan_vs_target_ok,
+            skew_abs=skew_abs,
+        ),
         target=target,
     )
 

@@ -35,6 +35,32 @@ Do not use yet if:
 - You cannot access the machine physically or via fallback path
 - You need fleet-level centralized monitoring
 
+## Which Version To Use
+
+### Stable release: `v0.8.0`
+
+Use this if you want the latest released version:
+
+```bash
+git clone https://github.com/yukimurata0421/raspi-sentinel.git
+cd raspi-sentinel
+git checkout v0.8.0
+```
+
+For `v0.8.0` usage details, follow the README included in that tag.
+
+### Upcoming beta preview: `main`
+
+Use this only before `v0.9.0` is tagged:
+
+```bash
+git clone https://github.com/yukimurata0421/raspi-sentinel.git
+cd raspi-sentinel
+git checkout main
+```
+
+After `v0.9.0` is tagged, beta quickstart steps should use `git checkout v0.9.0` for reproducibility.
+
 ## What This Does
 
 - Monitors local service health while OS is alive
@@ -79,15 +105,15 @@ Why this matters:
 
 ## 15-Minute Beta Demo
 
-### 1. Clone current release tag
+### 1. Clone beta preview line
 
 ```bash
 git clone https://github.com/yukimurata0421/raspi-sentinel.git
 cd raspi-sentinel
-git checkout v0.8.0
+git checkout main
 ```
 
-If you intentionally test the upcoming beta draft work, use `main` instead.
+This beta demo relies on files that are in the upcoming beta preview line (`main`) before `v0.9.0` is tagged.
 
 ### 2. Install
 
@@ -98,7 +124,7 @@ python3 -m pip install .
 Optional (`pipx`) install path for CLI trial:
 
 ```bash
-pipx install "git+https://github.com/yukimurata0421/raspi-sentinel.git@v0.8.0"
+pipx install "git+https://github.com/yukimurata0421/raspi-sentinel.git@main"
 ```
 
 ### 3. Install demo config (no restart/reboot, no notifications)
