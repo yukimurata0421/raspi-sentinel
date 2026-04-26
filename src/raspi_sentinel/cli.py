@@ -294,6 +294,14 @@ def _prometheus_bool(value: object) -> int:
     return 1 if value is True else 0
 
 
+def _gauge(name: str, help_text: str, value: int) -> list[str]:
+    return [
+        f"# HELP {name} {help_text}",
+        f"# TYPE {name} gauge",
+        f"{name} {value}",
+    ]
+
+
 def _prometheus_lines(
     *,
     doctor_report: dict[str, object],
@@ -317,26 +325,40 @@ def _prometheus_lines(
     reboots_count = safe_int(state_report.get("reboots_count"), 0)
     followups_count = safe_int(state_report.get("followups_count"), 0)
     lines = [
-        "# HELP raspi_sentinel_doctor_config_permissions_ok 1 when config permissions are ok.",
-        "# TYPE raspi_sentinel_doctor_config_permissions_ok gauge",
-        f"raspi_sentinel_doctor_config_permissions_ok {config_ok}",
-        "# HELP raspi_sentinel_doctor_thresholds_ok 1 when restart/reboot thresholds are valid.",
-        "# TYPE raspi_sentinel_doctor_thresholds_ok gauge",
-        f"raspi_sentinel_doctor_thresholds_ok {thresholds_ok}",
-        "# HELP raspi_sentinel_doctor_tmpfs_verify_ok 1 when tmpfs verification passes.",
-        "# TYPE raspi_sentinel_doctor_tmpfs_verify_ok gauge",
-        f"raspi_sentinel_doctor_tmpfs_verify_ok {tmpfs_ok}",
-        "# HELP raspi_sentinel_doctor_timer_active 1 when raspi-sentinel.timer is active.",
-        "# TYPE raspi_sentinel_doctor_timer_active gauge",
-        f"raspi_sentinel_doctor_timer_active {timer_active}",
-        "# HELP raspi_sentinel_state_limited_mode 1 when state loading is in limited mode.",
-        "# TYPE raspi_sentinel_state_limited_mode gauge",
-        f"raspi_sentinel_state_limited_mode {limited_mode}",
-        "# HELP raspi_sentinel_state_reboots_count Number of reboot records in state.",
-        "# TYPE raspi_sentinel_state_reboots_count gauge",
-        f"raspi_sentinel_state_reboots_count {reboots_count}",
-        "# HELP raspi_sentinel_state_followups_count Number of pending followups in state.",
-        "# TYPE raspi_sentinel_state_followups_count gauge",
-        f"raspi_sentinel_state_followups_count {followups_count}",
+        *_gauge(
+            "raspi_sentinel_doctor_config_permissions_ok",
+            "1 when config permissions are ok.",
+            config_ok,
+        ),
+        *_gauge(
+            "raspi_sentinel_doctor_thresholds_ok",
+            "1 when restart/reboot thresholds are valid.",
+            thresholds_ok,
+        ),
+        *_gauge(
+            "raspi_sentinel_doctor_tmpfs_verify_ok",
+            "1 when tmpfs verification passes.",
+            tmpfs_ok,
+        ),
+        *_gauge(
+            "raspi_sentinel_doctor_timer_active",
+            "1 when raspi-sentinel.timer is active.",
+            timer_active,
+        ),
+        *_gauge(
+            "raspi_sentinel_state_limited_mode",
+            "1 when state loading is in limited mode.",
+            limited_mode,
+        ),
+        *_gauge(
+            "raspi_sentinel_state_reboots_count",
+            "Number of reboot records in state.",
+            reboots_count,
+        ),
+        *_gauge(
+            "raspi_sentinel_state_followups_count",
+            "Number of pending followups in state.",
+            followups_count,
+        ),
     ]
     return lines

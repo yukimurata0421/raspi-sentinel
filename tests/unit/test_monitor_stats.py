@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from conftest import make_global_config, make_target
@@ -7,7 +8,7 @@ from conftest import make_global_config, make_target
 from raspi_sentinel.checks import CheckResult
 from raspi_sentinel.config import AppConfig, DiscordNotifyConfig, NotifyConfig, TargetConfig
 from raspi_sentinel.contracts import STATS_SCHEMA_VERSION
-from raspi_sentinel.monitor_stats import build_monitor_stats_snapshot
+from raspi_sentinel.monitor_stats import build_monitor_stats_snapshot, maybe_write_monitor_stats
 from raspi_sentinel.state_models import GlobalState
 
 
@@ -122,3 +123,33 @@ def test_monitor_stats_unknown_target_status_is_not_counted_as_health_bucket() -
     assert snapshot["targets_failed"] == 0
     payload = snapshot["targets"]["network_uplink"]
     assert payload["status"] == "unknown"
+
+
+def test_maybe_write_monitor_stats_writes_on_first_run_even_without_signature_change(
+    tmp_path: Path,
+) -> None:
+    config = AppConfig(
+        global_config=make_global_config(
+            monitor_stats_file=tmp_path / "stats.json",
+            monitor_stats_interval_sec=60,
+        ),
+        notify_config=NotifyConfig(
+            discord=DiscordNotifyConfig(
+                enabled=False,
+                webhook_url=None,
+                username="raspi-sentinel",
+                timeout_sec=5,
+                followup_delay_sec=300,
+                retry_interval_sec=60,
+                retry_backoff_base_sec=0.5,
+                heartbeat_interval_sec=0,
+                notify_on_recovery=False,
+            )
+        ),
+        targets=[_target()],
+    )
+    state = GlobalState()
+    state.monitor_stats.last_snapshot_signature = "{}"
+    maybe_write_monitor_stats(config=config, state=state, target_results={}, now_ts=1_000_000.0)
+    assert state.monitor_stats.last_written_ts == 1_000_000.0
+    assert config.global_config.monitor_stats_file.exists()

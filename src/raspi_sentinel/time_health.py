@@ -108,33 +108,37 @@ def _update_network_counters(
     obs["internet_fail_consecutive"] = _update_counter("internet", internet_ip_ok)
     obs["dns_fail_consecutive"] = _update_counter("dns", dns_layer_ok)
     obs["http_fail_consecutive"] = _update_counter("http", http_probe_ok)
-    obs["network_degraded_threshold"] = target.consecutive_failure_thresholds.get("degraded", 2)
-    obs["network_failed_threshold"] = target.consecutive_failure_thresholds.get("failed", 6)
+    obs["network_degraded_threshold"] = target.network.consecutive_failure_thresholds.get(
+        "degraded", 2
+    )
+    obs["network_failed_threshold"] = target.network.consecutive_failure_thresholds.get("failed", 6)
 
     def _exceeded(value: float | None, threshold: float | None) -> bool:
         return bool(value is not None and threshold is not None and value > threshold)
 
     obs["gateway_latency_exceeded"] = _exceeded(
-        safe_float(obs.get("gateway_latency_ms")), target.latency_thresholds_ms.get("gateway")
+        safe_float(obs.get("gateway_latency_ms")),
+        target.network.latency_thresholds_ms.get("gateway"),
     )
     obs["internet_latency_exceeded"] = _exceeded(
         safe_float(obs.get("internet_ip_latency_ms")),
-        target.latency_thresholds_ms.get("internet_ip"),
+        target.network.latency_thresholds_ms.get("internet_ip"),
     )
     obs["dns_latency_exceeded"] = _exceeded(
-        safe_float(obs.get("dns_latency_ms")), target.latency_thresholds_ms.get("dns")
+        safe_float(obs.get("dns_latency_ms")),
+        target.network.latency_thresholds_ms.get("dns"),
     )
     obs["http_latency_exceeded"] = _exceeded(
         safe_float(obs.get("http_total_latency_ms")),
-        target.latency_thresholds_ms.get("http_total"),
+        target.network.latency_thresholds_ms.get("http_total"),
     )
     obs["gateway_loss_exceeded"] = _exceeded(
         safe_float(obs.get("gateway_packet_loss_pct")),
-        target.packet_loss_thresholds_pct.get("gateway"),
+        target.network.packet_loss_thresholds_pct.get("gateway"),
     )
     obs["internet_loss_exceeded"] = _exceeded(
         safe_float(obs.get("internet_ip_packet_loss_pct")),
-        target.packet_loss_thresholds_pct.get("internet_ip"),
+        target.network.packet_loss_thresholds_pct.get("internet_ip"),
     )
 
 

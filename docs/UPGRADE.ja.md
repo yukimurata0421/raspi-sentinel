@@ -70,10 +70,15 @@ sudo systemctl stop raspi-sentinel.timer
 sudo cp -a /etc/raspi-sentinel/config.toml.bak /etc/raspi-sentinel/config.toml
 ```
 
-3. 必要な場合は旧バージョンを再インストール（例）:
+3. パッケージのロールバックが必要な場合は、既知の正常ソースから再インストール（例）:
 
 ```bash
-python3 -m pip install 'raspi-sentinel==<previous-version>'
+# 既存タグから
+git checkout v0.7.1
+python3 -m pip install .
+
+# または事前に作成した wheel から
+python3 -m pip install ./dist/raspi_sentinel-0.7.1-py3-none-any.whl
 ```
 
 4. `validate-config --strict` を再実行

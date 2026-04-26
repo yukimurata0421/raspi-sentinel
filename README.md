@@ -95,6 +95,12 @@ If you intentionally test the upcoming beta draft work, use `main` instead.
 python3 -m pip install .
 ```
 
+Optional (`pipx`) install path for CLI trial:
+
+```bash
+pipx install "git+https://github.com/yukimurata0421/raspi-sentinel.git@v0.8.0"
+```
+
 ### 3. Install demo config (no restart/reboot, no notifications)
 
 ```bash

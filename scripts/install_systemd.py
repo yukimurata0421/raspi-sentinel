@@ -54,9 +54,10 @@ def render_service_unit(
     raspi_sentinel_bin: str,
     config_path: Path,
 ) -> str:
+    pattern = r"^(\s*)ExecStart=\S*raspi-sentinel\s+"
     rendered = re.sub(
-        r"^(\s*)ExecStart=\S*raspi-sentinel\s+",
-        rf"\1ExecStart={raspi_sentinel_bin} ",
+        pattern,
+        lambda m: f"{m.group(1)}ExecStart={raspi_sentinel_bin} ",
         source_text,
         flags=re.MULTILINE,
     )

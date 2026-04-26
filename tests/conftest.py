@@ -87,7 +87,11 @@ def _default_flat_kwargs() -> dict[str, Any]:
 
 
 def make_target(**overrides: Any) -> TargetConfig:
-    """Build a TargetConfig from flat keyword arguments (backward compatible)."""
+    """Build a TargetConfig from flat keyword arguments (backward compatible).
+
+    New tests should prefer explicit grouped fields (`deps`, `network`, `stats`, etc.)
+    where practical to reduce reliance on flat compatibility shims.
+    """
     flat = _default_flat_kwargs()
     flat.update(overrides)
 

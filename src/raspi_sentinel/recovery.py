@@ -52,6 +52,7 @@ def _record_action_model(model: TargetState, action: str, now_ts: float) -> None
 
 
 def _within_cooldown(last_ts: float | int | None, cooldown_sec: int, now_ts: float) -> bool:
+    """Return True when now_ts is strictly within cooldown (< cooldown_sec)."""
     if cooldown_sec <= 0 or last_ts is None:
         return False
     try:
@@ -88,7 +89,7 @@ def network_only_failures_excluded_from_reboot() -> bool:
 
 
 def network_only_failures_can_reboot() -> bool:
-    """Backward-compatibility helper; prefer network_only_failures_excluded_from_reboot()."""
+    """Backward-compatibility helper; planned removal target is v1.0.0."""
     return not network_only_failures_excluded_from_reboot()
 
 
@@ -270,7 +271,14 @@ def apply_recovery(
         return RecoveryOutcome(action="none", requested_reboot=False, reboot_reason=None)
 
     failures_text = _build_failures_text(check_result)
-    consecutive = _record_failure_state(ts, now_ts=effective_now, failures_text=failures_text)
+    if clock_reboot_confirmed and check_result.healthy:
+        # Confirmed clock-frozen path can be healthy for other checks.
+        # Keep failure context but avoid incrementing general failure counters.
+        ts.last_failure_ts = effective_now
+        ts.last_failure_reason = failures_text
+        consecutive = ts.consecutive_failures
+    else:
+        consecutive = _record_failure_state(ts, now_ts=effective_now, failures_text=failures_text)
 
     if not allow_disruptive_actions:
         LOG.error(

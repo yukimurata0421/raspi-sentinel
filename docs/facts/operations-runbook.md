@@ -171,7 +171,7 @@ If backlog never clears:
    `journalctl -u raspi-sentinel.service -n 200 --no-pager`.
 3. Confirm `notify.discord.webhook_url` validity and outbound firewall policy.
 
-## 7. Controlled Deployment (Pi Zero / Remote Hosts)
+## 7. Controlled Deployment (Raspberry Pi / Remote Hosts)
 
 Use controlled staged deployment instead of direct overwrite when updating `/opt/raspi-sentinel`:
 

@@ -266,7 +266,7 @@ def _maintenance_suppressed_report() -> TargetReport:
 
 def _skipped_due_to_reboot_report() -> TargetReport:
     return {
-        "status": "degraded",
+        "status": "unknown",
         "reason": "not_evaluated_due_to_reboot_request",
         "action": "skipped",
         "healthy": False,
@@ -447,18 +447,20 @@ def _run_notification_phase(
     events_max: int,
     events_backups: int,
     notifications_enabled: bool,
+    skip_followups: bool = False,
 ) -> None:
     if not notifier.enabled or not notifications_enabled:
         return
-    send_due_followups(
-        notifier=notifier,
-        state=state,
-        target_results=target_results,
-        now_ts=now_ts,
-        events_file=events_file,
-        events_max_bytes=events_max,
-        events_backup_generations=events_backups,
-    )
+    if not skip_followups:
+        send_due_followups(
+            notifier=notifier,
+            state=state,
+            target_results=target_results,
+            now_ts=now_ts,
+            events_file=events_file,
+            events_max_bytes=events_max,
+            events_backup_generations=events_backups,
+        )
     send_periodic_heartbeat(
         notifier=notifier,
         state=state,
@@ -557,6 +559,7 @@ def _run_cycle_collect_locked(
         events_max=events_max,
         events_backups=events_backups,
         notifications_enabled=notifications_enabled,
+        skip_followups=artifacts.reboot_requested,
     )
 
     maybe_write_monitor_stats(

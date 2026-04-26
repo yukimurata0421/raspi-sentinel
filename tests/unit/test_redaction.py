@@ -32,3 +32,17 @@ def test_redact_text_masks_discord_webhook_path_tokens() -> None:
     redacted = redact_text(text)
     assert "123456/abcdefTOKEN" not in redacted
     assert "https://discord.com/api/webhooks/<redacted>" in redacted
+
+
+def test_redact_text_masks_compound_auth_and_query_secrets() -> None:
+    text = (
+        "Authorization: Bearer abc.def.ghi "
+        "curl https://api.test/path?api_key=secret123 "
+        "X-API-Key: another-secret"
+    )
+    redacted = redact_text(text)
+    assert "abc.def.ghi" not in redacted
+    assert "api_key=secret123" not in redacted
+    assert "another-secret" not in redacted
+    assert "Authorization: ***" in redacted
+    assert "api_key=***" in redacted

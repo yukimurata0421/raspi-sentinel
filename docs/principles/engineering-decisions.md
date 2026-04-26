@@ -6,8 +6,8 @@ The format follows a pragmatic rule: **state the decision, point to implementati
 
 ## Quick Index
 
-- Recovery safety order: `1-3`, `5-10`
-- Policy mapping and reboot guards: `4-*` (2 items), `5-*` (10 items)
+- Recovery safety order: `1-3`, `5-11`
+- Policy mapping and reboot guards: `4-*` (2 items), `5-*` (11 items)
 - Storage tiering and tmpfs verification: `3-4`, `7-3`
 - Notification/backlog behavior: `6-*` (4 items)
 - Release/documentation boundaries: `0-*` (2 items), `8-*` (5 items)

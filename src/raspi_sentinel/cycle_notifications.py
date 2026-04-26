@@ -58,6 +58,8 @@ class DeliveryBacklogManager:
             if context in backlog.contexts:
                 backlog.contexts[context] += 1
             elif len(backlog.contexts) >= MAX_NOTIFY_BACKLOG_CONTEXTS:
+                # Keep a bounded set of explicit contexts and aggregate overflow
+                # under a dedicated bucket. This can exceed the hard cap by +1.
                 backlog.contexts[_OVERFLOW_CONTEXT] = backlog.contexts.get(_OVERFLOW_CONTEXT, 0) + 1
             else:
                 backlog.contexts[context] = 1

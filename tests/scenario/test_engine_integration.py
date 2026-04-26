@@ -281,6 +281,7 @@ def test_evaluate_targets_phase_marks_remaining_targets_skipped_after_reboot_req
     assert artifacts.reboot_requested is True
     assert artifacts.reboot_reason == "failed"
     assert artifacts.target_reports["c"]["action"] == "skipped"
+    assert artifacts.target_reports["c"]["status"] == "unknown"
     assert artifacts.target_reports["c"]["reason"] == "not_evaluated_due_to_reboot_request"
 
 
@@ -312,6 +313,53 @@ def test_run_cycle_suppresses_notifications_in_dry_run_by_default(
     assert rc == UNHEALTHY
     assert report["dry_run"] is True
     assert calls == []
+
+
+def test_run_cycle_skips_followups_when_reboot_requested(tmp_path: Path, monkeypatch: Any) -> None:
+    cfg = make_app_config(
+        discord_overrides={
+            "enabled": True,
+            "webhook_url": "https://discord.com/api/webhooks/123/abc",
+            "heartbeat_interval_sec": 0,
+        }
+    )
+    store = TieredStateStore(tmp_path / "state.json")
+    followup_calls: list[str] = []
+
+    monkeypatch.setattr(
+        "raspi_sentinel.engine._evaluate_targets_phase",
+        lambda **kwargs: TargetEvaluationArtifacts(
+            target_results={},
+            target_reports={
+                "demo": {"status": "failed", "reason": "process_error", "action": "reboot"}
+            },
+            unhealthy_count=1,
+            reboot_requested=True,
+            reboot_reason="process failed",
+        ),
+    )
+    monkeypatch.setattr(
+        "raspi_sentinel.engine.send_due_followups",
+        lambda **kwargs: followup_calls.append("called"),
+    )
+    monkeypatch.setattr("raspi_sentinel.engine.send_periodic_heartbeat", lambda **kwargs: None)
+    monkeypatch.setattr(
+        "raspi_sentinel.engine.send_delivery_backlog_summary",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setattr("raspi_sentinel.engine.maybe_write_monitor_stats", lambda **kwargs: None)
+    monkeypatch.setattr("raspi_sentinel.engine.persist_cycle_outputs", lambda **kwargs: True)
+    monkeypatch.setattr("raspi_sentinel.engine.execute_deferred_reboot", lambda **kwargs: True)
+
+    rc, _ = _run_cycle_collect_locked(
+        config=cfg,
+        dry_run=False,
+        store=store,
+        now_ts=1000.0,
+        mono_provider=lambda: 1.0,
+    )
+    assert rc == REBOOT_REQUESTED
+    assert followup_calls == []
 
 
 def test_run_cycle_allows_notifications_in_dry_run_when_opted_in(

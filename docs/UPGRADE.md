@@ -70,10 +70,15 @@ sudo systemctl stop raspi-sentinel.timer
 sudo cp -a /etc/raspi-sentinel/config.toml.bak /etc/raspi-sentinel/config.toml
 ```
 
-3. If package rollback is needed, reinstall the previous version (example):
+3. If package rollback is needed, reinstall from a known-good source (examples):
 
 ```bash
-python3 -m pip install 'raspi-sentinel==<previous-version>'
+# from prior tag
+git checkout v0.7.1
+python3 -m pip install .
+
+# or from a previously built wheel artifact
+python3 -m pip install ./dist/raspi_sentinel-0.7.1-py3-none-any.whl
 ```
 4. Run `validate-config --strict` again.
 5. Re-enable timer only after dry-run is healthy.

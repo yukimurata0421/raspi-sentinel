@@ -35,6 +35,7 @@ git checkout v0.8.0
 ```
 
 次期 beta のドラフト動作を試す場合のみ `main` を使用してください。
+`v0.9.0` タグを切る前には、`docs/release-notes/v0.9.0.md` の `# Draft:` / `Planned release:` マーカーを削除してください（release workflow で検証されます）。
 
 ### 2. install
 

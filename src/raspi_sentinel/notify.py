@@ -105,7 +105,7 @@ class DiscordNotifier:
             data=data,
             headers={
                 "Content-Type": "application/json",
-                "User-Agent": f"raspi-sentinel/{__version__} (+https://local.raspi-sentinel)",
+                "User-Agent": f"raspi-sentinel/{__version__}",
             },
             method="POST",
         )

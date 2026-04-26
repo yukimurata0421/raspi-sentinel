@@ -37,6 +37,7 @@ Public issues are acceptable for non-sensitive functional bugs.
 4. Disclose details after fix is available.
 
 Response policy: best effort, no formal SLA. Initial triage response is usually attempted within 7 days.
+Critical issues (credential leakage, remote code execution) are prioritized for same-week patching when feasible.
 
 ## Operational Security Notes
 

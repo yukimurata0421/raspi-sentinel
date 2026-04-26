@@ -149,11 +149,6 @@ def maybe_write_monitor_stats(
 ) -> None:
     interval_sec = config.global_config.monitor_stats_interval_sec
     last_written_ts = state.monitor_stats.last_written_ts
-    elapsed: float
-    if last_written_ts is None:
-        elapsed = float(interval_sec)
-    else:
-        elapsed = now_ts - last_written_ts
 
     snapshot = build_monitor_stats_snapshot(
         config=config,
@@ -166,7 +161,11 @@ def maybe_write_monitor_stats(
     signature = json.dumps(signature_payload, sort_keys=True, separators=(",", ":"))
     previous_signature = state.monitor_stats.last_snapshot_signature
 
-    should_write = elapsed >= interval_sec or previous_signature != signature
+    if last_written_ts is None:
+        should_write = True
+    else:
+        elapsed = now_ts - last_written_ts
+        should_write = elapsed >= interval_sec or previous_signature != signature
     if not should_write:
         return
 
