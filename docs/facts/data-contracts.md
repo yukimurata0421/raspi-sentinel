@@ -108,6 +108,26 @@ Includes:
 - path existence checks
 - config permission warning
 
-## 6. Compatibility policy
+## 6. `doctor --json` (operator preflight report)
+
+Purpose:
+
+- quick operational safety check before/after enablement
+- validates environment assumptions consumed by recovery policy
+
+Includes:
+
+- config permissions and state-dir writability status
+- tmpfs tiering/verify result
+- systemd service/timer states
+- threshold sanity
+- reboot-policy indicators:
+  - `network_only_failures_excluded_from_reboot` (expected `true` in default policy)
+  - `network_only_failures_can_reboot` (compatibility field in `v0.8.x`)
+- last run interpretation:
+  - `last_run_result`
+  - `last_run_stats_schema_version`
+
+## 7. Compatibility policy
 
 - output compatibility and schema-version rules are defined in [../output-contract.md](../output-contract.md)

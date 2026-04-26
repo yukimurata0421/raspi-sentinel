@@ -4,8 +4,6 @@ All notable changes to this project are documented in this file.
 
 Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
-## [Unreleased]
-
 ## [0.8.0] - 2026-04-26
 
 ### Changed
@@ -109,7 +107,7 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - state loading now warns when `state_schema_version` is newer than supported.
   - added tests for future schema-version warnings in diagnostics and state loading.
 - docs and release prep:
-  - refreshed `v0.8.0-draft` release notes to match current `Unreleased` scope.
+  - finalized `v0.8.0` release notes to match 0.8.0 scope.
   - clarified `STATE_LOCK_ERROR` wording as timeout-or-I/O in docs.
   - documented deprecation warning behavior (once per process).
   - documented HTTP probe method note (HEAD requirement) in README.

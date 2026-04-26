@@ -143,7 +143,7 @@ def test_verify_tmpfs_storage_skips_when_tiering_not_enabled(
     assert result.reason == "skipped: tmpfs storage tiering is not enabled"
 
 
-def test_verify_tmpfs_storage_skips_when_run_path_used_without_explicit_opt_in(
+def test_verify_tmpfs_storage_skips_when_tiering_signals_are_absent(
     tmp_path: Path,
 ) -> None:
     cfg = make_app_config(

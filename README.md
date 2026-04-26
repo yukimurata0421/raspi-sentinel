@@ -584,6 +584,7 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json
 ```
 
 `doctor --json` includes `network_only_failures_excluded_from_reboot` (expected `true` in default policy).
+`network_only_failures_can_reboot` is kept as a compatibility field in `v0.8.x` and is planned for removal in `v1.0.0`.
 
 State introspection (schema version, counters, last actions):
 
@@ -606,7 +607,6 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
 | `2` | A **reboot** was requested (process exits before the reboot) |
 | `10` | Config load error |
 | `11` | Invalid loop interval |
-| `12` | No subcommand / help |
 | `13` | State lock acquisition failed (timeout or lock I/O error) |
 | `14` | State persistence failed |
 | `15` | `validate-config --strict` found warnings |
@@ -682,7 +682,10 @@ ruff check src tests
 ruff format --check src tests
 pytest \
   --cov=raspi_sentinel.checks \
+  --cov=raspi_sentinel.cli \
   --cov=raspi_sentinel.config \
+  --cov=raspi_sentinel.config_summary \
+  --cov=raspi_sentinel.engine \
   --cov=raspi_sentinel.recovery \
   --cov=raspi_sentinel.policy \
   --cov=raspi_sentinel.status_events \
@@ -691,11 +694,14 @@ pytest \
   --cov-report=term-missing \
   --cov-fail-under=80
 python -m coverage report \
-  --include="src/raspi_sentinel/policy.py,src/raspi_sentinel/status_events.py" \
+  --include="src/raspi_sentinel/policy.py,src/raspi_sentinel/status_events.py,src/raspi_sentinel/cli.py,src/raspi_sentinel/engine.py,src/raspi_sentinel/config_summary.py" \
   --fail-under=85
-  python -m coverage report \
+python -m coverage report \
   --include="src/raspi_sentinel/checks/*.py,src/raspi_sentinel/recovery.py" \
   --fail-under=88
+python -m coverage report \
+  --include="src/raspi_sentinel/cycle_notifications.py,src/raspi_sentinel/notify.py" \
+  --fail-under=90
 ```
 
 ## Versioning

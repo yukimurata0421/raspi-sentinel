@@ -55,7 +55,7 @@ loop_interval_sec = 30
 [notify.discord]
 enabled = true
 webhook_url = "https://discord.com/api/webhooks/..."
-username = "raspi-sentinel-v2"
+username = "raspi-sentinel"
 timeout_sec = 5
 followup_delay_sec = 300
 retry_interval_sec = 60
