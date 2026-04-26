@@ -103,7 +103,7 @@ Why this matters:
 - Recovery actions may restart services or request reboot
 - `shell=False` is default; shell execution is explicit opt-in
 
-## 15-Minute Beta Demo
+## 15-Minute Beta Demo (Non-root Friendly)
 
 ### 1. Clone beta preview line
 
@@ -127,24 +127,24 @@ Optional (`pipx`) install path for CLI trial:
 pipx install "git+https://github.com/yukimurata0421/raspi-sentinel.git@main"
 ```
 
-### 3. Install demo config (no restart/reboot, no notifications)
+### 3. Prepare demo workspace and config (no restart/reboot, no notifications)
 
 ```bash
-sudo install -d -m 0755 /etc/raspi-sentinel
-sudo install -m 0600 -o root -g root config/raspi-sentinel.beta-demo.toml /etc/raspi-sentinel/config.toml
-sudo "${EDITOR:-vi}" /etc/raspi-sentinel/config.toml
+install -d -m 0755 /tmp/raspi-sentinel-demo
+cp config/raspi-sentinel.beta-demo.toml /tmp/raspi-sentinel-demo/config.toml
+${EDITOR:-vi} /tmp/raspi-sentinel-demo/config.toml
 ```
 
 ### 4. Validate config
 
 ```bash
-raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
+raspi-sentinel -c /tmp/raspi-sentinel-demo/config.toml validate-config --strict
 ```
 
 ### 5. Run doctor
 
 ```bash
-raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json
+raspi-sentinel -c /tmp/raspi-sentinel-demo/config.toml doctor --json
 ```
 
 ### 6. Initialize demo heartbeat (healthy baseline)
@@ -156,28 +156,44 @@ python3 scripts/failure_inject.py fresh-file --path /tmp/raspi-sentinel-demo/hea
 ### 7. Run one dry-run cycle (expected healthy)
 
 ```bash
-raspi-sentinel -c /etc/raspi-sentinel/config.toml --dry-run run-once --json
+raspi-sentinel -c /tmp/raspi-sentinel-demo/config.toml --dry-run run-once --json
 ```
 
 ### 8. Inject sample failure
 
 ```bash
-sudo install -d -m 0755 /tmp/raspi-sentinel-demo
 python3 scripts/failure_inject.py stale-file --path /tmp/raspi-sentinel-demo/heartbeat.txt --age-sec 900
 ```
 
 Then run dry-run again:
 
 ```bash
-raspi-sentinel -c /etc/raspi-sentinel/config.toml --dry-run run-once --json
+raspi-sentinel -c /tmp/raspi-sentinel-demo/config.toml --dry-run run-once --json
 ```
 
 ### 9. Inspect and stop
 
 ```bash
-tail -n 20 /var/lib/raspi-sentinel/events.jsonl
-raspi-sentinel -c /etc/raspi-sentinel/config.toml explain-state --json
+tail -n 20 /tmp/raspi-sentinel-demo/events.jsonl
+raspi-sentinel -c /tmp/raspi-sentinel-demo/config.toml explain-state --json
 sudo systemctl disable --now raspi-sentinel.timer
+```
+
+### 10. Clean up demo files (optional)
+
+```bash
+rm -rf /tmp/raspi-sentinel-demo
+```
+
+## Production Setup (Root-owned Config)
+
+For production/systemd operation, install config under `/etc`:
+
+```bash
+sudo install -d -m 0755 /etc/raspi-sentinel
+sudo install -m 0600 -o root -g root config/raspi-sentinel.example.toml /etc/raspi-sentinel/config.toml
+sudo "${EDITOR:-vi}" /etc/raspi-sentinel/config.toml
+raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
 ```
 
 ## Emergency Stop
@@ -197,6 +213,8 @@ sudo python3 scripts/install_systemd.py --raspi-sentinel-bin "$BIN" --enable-tim
 ```
 
 The helper is recommended because it renders `ExecStart` to your actual binary path.
+The bundled service uses `ProtectHome=true`, so avoid `/home/...` binary paths.
+Prefer `/opt/raspi-sentinel/.venv/bin/raspi-sentinel` or another system-visible path.
 Manual installation is possible, but it is not equivalent unless you install all required units and edit `ExecStart` yourself:
 
 ```bash

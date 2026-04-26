@@ -24,6 +24,7 @@ This index is the entry point for operational and design documentation of `raspi
 ## Lifecycle and Release
 
 - [Versioning](VERSIONING.md)
+- [Release Notes Index](release-notes/README.md)
 - [Release Notes](release-notes/v0.8.0.md)
 - [Release Notes (Next Open Beta Draft)](release-notes/v0.9.0.md)
 - [Upgrade Guide](UPGRADE.md)

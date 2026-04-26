@@ -407,7 +407,17 @@ def test_apply_recovery_reboots_on_confirmed_clock_without_failures(
     monkeypatch: Any,
 ) -> None:
     monkeypatch.setattr(recovery, "read_uptime_sec", lambda: 1000.0)
-    state = GlobalState.from_dict({"targets": {"demo": {"consecutive_failures": 5}}})
+    state = GlobalState.from_dict(
+        {
+            "targets": {
+                "demo": {
+                    "consecutive_failures": 5,
+                    "last_failure_ts": 111.0,
+                    "last_failure_reason": "previous_failure",
+                }
+            }
+        }
+    )
     outcome = recovery.apply_recovery(
         target=make_target(restart_threshold=9, reboot_threshold=10),
         check_result=CheckResult(
@@ -428,7 +438,10 @@ def test_apply_recovery_reboots_on_confirmed_clock_without_failures(
     )
     assert outcome.action == "reboot"
     assert outcome.requested_reboot
-    assert state.ensure_target("demo").consecutive_failures == 5
+    model = state.ensure_target("demo")
+    assert model.consecutive_failures == 5
+    assert model.last_failure_ts == 111.0
+    assert model.last_failure_reason == "previous_failure"
 
 
 def test_apply_recovery_confirmed_clock_requires_failed_policy(monkeypatch: Any) -> None:

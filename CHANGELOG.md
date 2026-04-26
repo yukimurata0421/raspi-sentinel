@@ -11,6 +11,7 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 - versioning/docs alignment:
   - README/README.ja now describe `v0.9.x` as upcoming beta preview and keep current release on `v0.8.x`.
   - README/README.ja now separate stable (`v0.8.0`) checkout guidance from upcoming beta preview (`main`) so beta-demo files are not referenced from stable-tag flow.
+  - README.ja beta demo section no longer embeds release-tagging checklist text; release marker handling remains in `docs/VERSIONING.md`.
   - UPGRADE / VERSIONING / docs index now explicitly separate current stable vs next beta draft lines.
   - README feedback section wording now consistently uses `Upcoming` terminology for `v0.9.x`.
   - UPGRADE guides now use explicit track split (stable upgrade track vs beta-prep track) and include concrete rollback command examples.
@@ -54,6 +55,8 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - cycle target report now marks non-evaluated trailing targets as
     `action=skipped` with `reason=not_evaluated_due_to_reboot_request`
     when reboot intent is raised mid-cycle.
+  - skipped trailing targets now use `healthy=true` with `status=unknown` to represent "not evaluated" instead of unhealthy state.
+  - confirmed clock reboot path with otherwise healthy checks no longer mutates `last_failure_ts` / `last_failure_reason`.
   - `apply_recovery()` internals were split into focused helper stages for easier maintenance.
   - restart command timeout is now configurable via `global.restart_service_timeout_sec` (default: `30`).
   - maintenance command checks now emit an explicit warning when command text is empty after parsing.
@@ -69,6 +72,7 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - `_read_os_release` parsing now handles quoted/escaped values using `shlex`.
   - `deploy_pi5_guard.py` rsync excludes now include `.coverage`, `coverage.xml`, `dist/`, `build/`, `*.egg-info/`.
   - `verify-storage` CLI now supports `--no-cooldown` for ad-hoc checks without post-verify sleep.
+  - verify-storage default expected mode/owner values are centralized in `storage_verify` constants and reused by CLI parser defaults.
 - security redaction hardening:
   - redaction now masks Discord webhook path tokens in command/output text.
   - `validate-config` shell command summaries now use redacted command rendering.
@@ -83,6 +87,9 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - removed test-only stdlib compatibility aliases from `checks.__init__`.
   - centralized network probe initialization keys in `checks.models.NETWORK_PROBE_INIT_FIELDS`.
   - refactored `_classify_time_health_reason` to consume `TimeHealthReasonSignals` dataclass instead of wide argument lists.
+  - time-health reason classification now uses only signal payload values (no direct `TargetConfig` dependency).
+- test helper evolution:
+  - added `make_target_grouped()` in `tests/conftest.py` as preferred grouped-config constructor for new tests.
 - doctor UX:
   - `doctor --fix-permissions` now applies permission fixes before building final doctor snapshot, reducing before/after mismatch in output.
 - recovery cooldown hardening:

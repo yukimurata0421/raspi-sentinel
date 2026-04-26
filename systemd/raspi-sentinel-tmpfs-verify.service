@@ -1,5 +1,6 @@
 [Unit]
 Description=Verify raspi-sentinel tmpfs storage is writable and safe
+Requires=run-raspi\x2dsentinel.mount
 After=run-raspi\x2dsentinel.mount
 Before=raspi-sentinel.service
 

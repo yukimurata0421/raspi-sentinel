@@ -13,6 +13,14 @@ def test_parser_accepts_send_notifications_global_option() -> None:
     assert args.command == "run-once"
 
 
+def test_parser_accepts_send_notifications_for_loop_subcommand() -> None:
+    parser = cli._build_parser()
+    args = parser.parse_args(["--dry-run", "--send-notifications", "loop", "--interval-sec", "30"])
+    assert args.command == "loop"
+    assert args.send_notifications is True
+    assert args.interval_sec == 30
+
+
 def test_parser_accepts_doctor_support_bundle_and_permission_fix_options() -> None:
     parser = cli._build_parser()
     args = parser.parse_args(

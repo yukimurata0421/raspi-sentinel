@@ -108,3 +108,60 @@ def test_main_requires_absolute_binary_path(tmp_path: Path) -> None:
                 "raspi-sentinel",
             ]
         )
+
+
+def test_main_rejects_home_binary_path(tmp_path: Path) -> None:
+    src_dir = tmp_path / "systemd"
+    dst_dir = tmp_path / "dest"
+    src_dir.mkdir()
+    dst_dir.mkdir()
+    _write(src_dir / "raspi-sentinel.service", "[Service]\nExecStart=raspi-sentinel run-once")
+    _write(
+        src_dir / "raspi-sentinel-tmpfs-verify.service",
+        "[Service]\nExecStart=raspi-sentinel verify-storage",
+    )
+    _write(src_dir / "raspi-sentinel.timer", "[Timer]\nOnUnitActiveSec=30s")
+
+    with pytest.raises(ValueError, match="ProtectHome=true"):
+        install_systemd.main(
+            [
+                "--source-dir",
+                str(src_dir),
+                "--dest-dir",
+                str(dst_dir),
+                "--raspi-sentinel-bin",
+                "/home/pi/.local/bin/raspi-sentinel",
+            ]
+        )
+
+
+def test_main_enables_tmpfs_mount_when_requested(tmp_path: Path, monkeypatch: Any) -> None:
+    src_dir = tmp_path / "systemd"
+    dst_dir = tmp_path / "dest"
+    src_dir.mkdir()
+    dst_dir.mkdir()
+    _write(src_dir / "raspi-sentinel.service", "[Service]\nExecStart=raspi-sentinel run-once")
+    _write(
+        src_dir / "raspi-sentinel-tmpfs-verify.service",
+        "[Service]\nExecStart=raspi-sentinel verify-storage",
+    )
+    _write(src_dir / "raspi-sentinel.timer", "[Timer]\nOnUnitActiveSec=30s")
+    _write(src_dir / "run-raspi\\x2dsentinel.mount", "[Mount]\nWhere=/run/raspi-sentinel")
+
+    monkeypatch.setattr(install_systemd.shutil, "which", lambda name: "/opt/bin/raspi-sentinel")
+    calls: list[list[str]] = []
+    monkeypatch.setattr(install_systemd, "_run", lambda cmd, dry_run: calls.append(cmd))
+
+    rc = install_systemd.main(
+        [
+            "--source-dir",
+            str(src_dir),
+            "--dest-dir",
+            str(dst_dir),
+            "--include-tmpfs-mount",
+            "--enable-timer",
+        ]
+    )
+    assert rc == 0
+    assert ["systemctl", "enable", "--now", "run-raspi\\x2dsentinel.mount"] in calls
+    assert ["systemctl", "enable", "--now", "raspi-sentinel.timer"] in calls

@@ -1,7 +1,7 @@
 [global]
-state_file = "/var/lib/raspi-sentinel/state.json"
-events_file = "/var/lib/raspi-sentinel/events.jsonl"
-monitor_stats_file = "/var/lib/raspi-sentinel/stats.json"
+state_file = "/tmp/raspi-sentinel-demo/state.json"
+events_file = "/tmp/raspi-sentinel-demo/events.jsonl"
+monitor_stats_file = "/tmp/raspi-sentinel-demo/stats.json"
 monitor_stats_interval_sec = 30
 restart_threshold = 99
 reboot_threshold = 999

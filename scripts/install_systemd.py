@@ -48,6 +48,15 @@ def _resolve_raspi_sentinel_bin(explicit_path: str | None) -> str:
     )
 
 
+def _validate_execstart_visibility(path: str) -> None:
+    if path.startswith("/home/"):
+        raise ValueError(
+            "raspi-sentinel binary is under /home, but bundled service uses ProtectHome=true. "
+            "install into /opt/raspi-sentinel/.venv (or another system-visible path) "
+            "and pass that path via --raspi-sentinel-bin."
+        )
+
+
 def render_service_unit(
     source_text: str,
     *,
@@ -127,6 +136,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     unit_names = list(CORE_UNITS)
     raspi_sentinel_bin = _resolve_raspi_sentinel_bin(args.raspi_sentinel_bin)
+    _validate_execstart_visibility(raspi_sentinel_bin)
     if args.include_tmpfs_mount:
         unit_names.extend(OPTIONAL_UNITS)
 
@@ -147,6 +157,8 @@ def main(argv: list[str] | None = None) -> int:
             _install_file(src, dst, mode=0o644, dry_run=args.dry_run)
 
     _run(["systemctl", "daemon-reload"], dry_run=args.dry_run)
+    if args.include_tmpfs_mount:
+        _run(["systemctl", "enable", "--now", "run-raspi\\x2dsentinel.mount"], dry_run=args.dry_run)
     if args.enable_timer:
         _run(["systemctl", "enable", "--now", "raspi-sentinel.timer"], dry_run=args.dry_run)
     return 0

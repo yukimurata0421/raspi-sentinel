@@ -14,6 +14,10 @@ from .state import ensure_directory, is_storage_tiering_enabled
 
 LOG = logging.getLogger(__name__)
 
+DEFAULT_VERIFY_EXPECTED_MODE = 0o755
+DEFAULT_VERIFY_EXPECTED_OWNER_UID = 0
+DEFAULT_VERIFY_EXPECTED_OWNER_GID = 0
+
 
 @dataclass(slots=True)
 class StorageVerifyResult:
@@ -70,9 +74,9 @@ def _lookup_mount_info(path: Path) -> tuple[Path, str | None]:
 def verify_tmpfs_storage(
     *,
     config: AppConfig,
-    expected_mode: int | None = 0o755,
-    expected_owner_uid: int | None = 0,
-    expected_owner_gid: int | None = 0,
+    expected_mode: int | None = DEFAULT_VERIFY_EXPECTED_MODE,
+    expected_owner_uid: int | None = DEFAULT_VERIFY_EXPECTED_OWNER_UID,
+    expected_owner_gid: int | None = DEFAULT_VERIFY_EXPECTED_OWNER_GID,
     apply_cooldown: bool = True,
 ) -> StorageVerifyResult:
     if not _is_tmpfs_tiering_enabled(config):

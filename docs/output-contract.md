@@ -26,6 +26,8 @@ These outputs are treated as semi-public APIs for tooling and integrations.
   - `failed`
   - `unknown`
 - Adding a new status value is a breaking change.
+- For target reports, when `status="unknown"` due to skipped evaluation, `healthy` should remain `true`
+  to represent "not evaluated in this cycle" rather than "known unhealthy".
 
 ## Time Format
 
@@ -63,6 +65,12 @@ For `external_status_file` producers:
 
 - `last_progress_ts` means business/control-plane progress, not timer heartbeat.
 - `last_success_ts` means successful completion of user-meaningful work.
+- Example progress signals:
+  - successful outbound API round-trip with valid response
+  - completion of a producer batch/file write step
+- Example success signals:
+  - end-to-end business transaction committed
+  - externally visible artifact updated without errors
 - Producers should document their own `progress`/`success` definitions.
 - During configured startup grace windows, `null`/empty values for progress/success timestamps may be tolerated by runtime checks.
   Producers should still populate both fields as early as possible after startup settles.

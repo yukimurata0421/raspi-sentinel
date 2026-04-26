@@ -268,7 +268,8 @@ def _skipped_due_to_reboot_report() -> TargetReport:
         "status": "unknown",
         "reason": "not_evaluated_due_to_reboot_request",
         "action": "skipped",
-        "healthy": False,
+        # unknown means "not evaluated in this cycle", not "known unhealthy".
+        "healthy": True,
         "evidence": {},
     }
 
@@ -446,11 +447,11 @@ def _run_notification_phase(
     events_max: int,
     events_backups: int,
     notifications_enabled: bool,
-    skip_followups: bool = False,
+    reboot_requested: bool = False,
 ) -> None:
     if not notifier.enabled or not notifications_enabled:
         return
-    if not skip_followups:
+    if not reboot_requested:
         send_due_followups(
             notifier=notifier,
             state=state,
@@ -516,12 +517,11 @@ def _run_cycle_collect_locked(
     store: TieredStateStore,
     now_ts: float,
     mono_provider: Callable[[], float],
-    send_notifications_in_dry_run: bool = False,
+    notifications_enabled: bool = False,
 ) -> tuple[int, CycleReport]:
     state, state_diagnostics = store.load_with_diagnostics()
     limited_mode = state_diagnostics.limited_mode
     notifier = DiscordNotifier(config.notify_config.discord)
-    notifications_enabled = (not dry_run) or send_notifications_in_dry_run
 
     events_file = config.global_config.events_file
     events_max = config.global_config.events_max_file_bytes
@@ -558,7 +558,7 @@ def _run_cycle_collect_locked(
         events_max=events_max,
         events_backups=events_backups,
         notifications_enabled=notifications_enabled,
-        skip_followups=artifacts.reboot_requested,
+        reboot_requested=artifacts.reboot_requested,
     )
 
     maybe_write_monitor_stats(
@@ -618,6 +618,7 @@ def run_cycle_collect(
         durable_fields=config.global_config.state_durable_fields,
         require_tmpfs=config.global_config.storage_require_tmpfs,
     )
+    notifications_enabled = (not dry_run) or send_notifications_in_dry_run
     try:
         with store.exclusive_lock(timeout_sec=config.global_config.state_lock_timeout_sec):
             now_ts = time_provider()
@@ -627,7 +628,7 @@ def run_cycle_collect(
                 store=store,
                 now_ts=now_ts,
                 mono_provider=mono_provider,
-                send_notifications_in_dry_run=send_notifications_in_dry_run,
+                notifications_enabled=notifications_enabled,
             )
     except TimeoutError as exc:
         LOG.error("%s", exc)

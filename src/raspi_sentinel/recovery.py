@@ -273,9 +273,8 @@ def apply_recovery(
     failures_text = _build_failures_text(check_result)
     if clock_reboot_confirmed and check_result.healthy:
         # Confirmed clock-frozen path can be healthy for other checks.
-        # Keep failure context but avoid incrementing general failure counters.
-        ts.last_failure_ts = effective_now
-        ts.last_failure_reason = failures_text
+        # Do not mutate generic failure context for healthy checks.
+        # Reboot intent details are captured in reboot history entries.
         consecutive = ts.consecutive_failures
     else:
         consecutive = _record_failure_state(ts, now_ts=effective_now, failures_text=failures_text)

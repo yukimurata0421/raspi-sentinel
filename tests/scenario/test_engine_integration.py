@@ -282,6 +282,7 @@ def test_evaluate_targets_phase_marks_remaining_targets_skipped_after_reboot_req
     assert artifacts.reboot_reason == "failed"
     assert artifacts.target_reports["c"]["action"] == "skipped"
     assert artifacts.target_reports["c"]["status"] == "unknown"
+    assert artifacts.target_reports["c"]["healthy"] is True
     assert artifacts.target_reports["c"]["reason"] == "not_evaluated_due_to_reboot_request"
 
 
@@ -386,7 +387,7 @@ def test_run_cycle_allows_notifications_in_dry_run_when_opted_in(
         store=store,
         now_ts=1000.0,
         mono_provider=lambda: 1.0,
-        send_notifications_in_dry_run=True,
+        notifications_enabled=True,
     )
     assert rc == UNHEALTHY
     assert report["dry_run"] is True

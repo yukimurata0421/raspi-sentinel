@@ -17,6 +17,7 @@
     - `reboots` -> `reboot_history`
     - `followups` -> `followup_schedule`
     - `notify_delivery_backlog` -> `notify_backlog`
+  - aliases are compatibility-only; prefer canonical names in new configs.
 - Event log tier (disk):
   - `events_path` (`events.jsonl`)
 

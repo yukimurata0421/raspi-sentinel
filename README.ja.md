@@ -61,7 +61,6 @@ git checkout main
 ```
 
 このベータデモは、`v0.9.0` タグ前の beta プレビュー資材（`main`）を前提にしています。
-`v0.9.0` タグを切る前には、`docs/release-notes/v0.9.0.md` の `# Draft:` / `Planned release:` マーカーを削除してください（release workflow で検証されます）。
 
 ### 2. install
 
@@ -69,24 +68,24 @@ git checkout main
 python3 -m pip install .
 ```
 
-### 3. デモ config 配置（restart/rebootなし、通知なし）
+### 3. デモ用ワークスペースと config 準備（restart/rebootなし、通知なし）
 
 ```bash
-sudo install -d -m 0755 /etc/raspi-sentinel
-sudo install -m 0600 -o root -g root config/raspi-sentinel.beta-demo.toml /etc/raspi-sentinel/config.toml
-sudo "${EDITOR:-vi}" /etc/raspi-sentinel/config.toml
+install -d -m 0755 /tmp/raspi-sentinel-demo
+cp config/raspi-sentinel.beta-demo.toml /tmp/raspi-sentinel-demo/config.toml
+${EDITOR:-vi} /tmp/raspi-sentinel-demo/config.toml
 ```
 
 ### 4. config 検証
 
 ```bash
-raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
+raspi-sentinel -c /tmp/raspi-sentinel-demo/config.toml validate-config --strict
 ```
 
 ### 5. doctor
 
 ```bash
-raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json
+raspi-sentinel -c /tmp/raspi-sentinel-demo/config.toml doctor --json
 ```
 
 ### 6. デモ heartbeat 初期化（正常系ベースライン）
@@ -98,28 +97,44 @@ python3 scripts/failure_inject.py fresh-file --path /tmp/raspi-sentinel-demo/hea
 ### 7. dry-run（最初は正常判定を確認）
 
 ```bash
-raspi-sentinel -c /etc/raspi-sentinel/config.toml --dry-run run-once --json
+raspi-sentinel -c /tmp/raspi-sentinel-demo/config.toml --dry-run run-once --json
 ```
 
 ### 8. サンプル障害注入
 
 ```bash
-sudo install -d -m 0755 /tmp/raspi-sentinel-demo
 python3 scripts/failure_inject.py stale-file --path /tmp/raspi-sentinel-demo/heartbeat.txt --age-sec 900
 ```
 
 再度 dry-run:
 
 ```bash
-raspi-sentinel -c /etc/raspi-sentinel/config.toml --dry-run run-once --json
+raspi-sentinel -c /tmp/raspi-sentinel-demo/config.toml --dry-run run-once --json
 ```
 
 ### 9. 確認と停止
 
 ```bash
-tail -n 20 /var/lib/raspi-sentinel/events.jsonl
-raspi-sentinel -c /etc/raspi-sentinel/config.toml explain-state --json
+tail -n 20 /tmp/raspi-sentinel-demo/events.jsonl
+raspi-sentinel -c /tmp/raspi-sentinel-demo/config.toml explain-state --json
 sudo systemctl disable --now raspi-sentinel.timer
+```
+
+### 10. デモファイル削除（任意）
+
+```bash
+rm -rf /tmp/raspi-sentinel-demo
+```
+
+## 本番向けセットアップ（root所有 config）
+
+本番/systemd 運用では `/etc` 配下に root:root / 0600 で配置します。
+
+```bash
+sudo install -d -m 0755 /etc/raspi-sentinel
+sudo install -m 0600 -o root -g root config/raspi-sentinel.example.toml /etc/raspi-sentinel/config.toml
+sudo "${EDITOR:-vi}" /etc/raspi-sentinel/config.toml
+raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
 ```
 
 ## 緊急停止
@@ -137,6 +152,9 @@ sudo systemctl stop raspi-sentinel.service
 BIN="$(command -v raspi-sentinel)"
 sudo python3 scripts/install_systemd.py --raspi-sentinel-bin "$BIN" --enable-timer
 ```
+
+付属 service は `ProtectHome=true` のため、`ExecStart` のバイナリは `/home/...` 以外を推奨します。
+`/opt/raspi-sentinel/.venv/bin/raspi-sentinel` のような systemd から見えるパスを使ってください。
 
 tmpfs tiering を使う場合:
 

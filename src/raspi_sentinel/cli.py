@@ -24,7 +24,12 @@ from .exit_codes import (
 )
 from .logging_utils import configure_logging
 from .state_helpers import safe_int
-from .storage_verify import verify_tmpfs_storage
+from .storage_verify import (
+    DEFAULT_VERIFY_EXPECTED_MODE,
+    DEFAULT_VERIFY_EXPECTED_OWNER_GID,
+    DEFAULT_VERIFY_EXPECTED_OWNER_UID,
+    verify_tmpfs_storage,
+)
 
 LOG = logging.getLogger(__name__)
 
@@ -128,19 +133,19 @@ def _build_parser() -> argparse.ArgumentParser:
     verify_storage_parser.add_argument(
         "--expected-mode",
         type=lambda value: int(value, 8),
-        default=0o755,
+        default=DEFAULT_VERIFY_EXPECTED_MODE,
         help="Expected mount directory mode in octal (default: 0755)",
     )
     verify_storage_parser.add_argument(
         "--expected-owner-uid",
         type=int,
-        default=0,
+        default=DEFAULT_VERIFY_EXPECTED_OWNER_UID,
         help="Expected mount directory owner uid (default: 0)",
     )
     verify_storage_parser.add_argument(
         "--expected-owner-gid",
         type=int,
-        default=0,
+        default=DEFAULT_VERIFY_EXPECTED_OWNER_GID,
         help="Expected mount directory owner gid (default: 0)",
     )
     verify_storage_parser.add_argument(
@@ -251,7 +256,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if verify_result.ok else STORAGE_VERIFY_FAILED
     if args.command == "doctor":
         fix_result: dict[str, object] | None = None
-        if args.fix_permissions:
+        should_fix_permissions = args.fix_permissions or args.fix_permissions_dry_run
+        if should_fix_permissions:
             fix_result = fix_config_permissions(
                 config_path=args.config,
                 dry_run=args.fix_permissions_dry_run,
@@ -260,7 +266,11 @@ def main(argv: list[str] | None = None) -> int:
         if fix_result is not None:
             doctor_report["fix_permissions"] = fix_result
         if args.support_bundle is not None:
-            bundle = build_support_bundle(config_path=args.config, config=config)
+            bundle = build_support_bundle(
+                config_path=args.config,
+                config=config,
+                doctor_report=doctor_report,
+            )
             args.support_bundle.parent.mkdir(parents=True, exist_ok=True)
             args.support_bundle.write_text(
                 json.dumps(bundle, indent=2, sort_keys=True), encoding="utf-8"

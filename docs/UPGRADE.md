@@ -78,6 +78,7 @@ git checkout v0.7.1
 python3 -m pip install .
 
 # or from a previously built wheel artifact
+# note: wheel filenames use underscore for distribution name (PEP 427)
 python3 -m pip install ./dist/raspi_sentinel-0.7.1-py3-none-any.whl
 ```
 4. Run `validate-config --strict` again.

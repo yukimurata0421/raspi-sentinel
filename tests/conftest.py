@@ -113,6 +113,50 @@ def make_target(**overrides: Any) -> TargetConfig:
     )
 
 
+def make_target_grouped(
+    *,
+    name: str = "demo",
+    services: list[str] | None = None,
+    service_active: bool = False,
+    heartbeat_file: Path | None = None,
+    heartbeat_max_age_sec: int | None = None,
+    output_file: Path | None = None,
+    output_max_age_sec: int | None = None,
+    command: str | None = None,
+    command_use_shell: bool = False,
+    command_timeout_sec: int | None = None,
+    restart_threshold: int | None = None,
+    reboot_threshold: int | None = None,
+    deps: DependencyCheckConfig | None = None,
+    network: NetworkProbeConfig | None = None,
+    stats: StatsCheckConfig | None = None,
+    time_health: TimeHealthCheckConfig | None = None,
+    maintenance: MaintenanceCheckConfig | None = None,
+    external: ExternalStatusCheckConfig | None = None,
+) -> TargetConfig:
+    """Build TargetConfig from grouped sub-configs (preferred for new tests)."""
+    return TargetConfig(
+        name=name,
+        services=services or [],
+        service_active=service_active,
+        heartbeat_file=heartbeat_file,
+        heartbeat_max_age_sec=heartbeat_max_age_sec,
+        output_file=output_file,
+        output_max_age_sec=output_max_age_sec,
+        command=command,
+        command_use_shell=command_use_shell,
+        command_timeout_sec=command_timeout_sec,
+        restart_threshold=restart_threshold,
+        reboot_threshold=reboot_threshold,
+        deps=deps or DependencyCheckConfig(),
+        network=network or NetworkProbeConfig(),
+        stats=stats or StatsCheckConfig(),
+        time_health=time_health or TimeHealthCheckConfig(),
+        maintenance=maintenance or MaintenanceCheckConfig(),
+        external=external or ExternalStatusCheckConfig(),
+    )
+
+
 def make_global_config(**overrides: Any) -> GlobalConfig:
     base: dict[str, Any] = {
         "state_file": Path("/tmp/raspi-sentinel-test-state.json"),

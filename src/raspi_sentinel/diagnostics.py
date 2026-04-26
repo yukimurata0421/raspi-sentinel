@@ -310,8 +310,13 @@ def _recent_events_summary(events_file: Path, *, max_lines: int = 200) -> dict[s
     }
 
 
-def build_support_bundle(config_path: Path, config: AppConfig) -> dict[str, object]:
-    doctor_report = build_doctor_report(config_path=config_path, config=config)
+def build_support_bundle(
+    config_path: Path,
+    config: AppConfig,
+    *,
+    doctor_report: dict[str, object] | None = None,
+) -> dict[str, object]:
+    report = doctor_report or build_doctor_report(config_path=config_path, config=config)
     explain_state = build_explain_state_report(config=config)
     validation_report = build_config_validation_report(config_path=config_path, config=config)
     last_run_result, last_run_schema = _load_last_run_status(
@@ -330,7 +335,7 @@ def build_support_bundle(config_path: Path, config: AppConfig) -> dict[str, obje
             "argv0": sys.argv[0] if sys.argv else None,
         },
         "config_path": str(config_path),
-        "doctor": doctor_report,
+        "doctor": report,
         "config_validation": validation_report,
         "state": explain_state,
         "storage_tier": {

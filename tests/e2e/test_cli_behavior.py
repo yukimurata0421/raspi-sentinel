@@ -544,6 +544,53 @@ def test_doctor_fix_permissions_dry_run_includes_actions(
     assert payload["fix_permissions"]["actions"]
 
 
+def test_doctor_fix_permissions_dry_run_alone_triggers_dry_run_fix(
+    tmp_path: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    conf = tmp_path / "config.toml"
+    _write(
+        conf,
+        """
+        [global]
+        state_file = "/tmp/state.json"
+        restart_threshold = 2
+        reboot_threshold = 3
+        restart_cooldown_sec = 10
+        reboot_cooldown_sec = 20
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 60
+        default_command_timeout_sec = 5
+        loop_interval_sec = 30
+
+        [notify.discord]
+        enabled = false
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "demo"
+        services = []
+        service_active = false
+        command = "true"
+        """,
+    )
+    calls: list[dict[str, Any]] = []
+
+    def fake_fix(**kwargs: Any) -> dict[str, object]:
+        calls.append(kwargs)
+        return {"status": "dry-run", "actions": ["chmod 0600", "chown 0:0"], "detail": None}
+
+    monkeypatch.setattr("raspi_sentinel.cli.fix_config_permissions", fake_fix)
+    rc = cli.main(["-c", str(conf), "doctor", "--json", "--fix-permissions-dry-run"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["fix_permissions"]["status"] == "dry-run"
+    assert calls and calls[0]["dry_run"] is True
+
+
 def test_doctor_fix_permissions_applies_before_report_snapshot(
     tmp_path: Path, monkeypatch: Any, capsys: Any
 ) -> None:
@@ -663,6 +710,69 @@ def test_doctor_support_bundle_writes_sanitized_payload(
     assert "secret-token" not in bundle_text
     assert "user:pass" not in bundle_text
     assert "token=abcd" not in bundle_text
+
+
+def test_doctor_support_bundle_reuses_prebuilt_doctor_report(
+    tmp_path: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    conf = tmp_path / "config.toml"
+    support_bundle = tmp_path / "bundle.json"
+    _write(
+        conf,
+        """
+        [global]
+        state_file = "/tmp/state.json"
+        restart_threshold = 2
+        reboot_threshold = 3
+        restart_cooldown_sec = 10
+        reboot_cooldown_sec = 20
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 60
+        default_command_timeout_sec = 5
+        loop_interval_sec = 30
+
+        [notify.discord]
+        enabled = false
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "demo"
+        services = []
+        service_active = false
+        command = "true"
+        """,
+    )
+    call_count = {"doctor": 0}
+
+    def fake_doctor(**kwargs: Any) -> dict[str, object]:
+        call_count["doctor"] += 1
+        return {"config_permissions": {"status": "ok"}}
+
+    def fake_bundle(**kwargs: Any) -> dict[str, object]:
+        assert kwargs["doctor_report"] == {"config_permissions": {"status": "ok"}}
+        return {"doctor": kwargs["doctor_report"]}
+
+    monkeypatch.setattr("raspi_sentinel.cli.build_doctor_report", fake_doctor)
+    monkeypatch.setattr("raspi_sentinel.cli.build_support_bundle", fake_bundle)
+
+    rc = cli.main(
+        [
+            "-c",
+            str(conf),
+            "doctor",
+            "--json",
+            "--support-bundle",
+            str(support_bundle),
+        ]
+    )
+    assert rc == 0
+    assert call_count["doctor"] == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["support_bundle_path"] == str(support_bundle)
 
 
 def test_explain_state_json_includes_schema_and_target_view(

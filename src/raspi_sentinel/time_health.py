@@ -34,6 +34,8 @@ class TimeHealthReasonSignals:
     dns_ok: bool | None
     wan_vs_target_ok: bool | None
     skew_abs: float
+    skew_threshold_sec: float
+    has_http_time_probe_url: bool
 
 
 def _fetch_http_date_epoch(url: str, timeout_sec: int) -> tuple[float | None, str | None]:
@@ -163,7 +165,7 @@ def _update_network_counters(
     )
 
 
-def _classify_time_health_reason(*, signals: TimeHealthReasonSignals, target: TargetConfig) -> str:
+def _classify_time_health_reason(*, signals: TimeHealthReasonSignals) -> str:
     """Derive the single clock_reason string from the observation signals."""
     if signals.freeze_detected:
         if signals.clock_frozen_confirmed:
@@ -195,8 +197,8 @@ def _classify_time_health_reason(*, signals: TimeHealthReasonSignals, target: Ta
         return "target_reachability_error"
     if (
         signals.ntp_sync_ok is False
-        and target.http_time_probe_url
-        and signals.skew_abs < target.clock_skew_threshold_sec
+        and signals.has_http_time_probe_url
+        and signals.skew_abs < signals.skew_threshold_sec
     ):
         return "time_sync_broken"
     if signals.insufficient_interval:
@@ -335,8 +337,9 @@ def apply_time_health_checks(
             dns_ok=dns_ok,
             wan_vs_target_ok=wan_vs_target_ok,
             skew_abs=skew_abs,
+            skew_threshold_sec=target.clock_skew_threshold_sec,
+            has_http_time_probe_url=bool(target.http_time_probe_url),
         ),
-        target=target,
     )
 
     model.clock_last_reason = reason
