@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import stat
 import subprocess
@@ -8,10 +9,15 @@ import tempfile
 from pathlib import Path
 
 from .config import AppConfig
-from .contracts import ALLOWED_TARGET_STATUS
-from .recovery import network_only_failures_can_reboot
+from .contracts import ALLOWED_TARGET_STATUS, STATS_SCHEMA_VERSION
+from .recovery import (
+    network_only_failures_can_reboot,
+    network_only_failures_excluded_from_reboot,
+)
 from .state import TieredStateStore, is_storage_tiering_enabled
 from .storage_verify import verify_tmpfs_storage
+
+LOG = logging.getLogger(__name__)
 
 
 def _config_permission_status(config_path: Path) -> tuple[str, str | None]:
@@ -52,15 +58,28 @@ def _systemd_state(unit: str, timeout_sec: int = 3) -> str:
     return value
 
 
-def _load_last_run_status(stats_path: Path) -> str:
+def _load_last_run_status(stats_path: Path) -> tuple[str, int | None]:
     try:
         raw = json.loads(stats_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return "unknown"
+        return "unknown", None
+    stats_schema_version_raw = raw.get("stats_schema_version")
+    stats_schema_version: int | None = (
+        stats_schema_version_raw if isinstance(stats_schema_version_raw, int) else None
+    )
+    if stats_schema_version is not None and stats_schema_version > STATS_SCHEMA_VERSION:
+        LOG.warning(
+            ("stats file schema version is newer than supported: seen=%d supported=%d path=%s"),
+            stats_schema_version,
+            STATS_SCHEMA_VERSION,
+            stats_path,
+        )
     status = raw.get("status")
     if isinstance(status, str) and status in ALLOWED_TARGET_STATUS:
-        return status
-    return "unknown"
+        return status, stats_schema_version
+    if isinstance(status, str):
+        LOG.warning("stats file has unknown status value '%s' (path=%s)", status, stats_path)
+    return "unknown", stats_schema_version
 
 
 def build_doctor_report(config_path: Path, config: AppConfig) -> dict[str, object]:
@@ -77,6 +96,10 @@ def build_doctor_report(config_path: Path, config: AppConfig) -> dict[str, objec
     restart_threshold = config.global_config.restart_threshold
     reboot_threshold = config.global_config.reboot_threshold
     threshold_ok = restart_threshold < reboot_threshold
+    last_run_result, last_run_schema_version = _load_last_run_status(
+        config.global_config.monitor_stats_file
+    )
+    network_only_excluded = network_only_failures_excluded_from_reboot()
 
     return {
         "config_permissions": {
@@ -107,8 +130,11 @@ def build_doctor_report(config_path: Path, config: AppConfig) -> dict[str, objec
             "status": "ok" if threshold_ok else "warn",
             "detail": None if threshold_ok else "restart_threshold must be < reboot_threshold",
         },
+        "network_only_failures_excluded_from_reboot": network_only_excluded,
+        # Backward compatibility field kept for v0.8.x.
         "network_only_failures_can_reboot": network_only_failures_can_reboot(),
-        "last_run_result": _load_last_run_status(config.global_config.monitor_stats_file),
+        "last_run_result": last_run_result,
+        "last_run_stats_schema_version": last_run_schema_version,
     }
 
 

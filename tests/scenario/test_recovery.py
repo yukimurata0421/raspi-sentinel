@@ -6,7 +6,11 @@ from typing import Any
 from conftest import make_global_config, make_target
 
 from raspi_sentinel.checks import CheckFailure, CheckResult
-from raspi_sentinel.recovery import apply_recovery, network_only_failures_can_reboot
+from raspi_sentinel.recovery import (
+    apply_recovery,
+    network_only_failures_can_reboot,
+    network_only_failures_excluded_from_reboot,
+)
 from raspi_sentinel.state_models import GlobalState
 
 
@@ -212,4 +216,5 @@ def test_reboot_is_suppressed_immediately_after_restart(monkeypatch: Any) -> Non
 
 
 def test_network_only_failure_reboot_flag_is_disabled_by_policy() -> None:
+    assert network_only_failures_excluded_from_reboot() is True
     assert network_only_failures_can_reboot() is False

@@ -57,8 +57,8 @@ Common fields:
 
 Timestamp display notes:
 
-- `events.jsonl.ts` is epoch seconds (numeric, timezone-neutral).
-- Human-readable ISO timestamps in notifications/events currently use host local timezone.
+- `events.jsonl.ts` is timezone-aware ISO-8601 text (host-local timezone offset included).
+- Human-readable ISO timestamps in notifications/events also use host local timezone.
 - Cross-host consumers should normalize to UTC at ingestion time.
 
 Null semantics:

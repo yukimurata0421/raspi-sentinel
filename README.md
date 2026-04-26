@@ -472,6 +472,7 @@ internet_ip = 30
   - `dns_error_kind`: `nxdomain`, `timeout`, `resolver_config_missing`, `no_server`, `unreachable`, `unknown`
 - `http_probe_ok`: upper-layer reachability (`http_status_code`, connect/TLS/total latency, `http_error_kind`)
   - success requires `200 <= http_status_code < 300`
+  - probe uses HTTP `HEAD`; choose an endpoint that accepts `HEAD` (or returns `405` intentionally and treat it as probe failure)
   - `http_error_kind`: `dns_resolution_failed`, `connect_timeout`, `read_timeout`, `tls_error`, `connection_refused`, `non_2xx`, `unknown`
 
 Typical reasons and split:
@@ -582,6 +583,8 @@ Operator preflight checks (permissions/timer/tmpfs/threshold sanity):
 raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json
 ```
 
+`doctor --json` includes `network_only_failures_excluded_from_reboot` (expected `true` in default policy).
+
 State introspection (schema version, counters, last actions):
 
 ```bash
@@ -604,7 +607,7 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
 | `10` | Config load error |
 | `11` | Invalid loop interval |
 | `12` | No subcommand / help |
-| `13` | State lock timeout (another cycle holds the lock) |
+| `13` | State lock acquisition failed (timeout or lock I/O error) |
 | `14` | State persistence failed |
 | `15` | `validate-config --strict` found warnings |
 | `16` | Storage verification failed (`verify-storage`) |

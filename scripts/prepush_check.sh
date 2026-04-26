@@ -12,4 +12,4 @@ fi
 "${PYTHON_BIN}" -m ruff check src tests
 "${PYTHON_BIN}" -m ruff format --check src tests
 "${PYTHON_BIN}" -m mypy
-"${PYTHON_BIN}" -m pytest -q tests/unit/test_public_secret_scan.py tests/unit/test_example_config_placeholders.py
+"${PYTHON_BIN}" -m pytest -q tests/unit -k "public_secret_scan or example_config_placeholders"

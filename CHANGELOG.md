@@ -95,6 +95,22 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 - rollout verification summary:
   - same change set was applied and validated in development and deployment environments
   - validation commands completed with `overall_status: ok` in dry-run and non-dry-run `run-once --json`.
+- doctor/reporting clarity:
+  - added `network_only_failures_excluded_from_reboot` (clear safety-positive flag) to `doctor` output.
+  - `network_only_failures_can_reboot` remains for compatibility in `v0.8.x`.
+  - doctor now returns `last_run_stats_schema_version` and warns on future schema versions.
+- config summary warning refresh:
+  - tmpfs warning now checks whether `state_volatile` path is outside `/run/` when `storage.require_tmpfs=true`.
+- example config placeholder guard:
+  - placeholder test now scans all `config/**/*.toml` and validates discord webhook placeholder only when `notify.discord.enabled=true`.
+- schema compatibility guardrails:
+  - state loading now warns when `state_schema_version` is newer than supported.
+  - added tests for future schema-version warnings in diagnostics and state loading.
+- docs and release prep:
+  - refreshed `v0.8.0-draft` release notes to match current `Unreleased` scope.
+  - clarified `STATE_LOCK_ERROR` wording as timeout-or-I/O in docs.
+  - documented deprecation warning behavior (once per process).
+  - documented HTTP probe method note (HEAD requirement) in README.
 
 ## [0.7.1] - 2026-04-23
 

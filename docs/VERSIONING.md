@@ -43,3 +43,9 @@ A lightweight git tag **`v0.2.0`** may exist from an intermediate snapshot. Ther
 If a tag was pushed before `docs/release-notes/vX.Y.Z.md` existed, edit the release on GitHub or run:
 
 `gh release edit vX.Y.Z --notes-file docs/release-notes/vX.Y.Z.md`
+
+## Deprecation warning behavior
+
+- Deprecated `TargetConfig.<field>` shim warnings are emitted once per process per field name.
+- In `loop` mode, the same deprecated field access may not re-log every cycle.
+- Planned shim removal target remains `v1.0.0`.

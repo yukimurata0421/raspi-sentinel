@@ -248,11 +248,11 @@ def _global_warnings(config: AppConfig) -> list[str]:
     gc = config.global_config
     if gc.restart_threshold >= gc.reboot_threshold:
         warnings.append("global restart_threshold should be lower than reboot_threshold")
-    if gc.storage_require_tmpfs and gc.state_file.parent == Path("/var/lib/raspi-sentinel"):
+    if gc.storage_require_tmpfs and not str(gc.state_file).startswith("/run/"):
         warnings.append(
             (
-                "storage.require_tmpfs=true but state_file is under /var/lib; "
-                "verify volatile path intent"
+                "storage.require_tmpfs=true but state_volatile path is not under /run; "
+                f"verify volatile path intent ({gc.state_file})"
             )
         )
     return warnings

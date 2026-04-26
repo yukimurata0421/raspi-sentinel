@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -408,6 +409,31 @@ def test_state_store_quarantines_corrupted_json(tmp_path: Path) -> None:
     assert diagnostics.corrupt_backup_path.exists()
     assert not state_file.exists()
     assert loaded.targets == {}
+
+
+def test_state_store_warns_on_future_state_schema_version(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    state_file = tmp_path / "state.json"
+    state_file.write_text(
+        json.dumps(
+            {
+                "state_schema_version": 999,
+                "targets": {},
+                "reboots": [],
+                "followups": {},
+                "notify": {},
+                "monitor_stats": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    store = StateStore(state_file)
+    with caplog.at_level("WARNING"):
+        loaded, diagnostics = store.load_with_diagnostics()
+    assert diagnostics.state_load_error is None
+    assert loaded.state_schema_version == 999
+    assert "schema version is newer than supported" in caplog.text
 
 
 def test_state_store_skips_quarantine_when_candidate_slots_are_exhausted(

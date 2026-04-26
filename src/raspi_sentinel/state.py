@@ -15,6 +15,7 @@ try:
 except ImportError:  # pragma: no cover - non-POSIX fallback
     fcntl = None  # type: ignore[assignment]
 
+from .contracts import STATE_SCHEMA_VERSION
 from .state_helpers import write_json_atomic
 from .state_models import GlobalState, RebootRecord
 
@@ -122,6 +123,14 @@ class StateStore:
             diagnostics.state_load_error = "state JSON root is not an object"
             diagnostics.corrupt_backup_path = self._quarantine_corrupt_state()
             return self._default_state(), diagnostics
+        schema_version_raw = data.get("state_schema_version")
+        if isinstance(schema_version_raw, int) and schema_version_raw > STATE_SCHEMA_VERSION:
+            LOG.warning(
+                ("state file schema version is newer than supported: seen=%d supported=%d path=%s"),
+                schema_version_raw,
+                STATE_SCHEMA_VERSION,
+                self.path,
+            )
 
         return self._sanitize_loaded_state(data), diagnostics
 

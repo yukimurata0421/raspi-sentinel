@@ -9,7 +9,7 @@
 | `2` | `REBOOT_REQUESTED` | Recovery logic decided reboot is required and requested. |
 | `10` | `CONFIG_LOAD_FAILED` | Config file could not be parsed/validated. |
 | `11` | `INVALID_INTERVAL` | `loop --interval-sec` value is invalid (`<= 0`). |
-| `13` | `STATE_LOCK_ERROR` | Could not acquire state lock or lock I/O failed. |
+| `13` | `STATE_LOCK_ERROR` | State lock acquisition failed (timeout or lock I/O error). |
 | `14` | `STATE_PERSIST_FAILED` | Cycle ran but state persistence failed (volatile or durable tier). |
 | `15` | `VALIDATION_WARNING` | `validate-config --strict` detected warnings. |
 | `16` | `STORAGE_VERIFY_FAILED` | `verify-storage` detected mount/permission/writability/capacity issues. |

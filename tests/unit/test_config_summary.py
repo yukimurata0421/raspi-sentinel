@@ -134,3 +134,101 @@ def test_config_summary_adds_global_threshold_warning(tmp_path: Path, monkeypatc
         "restart_threshold should be lower than reboot_threshold" in warning
         for warning in report.get("global_warnings", [])
     )
+
+
+def test_config_summary_warns_when_require_tmpfs_uses_non_run_state_path(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    conf = tmp_path / "config.toml"
+    _write(
+        conf,
+        """
+        [global]
+        state_file = "/var/lib/raspi-sentinel/state.json"
+        restart_threshold = 2
+        reboot_threshold = 3
+        restart_cooldown_sec = 10
+        reboot_cooldown_sec = 20
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 60
+        default_command_timeout_sec = 5
+        loop_interval_sec = 30
+
+        [storage]
+        require_tmpfs = true
+
+        [notify.discord]
+        enabled = false
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "demo"
+        services = []
+        service_active = false
+        command = "true"
+        """,
+    )
+    cfg = load_config(conf)
+    monkeypatch.setattr(
+        config_summary,
+        "_check_service_unit_load_state",
+        lambda unit, timeout_sec=3: "loaded",
+    )
+    report = config_summary.build_config_validation_report(config_path=conf, config=cfg)
+    assert any(
+        "storage.require_tmpfs=true but state_volatile path is not under /run" in warning
+        for warning in report.get("global_warnings", [])
+    )
+
+
+def test_config_summary_does_not_warn_when_require_tmpfs_uses_run_state_path(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    conf = tmp_path / "config.toml"
+    _write(
+        conf,
+        """
+        [global]
+        state_file = "/run/raspi-sentinel/state.volatile.json"
+        restart_threshold = 2
+        reboot_threshold = 3
+        restart_cooldown_sec = 10
+        reboot_cooldown_sec = 20
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 60
+        default_command_timeout_sec = 5
+        loop_interval_sec = 30
+
+        [storage]
+        require_tmpfs = true
+
+        [notify.discord]
+        enabled = false
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "demo"
+        services = []
+        service_active = false
+        command = "true"
+        """,
+    )
+    cfg = load_config(conf)
+    monkeypatch.setattr(
+        config_summary,
+        "_check_service_unit_load_state",
+        lambda unit, timeout_sec=3: "loaded",
+    )
+    report = config_summary.build_config_validation_report(config_path=conf, config=cfg)
+    assert not any(
+        "storage.require_tmpfs=true but state_volatile path is not under /run" in warning
+        for warning in report.get("global_warnings", [])
+    )

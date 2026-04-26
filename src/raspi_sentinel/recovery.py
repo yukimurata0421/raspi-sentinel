@@ -80,8 +80,14 @@ def _policy_reason(result: CheckResult) -> str | None:
     return reason if isinstance(reason, str) else None
 
 
+def network_only_failures_excluded_from_reboot() -> bool:
+    """Return True when network-only failed reasons are excluded from reboot allowlist."""
+    return NETWORK_ONLY_FAILED_REASONS.isdisjoint(REBOOT_ALLOWED_POLICY_REASONS)
+
+
 def network_only_failures_can_reboot() -> bool:
-    return bool(NETWORK_ONLY_FAILED_REASONS & REBOOT_ALLOWED_POLICY_REASONS)
+    """Backward-compatibility helper; prefer network_only_failures_excluded_from_reboot()."""
+    return not network_only_failures_excluded_from_reboot()
 
 
 def _reboot_reason_allowed(result: CheckResult) -> bool:

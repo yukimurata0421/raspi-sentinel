@@ -48,6 +48,15 @@ These outputs are treated as semi-public APIs for tooling and integrations.
 
 These schemas are compatibility guardrails for `v0.8.x` contract hardening.
 
+## Forward Schema Handling
+
+- If a reader sees `*_schema_version` higher than supported, it should keep best-effort parsing
+  and emit an operator-visible warning.
+- `doctor` currently follows this policy:
+  - keeps `last_run_result` as `unknown` for unsupported status values
+  - exposes `last_run_stats_schema_version` for debugging
+  - logs warning when `stats_schema_version` is newer than supported.
+
 ## External Status Producer Contract
 
 For `external_status_file` producers:
