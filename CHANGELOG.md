@@ -111,6 +111,8 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - clarified `STATE_LOCK_ERROR` wording as timeout-or-I/O in docs.
   - documented deprecation warning behavior (once per process).
   - documented HTTP probe method note (HEAD requirement) in README.
+- deployment control:
+  - added `scripts/deploy_pi5_guard.py` for staged deployment to `pi5-guard` with preflight, stage validation, switch, post-deploy health gate, and rollback.
 
 ## [0.7.1] - 2026-04-23
 

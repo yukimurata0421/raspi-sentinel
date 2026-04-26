@@ -162,3 +162,27 @@ If backlog never clears:
 2. Check journald for transport details:
    `journalctl -u raspi-sentinel.service -n 200 --no-pager`.
 3. Confirm `notify.discord.webhook_url` validity and outbound firewall policy.
+
+## 7. Controlled Deployment to pi5-guard (Pi Zero)
+
+Use controlled staged deployment instead of direct overwrite when updating `/opt/raspi-sentinel`:
+
+```bash
+python3 scripts/deploy_pi5_guard.py --host pi5-guard@pi5-guard --mode safe
+```
+
+Flow (`--mode safe`):
+
+1. preflight (`ssh`, `sudo -n`, expected paths/config)
+2. stage sync to remote staging directory
+3. staged validation (`validate-config`, `--dry-run run-once --json`)
+4. switch with rollback backup (`/opt/raspi-sentinel.rollback.<timestamp>`)
+5. post-deploy health gate (`validate-config`, dry-run/live `run-once --json`)
+6. automatic rollback on failure
+
+Useful options:
+
+- `--mode fast`: skips staged validation, keeps switch + post-deploy health gate
+- `--dry-run`: prints commands without executing
+
+This deployment helper is intended for operator-controlled host updates and does not create git tags.
