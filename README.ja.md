@@ -112,6 +112,13 @@ bash scripts/prepush_check.sh
 - 設定検証: `raspi-sentinel ... validate-config`
 - 運用事前診断: `raspi-sentinel ... doctor`
 - 状態説明: `raspi-sentinel ... explain-state`
+- Prometheus出力: `raspi-sentinel ... export-prometheus --textfile-path <path>`
+
+権限修正（doctor から実行）:
+
+```bash
+sudo raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json --fix-permissions
+```
 
 JSONログが必要な場合:
 
@@ -128,5 +135,7 @@ raspi-sentinel --structured-logging -c /etc/raspi-sentinel/config.toml run-once
 - テストマップ: [docs/facts/test-map.md](docs/facts/test-map.md)
 - 終了コード: [docs/facts/exit-codes.md](docs/facts/exit-codes.md)
 - リリースノート: [docs/release-notes/v0.8.0.md](docs/release-notes/v0.8.0.md)
+- アップグレードガイド: [docs/UPGRADE.ja.md](docs/UPGRADE.ja.md)
+- セキュリティポリシー: [docs/SECURITY.ja.md](docs/SECURITY.ja.md)
 
 テストは `tests/unit/` `tests/scenario/` `tests/e2e/` の taxonomy で運用します。

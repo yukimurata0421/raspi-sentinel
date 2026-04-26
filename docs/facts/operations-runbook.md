@@ -186,3 +186,49 @@ Useful options:
 - `--dry-run`: prints commands without executing
 
 This deployment helper is intended for operator-controlled host updates and does not create git tags.
+
+## 8. Prometheus Textfile Export
+
+Write one-shot metrics for node_exporter textfile collector:
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml export-prometheus \
+  --textfile-path /var/lib/node_exporter/textfile_collector/raspi_sentinel.prom
+```
+
+Current metrics include:
+
+- config permission health
+- threshold consistency
+- tmpfs verify status
+- timer active status
+- state limited-mode/reboot/followup counters
+
+## 9. Permission Repair from Doctor
+
+When config ownership/mode drift is detected:
+
+```bash
+sudo raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json --fix-permissions
+```
+
+Preview only:
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json --fix-permissions --fix-permissions-dry-run
+```
+
+## 10. Failure Injection (Sample)
+
+Use helper script for controlled test scenarios:
+
+```bash
+# stop monitored service
+sudo python3 scripts/failure_inject.py service-down --service demo.service
+
+# inject stale file (mtime in the past)
+python3 scripts/failure_inject.py stale-file --path /tmp/heartbeat.txt --age-sec 900
+
+# restore service
+sudo python3 scripts/failure_inject.py service-restore --service demo.service
+```

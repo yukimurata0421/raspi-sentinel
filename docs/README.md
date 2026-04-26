@@ -25,6 +25,10 @@ This index is the entry point for operational and design documentation of `raspi
 
 - [Versioning](VERSIONING.md)
 - [Release Notes](release-notes/v0.8.0.md)
+- [Upgrade Guide](UPGRADE.md)
+- [Upgrade Guide (JA)](UPGRADE.ja.md)
+- [Security Policy](../SECURITY.md)
+- [Security Policy (JA)](SECURITY.ja.md)
 
 ## Historical Notes
 

@@ -58,17 +58,39 @@ def test_command_check_timeout_oserror_nonzero_and_success(monkeypatch: Any) -> 
     assert command_check("x", 1, "command") is not None
 
     def bad_run(*_: Any, **__: Any) -> Any:
-        return subprocess.CompletedProcess(args=["x"], returncode=2, stdout="", stderr="err")
+        return subprocess.CompletedProcess(
+            args=["x"],
+            returncode=2,
+            stdout="Authorization: Bearer supersecret",
+            stderr="",
+        )
 
     monkeypatch.setattr(command_checks.subprocess, "run", bad_run)
-    failure = command_check("x", 1, "command")
+    failure = command_check("x?token=abcd", 1, "command")
     assert failure is not None and "exit code" in failure.message
+    assert "token=abcd" not in failure.message
+    assert "supersecret" not in failure.message
 
     def ok_run(*_: Any, **__: Any) -> Any:
         return subprocess.CompletedProcess(args=["x"], returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr(command_checks.subprocess, "run", ok_run)
     assert command_check("x", 1, "command") is None
+
+
+def test_command_check_timeout_message_redacts_command(monkeypatch: Any) -> None:
+    def timeout_run(*_: Any, **__: Any) -> Any:
+        raise subprocess.TimeoutExpired(cmd="x", timeout=1)
+
+    monkeypatch.setattr(command_checks.subprocess, "run", timeout_run)
+    failure = command_check(
+        "curl https://user:pass@example.test?token=abcd",
+        1,
+        "command",
+    )
+    assert failure is not None
+    assert "user:pass" not in failure.message
+    assert "token=abcd" not in failure.message
 
 
 def test_command_check_shell_syntax_is_advisory_without_shell_opt_in() -> None:

@@ -27,7 +27,31 @@ def _config_permission_status(config_path: Path) -> tuple[str, str | None]:
         return "warn", f"cannot stat config file: {exc}"
     if mode & (stat.S_IWGRP | stat.S_IWOTH):
         return "warn", f"config is group/world writable (mode={mode:04o})"
+    if mode & (stat.S_IRGRP | stat.S_IROTH):
+        return "warn", f"config is group/world readable (mode={mode:04o})"
     return "ok", None
+
+
+def fix_config_permissions(
+    *,
+    config_path: Path,
+    mode: int = 0o600,
+    owner_uid: int = 0,
+    owner_gid: int = 0,
+    dry_run: bool = False,
+) -> dict[str, object]:
+    actions: list[str] = [
+        f"chmod {mode:04o} {config_path}",
+        f"chown {owner_uid}:{owner_gid} {config_path}",
+    ]
+    if dry_run:
+        return {"status": "dry-run", "actions": actions, "detail": None}
+    try:
+        os.chmod(config_path, mode)
+        os.chown(config_path, owner_uid, owner_gid)
+    except OSError as exc:
+        return {"status": "error", "actions": actions, "detail": str(exc)}
+    return {"status": "ok", "actions": actions, "detail": None}
 
 
 def _path_writable(path: Path) -> tuple[str, str | None]:

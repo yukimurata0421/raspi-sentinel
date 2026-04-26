@@ -441,6 +441,56 @@ def test_doctor_json_reports_core_operational_checks(
     assert payload["last_run_stats_schema_version"] in (None, 1)
 
 
+def test_doctor_fix_permissions_dry_run_includes_actions(
+    tmp_path: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    conf = tmp_path / "config.toml"
+    _write(
+        conf,
+        """
+        [global]
+        state_file = "/tmp/state.json"
+        restart_threshold = 2
+        reboot_threshold = 3
+        restart_cooldown_sec = 10
+        reboot_cooldown_sec = 20
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 60
+        default_command_timeout_sec = 5
+        loop_interval_sec = 30
+
+        [notify.discord]
+        enabled = false
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "demo"
+        services = []
+        service_active = false
+        command = "true"
+        """,
+    )
+    monkeypatch.setattr(
+        "raspi_sentinel.diagnostics.fix_config_permissions",
+        lambda **kwargs: {
+            "status": "dry-run",
+            "actions": ["chmod 0600 /tmp/config.toml", "chown 0:0 /tmp/config.toml"],
+            "detail": None,
+        },
+    )
+    rc = cli.main(
+        ["-c", str(conf), "doctor", "--json", "--fix-permissions", "--fix-permissions-dry-run"]
+    )
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["fix_permissions"]["status"] == "dry-run"
+    assert payload["fix_permissions"]["actions"]
+
+
 def test_explain_state_json_includes_schema_and_target_view(
     tmp_path: Path, monkeypatch: Any, capsys: Any
 ) -> None:
@@ -494,6 +544,63 @@ def test_explain_state_json_includes_schema_and_target_view(
     payload = json.loads(capsys.readouterr().out)
     assert payload["state_schema_version"] == 1
     assert payload["targets"]["demo"]["consecutive_failures"] == 2
+
+
+def test_export_prometheus_writes_textfile(tmp_path: Path) -> None:
+    conf = tmp_path / "config.toml"
+    state_file = tmp_path / "state.json"
+    stats_file = tmp_path / "stats.json"
+    textfile = tmp_path / "raspi_sentinel.prom"
+    state_file.write_text(
+        json.dumps(
+            {
+                "state_schema_version": 1,
+                "targets": {"demo": {"last_status": "ok"}},
+                "reboots": [{"ts": 1.0, "target": "demo", "reason": "x"}],
+                "followups": {},
+                "notify": {},
+                "monitor_stats": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    stats_file.write_text(json.dumps({"stats_schema_version": 1, "status": "ok"}), encoding="utf-8")
+    _write(
+        conf,
+        f"""
+        [global]
+        state_file = "{state_file}"
+        monitor_stats_file = "{stats_file}"
+        restart_threshold = 2
+        reboot_threshold = 3
+        restart_cooldown_sec = 10
+        reboot_cooldown_sec = 20
+        reboot_window_sec = 300
+        max_reboots_in_window = 2
+        min_uptime_for_reboot_sec = 60
+        default_command_timeout_sec = 5
+        loop_interval_sec = 30
+
+        [notify.discord]
+        enabled = false
+        username = "raspi-sentinel"
+        timeout_sec = 5
+        followup_delay_sec = 300
+        heartbeat_interval_sec = 0
+
+        [[targets]]
+        name = "demo"
+        services = []
+        service_active = false
+        command = "true"
+        """,
+    )
+
+    rc = cli.main(["-c", str(conf), "export-prometheus", "--textfile-path", str(textfile)])
+    assert rc == 0
+    content = textfile.read_text(encoding="utf-8")
+    assert "raspi_sentinel_doctor_config_permissions_ok" in content
+    assert "raspi_sentinel_state_reboots_count" in content
 
 
 def test_full_cycle_unhealthy_target_restarts_and_logs(tmp_path: Path, monkeypatch: Any) -> None:

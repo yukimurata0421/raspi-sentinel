@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .config import AppConfig, load_config
 from .config_summary import build_config_validation_report, format_config_validation_report
-from .diagnostics import build_doctor_report, build_explain_state_report
+from .diagnostics import build_doctor_report, build_explain_state_report, fix_config_permissions
 from .engine import CycleReport, run_cycle_collect
 from .exit_codes import (
     CONFIG_LOAD_FAILED,
@@ -129,6 +129,16 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print doctor checks as JSON (default output format; retained for compatibility)",
     )
+    doctor_parser.add_argument(
+        "--fix-permissions",
+        action="store_true",
+        help="Apply root-owned 0600 permissions to config file before running doctor checks",
+    )
+    doctor_parser.add_argument(
+        "--fix-permissions-dry-run",
+        action="store_true",
+        help="Show config permission fix actions without applying them",
+    )
     explain_state_parser = sub.add_parser(
         "explain-state",
         help="Print a concise view of persisted runtime state and diagnostics",
@@ -137,6 +147,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Print state explanation as JSON (default output format; retained for compatibility)",
+    )
+    prometheus_parser = sub.add_parser(
+        "export-prometheus",
+        help="Write one-shot Prometheus textfile metrics from doctor/explain-state snapshots",
+    )
+    prometheus_parser.add_argument(
+        "--textfile-path",
+        type=Path,
+        required=True,
+        help="Path to write Prometheus textfile metrics",
     )
 
     return parser
@@ -188,11 +208,23 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if verify_result.ok else STORAGE_VERIFY_FAILED
     if args.command == "doctor":
         doctor_report = build_doctor_report(config_path=args.config, config=config)
+        if args.fix_permissions:
+            doctor_report["fix_permissions"] = fix_config_permissions(
+                config_path=args.config,
+                dry_run=args.fix_permissions_dry_run,
+            )
         print(json.dumps(doctor_report, indent=2, sort_keys=True))
         return 0
     if args.command == "explain-state":
         state_report = build_explain_state_report(config=config)
         print(json.dumps(state_report, indent=2, sort_keys=True))
+        return 0
+    if args.command == "export-prometheus":
+        doctor_report = build_doctor_report(config_path=args.config, config=config)
+        state_report = build_explain_state_report(config=config)
+        lines = _prometheus_lines(doctor_report=doctor_report, state_report=state_report)
+        args.textfile_path.parent.mkdir(parents=True, exist_ok=True)
+        args.textfile_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return 0
 
     # args.command == "validate-config" (only remaining subcommand)
@@ -209,3 +241,55 @@ def main(argv: list[str] | None = None) -> int:
         )
         return VALIDATION_WARNING
     return 0
+
+
+def _prometheus_bool(value: object) -> int:
+    return 1 if value is True else 0
+
+
+def _prometheus_lines(
+    *,
+    doctor_report: dict[str, object],
+    state_report: dict[str, object],
+) -> list[str]:
+    config_status = doctor_report.get("config_permissions", {})
+    thresholds = doctor_report.get("thresholds", {})
+    tmpfs = doctor_report.get("tmpfs", {})
+    systemd = doctor_report.get("systemd", {})
+    config_ok = _prometheus_bool(
+        isinstance(config_status, dict) and config_status.get("status") == "ok"
+    )
+    thresholds_ok = _prometheus_bool(
+        isinstance(thresholds, dict) and thresholds.get("status") == "ok"
+    )
+    tmpfs_ok = _prometheus_bool(isinstance(tmpfs, dict) and tmpfs.get("verify_ok") is True)
+    timer_active = _prometheus_bool(
+        isinstance(systemd, dict) and systemd.get("timer_state") == "active"
+    )
+    limited_mode = _prometheus_bool(state_report.get("limited_mode") is True)
+    reboots_count = safe_int(state_report.get("reboots_count"), 0)
+    followups_count = safe_int(state_report.get("followups_count"), 0)
+    lines = [
+        "# HELP raspi_sentinel_doctor_config_permissions_ok 1 when config permissions are ok.",
+        "# TYPE raspi_sentinel_doctor_config_permissions_ok gauge",
+        f"raspi_sentinel_doctor_config_permissions_ok {config_ok}",
+        "# HELP raspi_sentinel_doctor_thresholds_ok 1 when restart/reboot thresholds are valid.",
+        "# TYPE raspi_sentinel_doctor_thresholds_ok gauge",
+        f"raspi_sentinel_doctor_thresholds_ok {thresholds_ok}",
+        "# HELP raspi_sentinel_doctor_tmpfs_verify_ok 1 when tmpfs verification passes.",
+        "# TYPE raspi_sentinel_doctor_tmpfs_verify_ok gauge",
+        f"raspi_sentinel_doctor_tmpfs_verify_ok {tmpfs_ok}",
+        "# HELP raspi_sentinel_doctor_timer_active 1 when raspi-sentinel.timer is active.",
+        "# TYPE raspi_sentinel_doctor_timer_active gauge",
+        f"raspi_sentinel_doctor_timer_active {timer_active}",
+        "# HELP raspi_sentinel_state_limited_mode 1 when state loading is in limited mode.",
+        "# TYPE raspi_sentinel_state_limited_mode gauge",
+        f"raspi_sentinel_state_limited_mode {limited_mode}",
+        "# HELP raspi_sentinel_state_reboots_count Number of reboot records in state.",
+        "# TYPE raspi_sentinel_state_reboots_count gauge",
+        f"raspi_sentinel_state_reboots_count {reboots_count}",
+        "# HELP raspi_sentinel_state_followups_count Number of pending followups in state.",
+        "# TYPE raspi_sentinel_state_followups_count gauge",
+        f"raspi_sentinel_state_followups_count {followups_count}",
+    ]
+    return lines

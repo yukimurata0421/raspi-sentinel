@@ -125,7 +125,10 @@ def _switch_release(
         "set -euo pipefail; "
         f"sudo -n rm -rf {shlex.quote(backup_dir)}; "
         f"sudo -n cp -a /opt/raspi-sentinel {shlex.quote(backup_dir)}; "
-        f"sudo -n rsync -az --delete --exclude .venv/ {shlex.quote(stage_dir)}/ /opt/raspi-sentinel/"
+        + (
+            "sudo -n rsync -az --delete --exclude .venv/ "
+            f"{shlex.quote(stage_dir)}/ /opt/raspi-sentinel/"
+        )
     )
     result = _run_ssh(host, remote_cmd, dry_run=dry_run)
     _require_ok(result, what="switch release", command=remote_cmd, dry_run=dry_run)
@@ -190,7 +193,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--mode",
         choices=("safe", "fast"),
         default="safe",
-        help="safe: staged validation + backup + post gates; fast: keep steps but skip stage validation",
+        help=(
+            "safe: staged validation + backup + post gates; "
+            "fast: keep steps but skip stage validation"
+        ),
     )
     parser.add_argument(
         "--stage-root",

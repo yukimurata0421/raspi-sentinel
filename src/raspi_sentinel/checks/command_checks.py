@@ -4,6 +4,7 @@ import logging
 import shlex
 import subprocess
 
+from ..redaction import redact_command, redact_text
 from .models import CheckFailure
 
 LOG = logging.getLogger(__name__)
@@ -17,12 +18,13 @@ def command_check(
     check_name: str = "command",
     use_shell: bool = False,
 ) -> CheckFailure | None:
+    redacted_command = redact_command(command)
     # Security posture stays explicit opt-in, but shell-token detection is now advisory.
     if not use_shell and any(token in command for token in ("|", "&&", "||", ";", "$(", "`")):
         LOG.warning(
             "possible shell syntax detected with use_shell=false (check=%s): %s",
             check_name,
-            command,
+            redacted_command,
         )
 
     args: str | list[str]
@@ -32,7 +34,10 @@ def command_check(
         try:
             parsed = shlex.split(command)
         except ValueError as exc:
-            return CheckFailure(check_name, f"invalid command syntax: {exc}")
+            return CheckFailure(
+                check_name,
+                f"invalid command syntax: {exc}; command={redacted_command}",
+            )
         if not parsed:
             return CheckFailure(check_name, "command is empty")
         args = parsed
@@ -47,17 +52,20 @@ def command_check(
             text=True,
         )
     except subprocess.TimeoutExpired:
-        return CheckFailure(check_name, f"command timeout after {timeout_sec}s: {command}")
+        return CheckFailure(
+            check_name,
+            f"command timeout after {timeout_sec}s: {redacted_command}",
+        )
     except OSError as exc:
         return CheckFailure(check_name, f"command failed to start: {exc}")
 
     if result.returncode != 0:
         stderr = result.stderr.strip()
         stdout = result.stdout.strip()
-        snippet = stderr or stdout or "no output"
+        snippet = redact_text(stderr or stdout or "no output")
         return CheckFailure(
             check_name,
-            f"command exit code {result.returncode}: {command}; output={snippet[:300]}",
+            (f"command exit code {result.returncode}: {redacted_command}; output={snippet[:300]}"),
         )
 
     return None

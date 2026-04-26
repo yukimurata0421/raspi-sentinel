@@ -18,6 +18,18 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 - tests and docs:
   - added regression coverage for 3-cycle `records_processed_total` stall detection.
   - install examples now use root-owned `0600` config deployment and concrete GitHub clone URL.
+- secret redaction hardening:
+  - command check failures now redact URL credentials, query secrets, and auth token patterns from command/output text.
+- CLI and operations tooling:
+  - added `export-prometheus --textfile-path` for node_exporter textfile workflows.
+  - added `doctor --fix-permissions` and `--fix-permissions-dry-run`.
+  - added helper scripts:
+    - `scripts/install_systemd.py`
+    - `scripts/failure_inject.py`
+- release/docs:
+  - added `SECURITY.md` (+ `docs/SECURITY.ja.md`).
+  - added upgrade guides (`docs/UPGRADE.md`, `docs/UPGRADE.ja.md`).
+  - added PyPI publish workflow (`.github/workflows/pypi.yml`).
 
 ## [0.8.0] - 2026-04-26
 

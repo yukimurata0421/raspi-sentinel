@@ -269,6 +269,12 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now raspi-sentinel.timer
 ```
 
+Alternative helper (Python, optional):
+
+```bash
+sudo python3 scripts/install_systemd.py --enable-timer
+```
+
 Optional tmpfs mount unit (when `[storage]` uses `/run/raspi-sentinel/*`):
 
 ```bash
@@ -584,6 +590,12 @@ Operator preflight checks (permissions/timer/tmpfs/threshold sanity):
 raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json
 ```
 
+Apply secure config ownership/mode from doctor:
+
+```bash
+sudo raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json --fix-permissions
+```
+
 `doctor --json` includes `network_only_failures_excluded_from_reboot` (expected `true` in default policy).
 `network_only_failures_can_reboot` is kept as a compatibility field in `v0.8.x` and is planned for removal in `v1.0.0`.
 
@@ -591,6 +603,12 @@ State introspection (schema version, counters, last actions):
 
 ```bash
 raspi-sentinel -c /etc/raspi-sentinel/config.toml explain-state --json
+```
+
+Prometheus textfile export (node_exporter textfile collector):
+
+```bash
+raspi-sentinel -c /etc/raspi-sentinel/config.toml export-prometheus --textfile-path /var/lib/node_exporter/textfile_collector/raspi_sentinel.prom
 ```
 
 Fail validation when warnings exist:
@@ -651,6 +669,8 @@ The goal of tests is to protect recovery policy behavior.
 Test ownership map:
 
 - [docs/facts/test-map.md](docs/facts/test-map.md)
+- [docs/UPGRADE.md](docs/UPGRADE.md)
+- [SECURITY.md](SECURITY.md)
 
 New test taxonomy (new files only):
 

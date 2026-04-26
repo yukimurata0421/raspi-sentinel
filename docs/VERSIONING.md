@@ -36,7 +36,9 @@ A lightweight git tag **`v0.2.0`** may exist from an intermediate snapshot. Ther
 4. Run tests (`pytest`) and Ruff (`ruff check src tests`, `ruff format --check src tests`).
 5. Tag: `git tag -a vX.Y.Z -m "Release vX.Y.Z"` (or `git tag -s` if you sign tags).
 6. Push the tag (`git push origin vX.Y.Z`). The workflow creates/updates the GitHub Release with the notes file.
-7. Publish PyPI or other artifacts if you use them.
+7. Publish PyPI package:
+   - `Publish PyPI` workflow runs on GitHub Release publish (or manual dispatch)
+   - requires PyPI Trusted Publisher / OIDC setup for this repository.
 
 ## Existing release without notes
 
