@@ -57,7 +57,8 @@ Required claims:
 
 - repository: `yukimurata0421/raspi-sentinel`
 - workflow file: `.github/workflows/pypi.yml`
-- environment: `testpypi` (TestPyPI) / `pypi` (PyPI)
+
+Current workflow does not require a GitHub Actions `environment` claim for publish jobs.
 
 If publish fails with `invalid-publisher`, verify those three fields first.
 The workflow prints expected claims at runtime for quick comparison.
