@@ -29,6 +29,12 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - name: Show expected Trusted Publisher claims (TestPyPI)
+        run: |
+          echo "repository=${GITHUB_REPOSITORY}"
+          echo "workflow_ref=${GITHUB_WORKFLOW_REF}"
+          echo "ref=${GITHUB_REF}"
+          echo "environment=testpypi"
       - name: Build package
         run: |
           python -m pip install --upgrade pip
@@ -50,6 +56,12 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - name: Show expected Trusted Publisher claims (PyPI)
+        run: |
+          echo "repository=${GITHUB_REPOSITORY}"
+          echo "workflow_ref=${GITHUB_WORKFLOW_REF}"
+          echo "ref=${GITHUB_REF}"
+          echo "environment=pypi"
       - name: Build package
         run: |
           python -m pip install --upgrade pip

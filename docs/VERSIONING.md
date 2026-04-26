@@ -49,6 +49,21 @@ Current state:
    - `Publish PyPI` can also be manually dispatched for TestPyPI rehearsal.
    - requires Trusted Publisher / OIDC setup for the selected environment.
 
+## Trusted Publisher one-time setup
+
+Before first TestPyPI/PyPI publish, configure Trusted Publisher on the package index side.
+
+Required claims:
+
+- repository: `yukimurata0421/raspi-sentinel`
+- workflow file: `.github/workflows/pypi.yml`
+- environment: `testpypi` (TestPyPI) / `pypi` (PyPI)
+
+If publish fails with `invalid-publisher`, verify those three fields first.
+The workflow prints expected claims at runtime for quick comparison.
+
+After fixing publisher settings, rerun the failed workflow run or dispatch `Publish PyPI` again.
+
 ## PyPI rollout recommendation for beta
 
 For open beta releases, use this order:
