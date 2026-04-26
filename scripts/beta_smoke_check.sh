@@ -60,13 +60,48 @@ EOF
 
 PYTHONPATH=src "${PYTHON_BIN}" scripts/failure_inject.py fresh-file --path "${TMP_DIR}/heartbeat.txt"
 
-PYTHONPATH=src "${PYTHON_BIN}" -m raspi_sentinel.cli \
+PYTHONPATH=src "${PYTHON_BIN}" -m raspi_sentinel \
   -c "${TMP_DIR}/config.toml" \
   validate-config --strict
 
-PYTHONPATH=src "${PYTHON_BIN}" -m raspi_sentinel.cli \
+PYTHONPATH=src "${PYTHON_BIN}" -m raspi_sentinel \
   -c "${TMP_DIR}/config.toml" \
-  --dry-run run-once --json >/dev/null
+  doctor --json >/dev/null
+
+PYTHONPATH=src "${PYTHON_BIN}" -m raspi_sentinel \
+  -c "${TMP_DIR}/config.toml" \
+  --dry-run run-once --json > "${TMP_DIR}/healthy.json"
+
+PYTHONPATH=src "${PYTHON_BIN}" scripts/failure_inject.py stale-file \
+  --path "${TMP_DIR}/heartbeat.txt" \
+  --age-sec 900
+
+set +e
+PYTHONPATH=src "${PYTHON_BIN}" -m raspi_sentinel \
+  -c "${TMP_DIR}/config.toml" \
+  --dry-run run-once --json > "${TMP_DIR}/stale.json"
+STALE_RC="$?"
+set -e
+
+if [[ "${STALE_RC}" -eq 0 ]]; then
+  echo "expected stale dry-run to return non-zero"
+  exit 1
+fi
+
+PYTHONPATH=src "${PYTHON_BIN}" - <<PY
+import json
+from pathlib import Path
+
+healthy = json.loads(Path("${TMP_DIR}/healthy.json").read_text(encoding="utf-8"))
+stale = json.loads(Path("${TMP_DIR}/stale.json").read_text(encoding="utf-8"))
+
+healthy_target = healthy["targets"]["beta_demo_heartbeat"]
+stale_target = stale["targets"]["beta_demo_heartbeat"]
+
+assert healthy_target["status"] == "ok", healthy
+assert stale_target["status"] in {"degraded", "failed"}, stale
+assert stale_target["reason"] != "healthy", stale
+PY
 
 BIN_PATH="$(command -v raspi-sentinel || true)"
 if [[ -n "${BIN_PATH}" && "${BIN_PATH}" != /* ]]; then

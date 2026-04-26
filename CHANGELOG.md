@@ -9,6 +9,7 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 ### Changed
 
 - versioning/docs alignment:
+  - bumped canonical package version to `0.9.0` in `src/raspi_sentinel/_version.py` for open-beta release prep.
   - README/README.ja now describe `v0.9.x` as upcoming beta preview and keep current release on `v0.8.x`.
   - README/README.ja now separate stable (`v0.8.0`) checkout guidance from upcoming beta preview (`main`) so beta-demo files are not referenced from stable-tag flow.
   - README.ja beta demo section no longer embeds release-tagging checklist text; release marker handling remains in `docs/VERSIONING.md`.
@@ -17,6 +18,7 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - UPGRADE guides now use explicit track split (stable upgrade track vs beta-prep track) and include concrete rollback command examples.
   - README/README.ja quickstart now uses `config/raspi-sentinel.beta-demo.toml` and matching failure-injection path (`/tmp/raspi-sentinel-demo/heartbeat.txt`) for deterministic beta demo flow.
 - release automation/docs consistency:
+  - `docs/release-notes/v0.9.0.md` now uses release-ready title format (draft/planned markers removed).
   - PyPI workflow now supports explicit TestPyPI rehearsal via manual dispatch target selection.
   - release workflow now fails if release notes still contain `Planned release:` marker or `# Draft:` title marker.
 - contract/docs clarifications:
@@ -39,6 +41,7 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
     instead of asserting historical fixed deploy paths.
   - added `scripts/beta_smoke_check.sh` for beta readiness validation
     (lint/type subset/tests + demo config + install helper dry-run).
+  - `beta_smoke_check.sh` now runs the full beta-demo cycle (validate-config, doctor, healthy dry-run, stale injection, degraded dry-run assertions).
   - `beta_smoke_check.sh` now resolves `raspi-sentinel` binary path using shell `command -v` with absolute-path normalization.
   - added CLI parser contract tests for documented options:
     `--send-notifications`, `doctor --support-bundle/--fix-permissions*`, and `export-prometheus --textfile-path`.

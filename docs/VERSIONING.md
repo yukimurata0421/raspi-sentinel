@@ -30,8 +30,8 @@ A lightweight git tag **`v0.2.0`** may exist from an intermediate snapshot. Ther
 
 Current state:
 
-- stable release line: **`v0.8.x`** (`__version__ = 0.8.0`)
-- next planned line: **`v0.9.x` open beta** (draft notes in `docs/release-notes/v0.9.0.md`)
+- latest stable tag line: **`v0.8.x`**
+- working tree/package version: **`0.9.0`** for open beta release preparation
 
 ## Release checklist
 

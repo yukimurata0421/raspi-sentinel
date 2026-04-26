@@ -6,6 +6,7 @@ import logging
 import time
 from pathlib import Path
 
+from ._version import __version__
 from .config import AppConfig, load_config
 from .config_summary import build_config_validation_report, format_config_validation_report
 from .diagnostics import (
@@ -88,6 +89,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--structured-logging",
         action="store_true",
         help="Emit logs as JSON lines for machine ingestion",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"raspi-sentinel {__version__}",
     )
 
     sub = parser.add_subparsers(dest="command", required=True)
@@ -202,6 +208,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    if argv is not None and "--version" in argv:
+        print(f"raspi-sentinel {__version__}")
+        return 0
+
     parser = _build_parser()
     args = parser.parse_args(argv)
 

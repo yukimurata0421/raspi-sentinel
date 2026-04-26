@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from raspi_sentinel import cli
 
 
@@ -50,3 +52,9 @@ def test_parser_accepts_export_prometheus_subcommand() -> None:
     )
     assert args.command == "export-prometheus"
     assert args.textfile_path == Path("/tmp/raspi-sentinel.prom")
+
+
+def test_cli_supports_global_version_flag(capsys: pytest.CaptureFixture[str]) -> None:
+    rc = cli.main(["--version"])
+    assert rc == 0
+    assert "raspi-sentinel 0.9.0" in capsys.readouterr().out
