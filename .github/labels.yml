@@ -1,42 +1,42 @@
 - name: severity/P0-unintended-reboot
-  color: b60205
+  color: "b60205"
   description: Unintended or unsafe reboot behavior.
 - name: severity/P1-broken-install
-  color: d93f0b
+  color: "d93f0b"
   description: Installation flow is broken.
 - name: severity/P1-broken-recovery-policy
-  color: d93f0b
+  color: "d93f0b"
   description: Recovery policy behavior is broken.
 - name: severity/P2-docs-confusing
-  color: fbca04
+  color: "fbca04"
   description: Docs are confusing or misleading.
 - name: area/install
-  color: 0052cc
+  color: "0052cc"
   description: Install/package/bootstrap area.
 - name: area/config
-  color: 0052cc
+  color: "0052cc"
   description: Config parsing/validation area.
 - name: area/systemd
-  color: 0052cc
+  color: "0052cc"
   description: systemd units/timers/service interactions.
 - name: area/recovery
-  color: 0052cc
+  color: "0052cc"
   description: Recovery policy and actions.
 - name: area/notification
-  color: 0052cc
+  color: "0052cc"
   description: Notification and delivery handling.
 - name: area/storage-tier
-  color: 0052cc
+  color: "0052cc"
   description: Volatile/durable storage tier behavior.
 - name: area/docs
-  color: 0052cc
+  color: "0052cc"
   description: Documentation.
 - name: beta-feedback
-  color: 5319e7
+  color: "5319e7"
   description: Open beta feedback report.
 - name: needs-repro
-  color: 1d76db
+  color: "1d76db"
   description: Reproduction details required.
 - name: needs-environment
-  color: 1d76db
+  color: "1d76db"
   description: Environment details required.
