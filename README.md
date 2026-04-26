@@ -212,6 +212,18 @@ BIN="$(command -v raspi-sentinel)"
 sudo python3 scripts/install_systemd.py --raspi-sentinel-bin "$BIN" --enable-timer
 ```
 
+Recommended systemd-visible install path (`/opt`) example:
+
+```bash
+sudo install -d -m 0755 /opt/raspi-sentinel
+sudo chown "$USER":"$USER" /opt/raspi-sentinel
+python3 -m venv /opt/raspi-sentinel/.venv
+/opt/raspi-sentinel/.venv/bin/pip install .
+sudo python3 scripts/install_systemd.py \
+  --raspi-sentinel-bin /opt/raspi-sentinel/.venv/bin/raspi-sentinel \
+  --enable-timer
+```
+
 The helper is recommended because it renders `ExecStart` to your actual binary path.
 The bundled service uses `ProtectHome=true`, so avoid `/home/...` binary paths.
 Prefer `/opt/raspi-sentinel/.venv/bin/raspi-sentinel` or another system-visible path.

@@ -153,6 +153,18 @@ BIN="$(command -v raspi-sentinel)"
 sudo python3 scripts/install_systemd.py --raspi-sentinel-bin "$BIN" --enable-timer
 ```
 
+systemd から確実に参照できる `/opt` 配下に置く例:
+
+```bash
+sudo install -d -m 0755 /opt/raspi-sentinel
+sudo chown "$USER":"$USER" /opt/raspi-sentinel
+python3 -m venv /opt/raspi-sentinel/.venv
+/opt/raspi-sentinel/.venv/bin/pip install .
+sudo python3 scripts/install_systemd.py \
+  --raspi-sentinel-bin /opt/raspi-sentinel/.venv/bin/raspi-sentinel \
+  --enable-timer
+```
+
 付属 service は `ProtectHome=true` のため、`ExecStart` のバイナリは `/home/...` 以外を推奨します。
 `/opt/raspi-sentinel/.venv/bin/raspi-sentinel` のような systemd から見えるパスを使ってください。
 
