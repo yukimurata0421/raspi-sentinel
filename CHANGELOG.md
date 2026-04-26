@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 
 Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
+## [Unreleased]
+
+### Changed
+
+- recovery cooldown hardening:
+  - warning-only cycles no longer overwrite `last_action` / `last_action_ts`, so `restart_cooldown_sec`
+    remains effective across repeated unhealthy cycles until cooldown expiry.
+- tiered state save ordering:
+  - durable payload now writes before volatile payload to reduce partial-update risk when durable write fails.
+- config permission guardrails:
+  - `validate-config` summary now warns when Discord notify is enabled and config file is group/other-readable.
+- tests and docs:
+  - added regression coverage for 3-cycle `records_processed_total` stall detection.
+  - install examples now use root-owned `0600` config deployment and concrete GitHub clone URL.
+
 ## [0.8.0] - 2026-04-26
 
 ### Changed

@@ -57,7 +57,7 @@
 ### インストール方法 A（ソースから）
 
 ```bash
-git clone https://github.com/<your-account>/raspi-sentinel.git
+git clone https://github.com/yukimurata0421/raspi-sentinel.git
 cd raspi-sentinel
 git config core.hooksPath .githooks
 python3 -m pip install .
@@ -79,7 +79,7 @@ python3 -m pip install raspi-sentinel
 
 ```bash
 sudo install -d -m 0755 /etc/raspi-sentinel
-sudo install -m 0644 config/raspi-sentinel.example.toml /etc/raspi-sentinel/config.toml
+sudo install -m 0600 -o root -g root config/raspi-sentinel.example.toml /etc/raspi-sentinel/config.toml
 sudo install -d -m 0755 /var/lib/raspi-sentinel
 ```
 

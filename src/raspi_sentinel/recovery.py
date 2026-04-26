@@ -222,9 +222,14 @@ def apply_recovery(
     policy_failed = _policy_failed(check_result)
 
     def _return(
-        action: str, *, reboot: bool = False, reboot_reason: str | None = None
+        action: str,
+        *,
+        reboot: bool = False,
+        reboot_reason: str | None = None,
+        record_action: bool = True,
     ) -> RecoveryOutcome:
-        _record_action_model(ts, action, effective_now)
+        if record_action:
+            _record_action_model(ts, action, effective_now)
         return RecoveryOutcome(action=action, requested_reboot=reboot, reboot_reason=reboot_reason)
 
     if check_result.healthy and not clock_reboot_confirmed:
@@ -253,7 +258,7 @@ def apply_recovery(
             target.name,
             failures_text,
         )
-        return _return("warn")
+        return _return("warn", record_action=False)
 
     if clock_reboot_confirmed:
         if not policy_failed:
@@ -265,7 +270,7 @@ def apply_recovery(
                 target.name,
                 check_result.observations.get("policy_status"),
             )
-            return _return("warn")
+            return _return("warn", record_action=False)
 
         can_reboot, guard_reason = _can_reboot(global_config, state, effective_now)
         if can_reboot:
@@ -287,7 +292,7 @@ def apply_recovery(
                 target.name,
                 guard_reason,
             )
-        return _return("warn")
+        return _return("warn", record_action=False)
 
     restart_threshold, reboot_threshold = _thresholds(target, global_config)
     LOG.warning(
@@ -314,7 +319,7 @@ def apply_recovery(
             ),
             target.name,
         )
-        return _return("warn")
+        return _return("warn", record_action=False)
 
     if consecutive >= reboot_threshold:
         if last_action == "restart" and _within_cooldown(
@@ -386,10 +391,10 @@ def apply_recovery(
                 target.name,
                 global_config.restart_cooldown_sec,
             )
-            return _return("warn")
+            return _return("warn", record_action=False)
 
         restarted = _restart_services(target.services, dry_run=dry_run)
         action = "restart" if restarted else "warn"
-        return _return(action)
+        return _return(action, record_action=(action != "warn"))
 
-    return _return("warn")
+    return _return("warn", record_action=False)

@@ -606,8 +606,8 @@ def test_tiered_state_store_returns_false_when_durable_save_fails(tmp_path: Path
         max_reboots_entries=256,
     )
     assert ok is False
-    assert calls == [volatile, durable]
-    assert volatile.exists()
+    assert calls == [durable]
+    assert not volatile.exists()
 
 
 def test_tiered_state_store_initializes_missing_parent_directories(tmp_path: Path) -> None:

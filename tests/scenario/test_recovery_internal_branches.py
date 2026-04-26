@@ -200,7 +200,7 @@ def test_apply_recovery_limited_mode_updates_raw_state() -> None:
     )
     assert outcome.action == "warn"
     ts = state.ensure_target("demo")
-    assert ts.last_action == "warn"
+    assert ts.last_action is None
     assert ts.last_failure_ts == 100.0
 
 
@@ -254,6 +254,65 @@ def test_apply_recovery_restart_cooldown_suppresses_repeat(monkeypatch: Any) -> 
     )
     assert outcome.action == "warn"
     assert not outcome.requested_reboot
+
+
+def test_apply_recovery_restart_cooldown_persists_through_warn_cycles(monkeypatch: Any) -> None:
+    restart_calls: list[tuple[list[str], bool]] = []
+
+    def fake_restart_services(services: list[str], dry_run: bool) -> bool:
+        restart_calls.append((services, dry_run))
+        return True
+
+    monkeypatch.setattr(recovery, "_restart_services", fake_restart_services)
+
+    result = CheckResult(
+        target="demo",
+        healthy=False,
+        failures=[CheckFailure("service_active", "down")],
+    )
+    target_cfg = make_target(
+        services=["demo.service"],
+        service_active=True,
+        restart_threshold=1,
+        reboot_threshold=99,
+    )
+    global_cfg = _global(restart_cooldown_sec=300)
+    state = GlobalState()
+
+    first = recovery.apply_recovery(
+        target=target_cfg,
+        check_result=result,
+        global_config=global_cfg,
+        state=state,
+        dry_run=True,
+        now_ts=0.0,
+    )
+    assert first.action == "restart"
+
+    for now_ts in (10.0, 20.0, 299.0):
+        blocked = recovery.apply_recovery(
+            target=target_cfg,
+            check_result=result,
+            global_config=global_cfg,
+            state=state,
+            dry_run=True,
+            now_ts=now_ts,
+        )
+        assert blocked.action == "warn"
+        ts = state.ensure_target("demo")
+        assert ts.last_action == "restart"
+        assert ts.last_action_ts == 0.0
+
+    reopened = recovery.apply_recovery(
+        target=target_cfg,
+        check_result=result,
+        global_config=global_cfg,
+        state=state,
+        dry_run=True,
+        now_ts=300.0,
+    )
+    assert reopened.action == "restart"
+    assert len(restart_calls) == 2
 
 
 def test_apply_recovery_reboot_is_deferred_and_not_executed(monkeypatch: Any) -> None:

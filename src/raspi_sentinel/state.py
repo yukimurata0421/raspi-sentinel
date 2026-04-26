@@ -374,14 +374,6 @@ class TieredStateStore:
 
         volatile_payload, durable_payload = self._split_payloads(state_model)
 
-        volatile_ok = self._save_raw_payload(
-            path=self.volatile_store.path,
-            payload=volatile_payload,
-            max_file_bytes=max_file_bytes,
-        )
-        if not volatile_ok:
-            return False
-
         durable_ok = True
         if self.durable_store is not None:
             durable_ok = self._save_raw_payload(
@@ -392,7 +384,11 @@ class TieredStateStore:
         if not durable_ok:
             return False
 
-        return True
+        return self._save_raw_payload(
+            path=self.volatile_store.path,
+            payload=volatile_payload,
+            max_file_bytes=max_file_bytes,
+        )
 
     def _save_raw_payload(
         self,

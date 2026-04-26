@@ -265,3 +265,36 @@ def test_apply_records_progress_check_resets_on_counter_drop() -> None:
     assert state.clock_prev_monotonic_sec == 333.3
     assert result.failures == []
     assert result.healthy
+
+
+def test_apply_records_progress_check_triggers_on_third_stall_cycle() -> None:
+    from raspi_sentinel.state_models import TargetState
+
+    state = TargetState.from_dict(
+        {
+            "last_records_processed_total": 100,
+            "records_stalled_cycles": 0,
+        }
+    )
+
+    for cycle in range(1, 4):
+        result = checks.CheckResult(
+            target="demo",
+            healthy=True,
+            failures=[],
+            observations={"records_processed_total": 100},
+        )
+        checks.apply_records_progress_check(
+            target=target(stats_records_stall_cycles=3),
+            target_state=state,
+            result=result,
+        )
+        if cycle < 3:
+            assert result.failures == []
+            assert result.healthy
+        else:
+            assert any(f.check == "semantic_records_stalled" for f in result.failures)
+            assert not result.healthy
+
+    assert state.last_records_processed_total == 100
+    assert state.records_stalled_cycles == 3

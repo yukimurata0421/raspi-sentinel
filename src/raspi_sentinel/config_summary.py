@@ -8,14 +8,24 @@ from typing import Any
 from .config import AppConfig, TargetConfig
 
 
-def _config_permission_warning(config_path: Path) -> str | None:
+def _config_mode(config_path: Path) -> int | None:
     try:
-        mode = stat.S_IMODE(config_path.stat().st_mode)
-    except OSError as exc:
-        return f"cannot stat config file: {exc}"
-    if mode & (stat.S_IWGRP | stat.S_IWOTH):
+        return stat.S_IMODE(config_path.stat().st_mode)
+    except OSError:
+        return None
+
+
+def _config_permission_warning(config_path: Path, mode: int | None = None) -> str | None:
+    effective_mode = mode if mode is not None else _config_mode(config_path)
+    if effective_mode is None:
+        try:
+            config_path.stat()
+        except OSError as exc:
+            return f"cannot stat config file: {exc}"
+        return "cannot stat config file"
+    if effective_mode & (stat.S_IWGRP | stat.S_IWOTH):
         return (
-            f"config file is group/world-writable (mode={mode:04o}); "
+            f"config file is group/world-writable (mode={effective_mode:04o}); "
             "use chmod go-w on trusted admin-owned config"
         )
     return None
@@ -243,7 +253,7 @@ def _target_warnings(
     return warnings
 
 
-def _global_warnings(config: AppConfig) -> list[str]:
+def _global_warnings(config: AppConfig, config_mode: int | None = None) -> list[str]:
     warnings: list[str] = []
     gc = config.global_config
     if gc.restart_threshold >= gc.reboot_threshold:
@@ -253,6 +263,17 @@ def _global_warnings(config: AppConfig) -> list[str]:
             (
                 "storage.require_tmpfs=true but state_volatile path is not under /run; "
                 f"verify volatile path intent ({gc.state_file})"
+            )
+        )
+    if (
+        config.notify_config.discord.enabled
+        and config_mode is not None
+        and (config_mode & (stat.S_IRGRP | stat.S_IROTH))
+    ):
+        warnings.append(
+            (
+                "Config file is readable by group/others while Discord notification is enabled. "
+                "Webhook URLs may be exposed. Consider chmod 600 and chown root:root."
             )
         )
     return warnings
@@ -336,8 +357,9 @@ def _target_summary(
 
 
 def build_config_validation_report(config_path: Path, config: AppConfig) -> dict[str, Any]:
-    permission_warning = _config_permission_warning(config_path)
-    global_warnings = _global_warnings(config)
+    config_mode = _config_mode(config_path)
+    permission_warning = _config_permission_warning(config_path, config_mode)
+    global_warnings = _global_warnings(config, config_mode=config_mode)
     target_summaries = [
         _target_summary(target, config, permission_warning) for target in config.targets
     ]

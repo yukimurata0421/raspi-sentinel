@@ -25,6 +25,7 @@ This section defines what `raspi-sentinel` is responsible for and what remains o
 - Config commands run with `shell=False` by default.
 - Shell execution is explicit opt-in via `command_use_shell`, `dns_check_use_shell`, `gateway_check_use_shell`, `maintenance_mode_use_shell`.
 - If shell syntax is detected without opt-in, a warning is logged and command execution remains `shell=False`.
+- Do not embed secrets directly in `command`/dependency command strings; prefer local files or environment wiring that stays outside shared logs.
 - When running as **root**, restrict config file permissions (for example `chmod 600` / `root:root`) so webhook URLs and commands are not exposed to other local users.
 - On load, if the config file is **group- or world-writable**, a **warning** is logged (unsafe in shared-admin environments).
 
@@ -217,7 +218,7 @@ Reboot loop guards:
 Option A: source checkout (current default)
 
 ```bash
-git clone https://github.com/<your-account>/raspi-sentinel.git
+git clone https://github.com/yukimurata0421/raspi-sentinel.git
 cd raspi-sentinel
 git config core.hooksPath .githooks
 python3 -m pip install .
@@ -247,7 +248,7 @@ bash scripts/prepush_check.sh
 
 ```bash
 sudo install -d -m 0755 /etc/raspi-sentinel
-sudo install -m 0644 config/raspi-sentinel.example.toml /etc/raspi-sentinel/config.toml
+sudo install -m 0600 -o root -g root config/raspi-sentinel.example.toml /etc/raspi-sentinel/config.toml
 ```
 
 Edit `/etc/raspi-sentinel/config.toml` for your real services/paths.

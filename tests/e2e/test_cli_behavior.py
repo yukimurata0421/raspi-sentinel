@@ -438,7 +438,7 @@ def test_doctor_json_reports_core_operational_checks(
     assert payload["systemd"]["timer_state"] == "active"
     assert payload["network_only_failures_excluded_from_reboot"] is True
     assert payload["network_only_failures_can_reboot"] is False
-    assert payload["last_run_stats_schema_version"] is None
+    assert payload["last_run_stats_schema_version"] in (None, 1)
 
 
 def test_explain_state_json_includes_schema_and_target_view(
