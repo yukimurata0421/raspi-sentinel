@@ -168,6 +168,26 @@ def test_switch_release_excludes_venv_from_delete(
     assert "--exclude .venv/" in seen_cmd[0]
 
 
+def test_rsync_to_stage_includes_artifact_excludes(
+    deploy_mod: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    seen_cmd: list[str] = []
+
+    def fake_run(cmd: list[str], *, dry_run: bool) -> Any:
+        del dry_run
+        seen_cmd.extend(cmd)
+        return deploy_mod.subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(deploy_mod, "_run", fake_run)
+    deploy_mod._rsync_to_stage(tmp_path, "pi5-guard@pi5-guard", "/tmp/stage", dry_run=False)
+    flat = " ".join(seen_cmd)
+    assert "--exclude .coverage" in flat
+    assert "--exclude coverage.xml" in flat
+    assert "--exclude dist/" in flat
+    assert "--exclude build/" in flat
+    assert "--exclude *.egg-info/" in flat
+
+
 def test_main_safe_mode_runs_stage_validation(
     deploy_mod: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:

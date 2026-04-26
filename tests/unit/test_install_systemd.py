@@ -83,3 +83,28 @@ def test_main_raises_when_binary_not_found(tmp_path: Path, monkeypatch: Any) -> 
                 str(dst_dir),
             ]
         )
+
+
+def test_main_requires_absolute_binary_path(tmp_path: Path) -> None:
+    src_dir = tmp_path / "systemd"
+    dst_dir = tmp_path / "dest"
+    src_dir.mkdir()
+    dst_dir.mkdir()
+    _write(src_dir / "raspi-sentinel.service", "[Service]\nExecStart=raspi-sentinel run-once")
+    _write(
+        src_dir / "raspi-sentinel-tmpfs-verify.service",
+        "[Service]\nExecStart=raspi-sentinel verify-storage",
+    )
+    _write(src_dir / "raspi-sentinel.timer", "[Timer]\nOnUnitActiveSec=30s")
+
+    with pytest.raises(ValueError, match="--raspi-sentinel-bin must be an absolute path"):
+        install_systemd.main(
+            [
+                "--source-dir",
+                str(src_dir),
+                "--dest-dir",
+                str(dst_dir),
+                "--raspi-sentinel-bin",
+                "raspi-sentinel",
+            ]
+        )

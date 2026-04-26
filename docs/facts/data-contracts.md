@@ -105,6 +105,7 @@ Includes:
 - per-target enabled rules and thresholds
 - time-health and maintenance settings
 - shell command usage
+- redacted shell command display (secret/token patterns masked)
 - path existence checks
 - config permission warning
 
@@ -127,6 +128,8 @@ Includes:
 - last run interpretation:
   - `last_run_result`
   - `last_run_stats_schema_version`
+- `path_warnings`:
+  - warns when monitored target paths are under `/home` while bundled systemd unit uses `ProtectHome=true`
 
 ## 7. Compatibility policy
 

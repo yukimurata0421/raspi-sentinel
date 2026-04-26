@@ -770,7 +770,8 @@ def test_full_cycle_unhealthy_target_restarts_and_logs(tmp_path: Path, monkeypat
 
     restart_calls: list[list[str]] = []
 
-    def fake_restart_services(services: list[str], dry_run: bool) -> bool:
+    def fake_restart_services(services: list[str], dry_run: bool, timeout_sec: int) -> bool:
+        assert timeout_sec == 30
         restart_calls.append(["systemctl", "restart", *services])
         return True
 
@@ -838,7 +839,8 @@ def test_state_corruption_enters_limited_mode_and_blocks_disruptive_actions(
 
     restart_calls: list[list[str]] = []
 
-    def fake_restart_services(services: list[str], dry_run: bool) -> bool:
+    def fake_restart_services(services: list[str], dry_run: bool, timeout_sec: int) -> bool:
+        assert timeout_sec == 30
         restart_calls.append(["systemctl", "restart", *services])
         return True
 
@@ -910,7 +912,8 @@ def test_state_corruption_limited_mode_still_sends_warn_notification(
 
     restart_calls: list[list[str]] = []
 
-    def fake_restart_services(services: list[str], dry_run: bool) -> bool:
+    def fake_restart_services(services: list[str], dry_run: bool, timeout_sec: int) -> bool:
+        assert timeout_sec == 30
         restart_calls.append(["systemctl", "restart", *services])
         return True
 

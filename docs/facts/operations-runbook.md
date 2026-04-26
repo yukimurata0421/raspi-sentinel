@@ -38,9 +38,17 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml --dry-run run-once --json
 
 ## 2. Enable Timed Execution
 
+Recommended helper install (renders `ExecStart` with absolute binary path):
+
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now raspi-sentinel.timer
+BIN="$(command -v raspi-sentinel)"
+sudo python3 scripts/install_systemd.py --raspi-sentinel-bin "$BIN" --enable-timer
+```
+
+Then verify timer:
+
+```bash
+systemctl status raspi-sentinel.timer
 ```
 
 ## 3. Routine Checks
@@ -251,8 +259,19 @@ Use helper script for controlled test scenarios:
 sudo python3 scripts/failure_inject.py service-down --service demo.service
 
 # inject stale file (mtime in the past)
-python3 scripts/failure_inject.py stale-file --path /tmp/heartbeat.txt --age-sec 900
+python3 scripts/failure_inject.py stale-file --path /tmp/raspi-sentinel-demo/heartbeat.txt --age-sec 900
+
+# initialize/restore fresh heartbeat file
+python3 scripts/failure_inject.py fresh-file --path /tmp/raspi-sentinel-demo/heartbeat.txt
 
 # restore service
 sudo python3 scripts/failure_inject.py service-restore --service demo.service
+```
+
+## 12. Beta Smoke Check
+
+Run an end-to-end beta readiness smoke suite before release tagging:
+
+```bash
+bash scripts/beta_smoke_check.sh
 ```

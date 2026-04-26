@@ -89,7 +89,7 @@ class DiscordNotifier:
                 return True
             self.last_failure_kind = failure_kind
             if attempt < max_attempts - 1:
-                backoff_sec = 0.5 * (attempt + 1)
+                backoff_sec = self.config.retry_backoff_base_sec * (attempt + 1)
                 sleep_sec = retry_after_sec if retry_after_sec is not None else backoff_sec
                 time.sleep(max(0.0, sleep_sec))
                 LOG.warning(

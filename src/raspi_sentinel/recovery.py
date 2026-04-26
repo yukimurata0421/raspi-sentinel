@@ -39,8 +39,10 @@ class RecoveryOutcome:
 def _thresholds(target: TargetConfig, global_config: GlobalConfig) -> tuple[int, int]:
     restart_threshold = target.restart_threshold or global_config.restart_threshold
     reboot_threshold = target.reboot_threshold or global_config.reboot_threshold
-    if reboot_threshold < restart_threshold:
-        reboot_threshold = restart_threshold
+    if reboot_threshold <= restart_threshold:
+        raise RuntimeError(
+            "invalid thresholds: reboot_threshold must be greater than restart_threshold"
+        )
     return restart_threshold, reboot_threshold
 
 
@@ -141,7 +143,7 @@ def _can_reboot(global_config: GlobalConfig, state: GlobalState, now_ts: float) 
     return True, "allowed"
 
 
-def _restart_services(services: list[str], dry_run: bool) -> bool:
+def _restart_services(services: list[str], dry_run: bool, timeout_sec: int) -> bool:
     if not services:
         LOG.warning("restart requested but no services configured")
         return False
@@ -155,7 +157,7 @@ def _restart_services(services: list[str], dry_run: bool) -> bool:
             result = subprocess.run(
                 ["systemctl", "restart", service],
                 check=False,
-                timeout=30,
+                timeout=timeout_sec,
                 capture_output=True,
                 text=True,
             )
@@ -210,6 +212,37 @@ def execute_deferred_reboot(*, dry_run: bool, reason: str) -> bool:
     return _trigger_reboot(dry_run=dry_run, reason=reason)
 
 
+def _build_failures_text(result: CheckResult) -> str:
+    failures_text = "; ".join(f"{f.check}: {f.message}" for f in result.failures).strip()
+    if failures_text:
+        return failures_text
+    return str(result.observations.get("policy_reason", "unhealthy"))
+
+
+def _record_failure_state(ts: TargetState, *, now_ts: float, failures_text: str) -> int:
+    consecutive = ts.consecutive_failures + 1
+    ts.consecutive_failures = consecutive
+    ts.last_failure_ts = now_ts
+    ts.last_failure_reason = failures_text
+    return consecutive
+
+
+def _is_dns_only_dependency_failure(check_result: CheckResult) -> bool:
+    has_dns_failure = _has_failure(check_result, "dependency_dns")
+    has_gateway_failure = _has_failure(check_result, "dependency_gateway")
+    has_non_dependency_failure = _has_non_dependency_failure(check_result)
+    return has_dns_failure and not has_gateway_failure and not has_non_dependency_failure
+
+
+def _warn_outcome() -> RecoveryOutcome:
+    return RecoveryOutcome(action="warn", requested_reboot=False, reboot_reason=None)
+
+
+def _record_and_return(ts: TargetState, *, action: str, now_ts: float) -> RecoveryOutcome:
+    _record_action_model(ts, action, now_ts)
+    return RecoveryOutcome(action=action, requested_reboot=(action == "reboot"))
+
+
 def apply_recovery(
     target: TargetConfig,
     check_result: CheckResult,
@@ -222,18 +255,6 @@ def apply_recovery(
     ts = state.ensure_target(target.name)
     effective_now = time.time() if now_ts is None else now_ts
     clock_reboot_confirmed = _clock_reboot_confirmed(check_result)
-    policy_failed = _policy_failed(check_result)
-
-    def _return(
-        action: str,
-        *,
-        reboot: bool = False,
-        reboot_reason: str | None = None,
-        record_action: bool = True,
-    ) -> RecoveryOutcome:
-        if record_action:
-            _record_action_model(ts, action, effective_now)
-        return RecoveryOutcome(action=action, requested_reboot=reboot, reboot_reason=reboot_reason)
 
     if check_result.healthy and not clock_reboot_confirmed:
         previous = ts.consecutive_failures
@@ -245,15 +266,11 @@ def apply_recovery(
                 target.name,
                 previous,
             )
-        return _return("none")
+        _record_action_model(ts, "none", effective_now)
+        return RecoveryOutcome(action="none", requested_reboot=False, reboot_reason=None)
 
-    failures_text = "; ".join(f"{f.check}: {f.message}" for f in check_result.failures).strip()
-    if not failures_text:
-        failures_text = str(check_result.observations.get("policy_reason", "unhealthy"))
-    consecutive = ts.consecutive_failures + 1
-    ts.consecutive_failures = consecutive
-    ts.last_failure_ts = effective_now
-    ts.last_failure_reason = failures_text
+    failures_text = _build_failures_text(check_result)
+    consecutive = _record_failure_state(ts, now_ts=effective_now, failures_text=failures_text)
 
     if not allow_disruptive_actions:
         LOG.error(
@@ -261,10 +278,10 @@ def apply_recovery(
             target.name,
             failures_text,
         )
-        return _return("warn", record_action=False)
+        return _warn_outcome()
 
     if clock_reboot_confirmed:
-        if not policy_failed:
+        if not _policy_failed(check_result):
             LOG.warning(
                 (
                     "target '%s': confirmed clock reboot blocked because "
@@ -273,7 +290,7 @@ def apply_recovery(
                 target.name,
                 check_result.observations.get("policy_status"),
             )
-            return _return("warn", record_action=False)
+            return _warn_outcome()
 
         can_reboot, guard_reason = _can_reboot(global_config, state, effective_now)
         if can_reboot:
@@ -288,14 +305,18 @@ def apply_recovery(
                 target=target.name,
                 reason=failures_text,
             )
-            return _return("reboot", reboot=True, reboot_reason=failures_text)
-        else:
-            LOG.error(
-                "target '%s': confirmed clock reboot blocked by safeguard: %s",
-                target.name,
-                guard_reason,
+            _record_action_model(ts, "reboot", effective_now)
+            return RecoveryOutcome(
+                action="reboot",
+                requested_reboot=True,
+                reboot_reason=failures_text,
             )
-        return _return("warn", record_action=False)
+        LOG.error(
+            "target '%s': confirmed clock reboot blocked by safeguard: %s",
+            target.name,
+            guard_reason,
+        )
+        return _warn_outcome()
 
     restart_threshold, reboot_threshold = _thresholds(target, global_config)
     LOG.warning(
@@ -309,12 +330,9 @@ def apply_recovery(
 
     last_action = ts.last_action
     last_action_ts = ts.last_action_ts
-    has_dns_failure = _has_failure(check_result, "dependency_dns")
-    has_gateway_failure = _has_failure(check_result, "dependency_gateway")
-    has_non_dependency_failure = _has_non_dependency_failure(check_result)
     # DNS-only dependency failures should not escalate to reboot.
     # See docs/principles/recovery-philosophy.md.
-    if has_dns_failure and not has_gateway_failure and not has_non_dependency_failure:
+    if _is_dns_only_dependency_failure(check_result):
         LOG.warning(
             (
                 "target '%s': DNS-only dependency failure detected; "
@@ -322,7 +340,7 @@ def apply_recovery(
             ),
             target.name,
         )
-        return _return("warn", record_action=False)
+        return _warn_outcome()
 
     if consecutive >= reboot_threshold:
         if last_action == "restart" and _within_cooldown(
@@ -338,19 +356,11 @@ def apply_recovery(
                 target.name,
                 global_config.restart_cooldown_sec,
             )
-        elif not policy_failed:
+        elif not _policy_failed(check_result):
             LOG.warning(
                 "target '%s': reboot blocked because policy_status is not failed (status=%s)",
                 target.name,
                 check_result.observations.get("policy_status"),
-            )
-        elif has_dns_failure and not has_gateway_failure:
-            LOG.error(
-                (
-                    "target '%s': reboot blocked because failure is classified as "
-                    "DNS-only dependency issue"
-                ),
-                target.name,
             )
         elif not _reboot_reason_allowed(check_result):
             LOG.error(
@@ -375,13 +385,17 @@ def apply_recovery(
                     target=target.name,
                     reason=failures_text,
                 )
-                return _return("reboot", reboot=True, reboot_reason=failures_text)
-            else:
-                LOG.error(
-                    "target '%s': reboot blocked by safeguard: %s",
-                    target.name,
-                    guard_reason,
+                _record_action_model(ts, "reboot", effective_now)
+                return RecoveryOutcome(
+                    action="reboot",
+                    requested_reboot=True,
+                    reboot_reason=failures_text,
                 )
+            LOG.error(
+                "target '%s': reboot blocked by safeguard: %s",
+                target.name,
+                guard_reason,
+            )
 
     if consecutive >= restart_threshold:
         if last_action == "restart" and _within_cooldown(
@@ -394,10 +408,15 @@ def apply_recovery(
                 target.name,
                 global_config.restart_cooldown_sec,
             )
-            return _return("warn", record_action=False)
+            return _warn_outcome()
 
-        restarted = _restart_services(target.services, dry_run=dry_run)
-        action = "restart" if restarted else "warn"
-        return _return(action, record_action=(action != "warn"))
+        restarted = _restart_services(
+            target.services,
+            dry_run=dry_run,
+            timeout_sec=global_config.restart_service_timeout_sec,
+        )
+        if restarted:
+            return _record_and_return(ts, action="restart", now_ts=effective_now)
+        return _warn_outcome()
 
-    return _return("warn", record_action=False)
+    return _warn_outcome()

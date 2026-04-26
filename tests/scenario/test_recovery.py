@@ -17,7 +17,7 @@ from raspi_sentinel.state_models import GlobalState
 def _global(**overrides: Any) -> Any:
     defaults = {
         "restart_threshold": 1,
-        "reboot_threshold": 1,
+        "reboot_threshold": 2,
         "restart_cooldown_sec": 0,
         "reboot_cooldown_sec": 0,
         "reboot_window_sec": 3600,
@@ -70,7 +70,7 @@ def test_dns_only_failure_does_not_reboot_even_when_threshold_reached() -> None:
     )
     state = GlobalState()
     outcome = apply_recovery(
-        target=make_target(restart_threshold=1, reboot_threshold=1),
+        target=make_target(restart_threshold=1, reboot_threshold=2),
         check_result=result,
         global_config=_global(),
         state=state,
@@ -91,7 +91,7 @@ def test_gateway_failure_does_not_request_reboot_even_when_policy_failed(monkeyp
     )
     state = GlobalState()
     outcome = apply_recovery(
-        target=make_target(restart_threshold=1, reboot_threshold=1),
+        target=make_target(restart_threshold=1, reboot_threshold=2),
         check_result=result,
         global_config=_global(),
         state=state,
@@ -111,7 +111,7 @@ def test_recovery_reboot_requires_policy_failed_for_network_uplink(monkeypatch: 
     )
     state = GlobalState()
     outcome = apply_recovery(
-        target=make_target(name="network_uplink", restart_threshold=1, reboot_threshold=1),
+        target=make_target(name="network_uplink", restart_threshold=1, reboot_threshold=2),
         check_result=result,
         global_config=_global(),
         state=state,
@@ -127,7 +127,7 @@ def test_recovery_reboot_requires_policy_failed_for_network_uplink(monkeypatch: 
         observations={"policy_status": "failed"},
     )
     outcome_failed = apply_recovery(
-        target=make_target(name="network_uplink", restart_threshold=1, reboot_threshold=1),
+        target=make_target(name="network_uplink", restart_threshold=1, reboot_threshold=2),
         check_result=failed_result,
         global_config=_global(),
         state=GlobalState(),
@@ -204,7 +204,7 @@ def test_reboot_is_suppressed_immediately_after_restart(monkeypatch: Any) -> Non
     )
     global_cfg = _global(restart_cooldown_sec=120)
     outcome = apply_recovery(
-        target=make_target(restart_threshold=1, reboot_threshold=1),
+        target=make_target(restart_threshold=1, reboot_threshold=2),
         check_result=result,
         global_config=global_cfg,
         state=state,

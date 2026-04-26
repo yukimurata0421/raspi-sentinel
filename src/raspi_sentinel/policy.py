@@ -4,14 +4,12 @@ from dataclasses import dataclass
 from typing import Literal, cast
 
 from .checks import CheckResult
-from .checks.models import Observations, is_observation_flag_true
+from .checks.models import PROCESS_CHECK_NAMES, Observations, is_observation_flag_true
 from .state_helpers import safe_bool, safe_float, safe_int
 from .state_models import TargetState
 
 PolicyStatus = Literal["ok", "degraded", "failed"]
 
-# Failures from these checks are treated as hard "process" failures (failed / process_error).
-PROCESS_CHECK_NAMES = frozenset({"service_active", "command", "heartbeat_file", "output_file"})
 NETWORK_DEPENDENCY_CHECK_NAMES = frozenset(
     {
         "dependency_link",

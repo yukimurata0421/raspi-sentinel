@@ -111,6 +111,26 @@ class TestSendLines:
         assert mock_urlopen.call_count == 3
 
     @patch("raspi_sentinel.notify.urllib.request.urlopen")
+    def test_retry_backoff_uses_configured_base(self, mock_urlopen: MagicMock) -> None:
+        mock_resp_body = BytesIO(b'{"message": "rate limited"}')
+        headers = MagicMock()
+        headers.get.return_value = None
+        exc = urllib.error.HTTPError(
+            url="https://example.com",
+            code=429,
+            msg="Too Many Requests",
+            hdrs=headers,
+            fp=mock_resp_body,
+        )
+        mock_urlopen.side_effect = exc
+        n = _notifier(timeout_sec=1, retry_backoff_base_sec=1.25)
+        sleep_calls: list[float] = []
+        with patch("raspi_sentinel.notify.time.sleep", side_effect=lambda s: sleep_calls.append(s)):
+            result = n.send_lines("title", ["line"])
+        assert result is False
+        assert sleep_calls == [1.25, 2.5]
+
+    @patch("raspi_sentinel.notify.urllib.request.urlopen")
     def test_retry_respects_retry_after_header(self, mock_urlopen: MagicMock) -> None:
         headers = MagicMock()
         headers.get.return_value = "1.5"

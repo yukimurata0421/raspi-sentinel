@@ -129,6 +129,7 @@ def make_global_config(**overrides: Any) -> GlobalConfig:
         "reboot_window_sec": 21600,
         "max_reboots_in_window": 2,
         "min_uptime_for_reboot_sec": 600,
+        "restart_service_timeout_sec": 30,
         "default_command_timeout_sec": 10,
         "loop_interval_sec": 60,
         "storage_require_tmpfs": False,
@@ -148,6 +149,7 @@ def make_discord_config(**overrides: Any) -> DiscordNotifyConfig:
         "timeout_sec": 5,
         "followup_delay_sec": 300,
         "retry_interval_sec": 60,
+        "retry_backoff_base_sec": 0.5,
         "heartbeat_interval_sec": 300,
         "notify_on_recovery": True,
     }

@@ -31,6 +31,7 @@ def _base_config(extra_target: str = 'command = "true"') -> str:
     timeout_sec = 5
     followup_delay_sec = 300
     retry_interval_sec = 60
+    retry_backoff_base_sec = 0.5
     heartbeat_interval_sec = 0
 
     [[targets]]
@@ -143,6 +144,16 @@ def test_retry_interval_sec_must_be_positive(tmp_path: Path) -> None:
         load_config(conf)
 
 
+def test_retry_backoff_base_sec_must_be_non_negative(tmp_path: Path) -> None:
+    conf = tmp_path / "config.toml"
+    _write(
+        conf,
+        _base_config().replace("retry_backoff_base_sec = 0.5", "retry_backoff_base_sec = -1"),
+    )
+    with pytest.raises(ValueError, match="retry_backoff_base_sec must be >= 0"):
+        load_config(conf)
+
+
 def test_target_requires_at_least_one_rule(tmp_path: Path) -> None:
     conf = tmp_path / "config.toml"
     _write(conf, _base_config(extra_target=""))
@@ -154,6 +165,20 @@ def test_invalid_global_thresholds_rejected(tmp_path: Path) -> None:
     conf = tmp_path / "config.toml"
     _write(conf, _base_config().replace("restart_threshold = 2", "restart_threshold = 0"))
     with pytest.raises(ValueError, match="global restart_threshold must be > 0"):
+        load_config(conf)
+
+
+def test_restart_service_timeout_sec_must_be_positive(tmp_path: Path) -> None:
+    conf = tmp_path / "config.toml"
+    bad = _base_config().replace(
+        "loop_interval_sec = 30",
+        "loop_interval_sec = 30\n    restart_service_timeout_sec = 0",
+    )
+    _write(
+        conf,
+        bad,
+    )
+    with pytest.raises(ValueError, match="global restart_service_timeout_sec must be > 0"):
         load_config(conf)
 
 

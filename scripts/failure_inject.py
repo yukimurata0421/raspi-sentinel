@@ -34,6 +34,17 @@ def _inject_stale_file(path: Path, age_sec: int, *, dry_run: bool) -> None:
     os.utime(path, (target_ts, target_ts))
 
 
+def _inject_fresh_file(path: Path, *, dry_run: bool) -> None:
+    print(f"+ fresh-file {path}")
+    if dry_run:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_text("failure-inject\n", encoding="utf-8")
+    now = time.time()
+    os.utime(path, (now, now))
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Inject reversible raspi-sentinel failure scenarios."
@@ -50,6 +61,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     stale_file = sub.add_parser("stale-file", help="Set file mtime into the past.")
     stale_file.add_argument("--path", type=Path, required=True)
     stale_file.add_argument("--age-sec", type=int, default=600)
+
+    fresh_file = sub.add_parser("fresh-file", help="Create/update file mtime to current time.")
+    fresh_file.add_argument("--path", type=Path, required=True)
     return parser.parse_args(argv)
 
 
@@ -63,6 +77,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "stale-file":
         _inject_stale_file(args.path, args.age_sec, dry_run=args.dry_run)
+        return 0
+    if args.command == "fresh-file":
+        _inject_fresh_file(args.path, dry_run=args.dry_run)
         return 0
     return 1
 

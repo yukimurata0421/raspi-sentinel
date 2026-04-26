@@ -452,6 +452,7 @@ def load_config(path: Path) -> AppConfig:
         reboot_window_sec=_require_int(global_raw, "reboot_window_sec", 21600),
         max_reboots_in_window=_require_int(global_raw, "max_reboots_in_window", 2),
         min_uptime_for_reboot_sec=_require_int(global_raw, "min_uptime_for_reboot_sec", 600),
+        restart_service_timeout_sec=_require_int(global_raw, "restart_service_timeout_sec", 30),
         default_command_timeout_sec=_require_int(global_raw, "default_command_timeout_sec", 10),
         loop_interval_sec=_require_int(global_raw, "loop_interval_sec", 60),
         storage_require_tmpfs=storage_require_tmpfs,
@@ -472,6 +473,8 @@ def load_config(path: Path) -> AppConfig:
         raise ValueError("global max_reboots_in_window must be > 0")
     if global_config.default_command_timeout_sec <= 0:
         raise ValueError("global default_command_timeout_sec must be > 0")
+    if global_config.restart_service_timeout_sec <= 0:
+        raise ValueError("global restart_service_timeout_sec must be > 0")
     if global_config.loop_interval_sec <= 0:
         raise ValueError("global loop_interval_sec must be > 0")
     if global_config.monitor_stats_interval_sec <= 0:
@@ -517,6 +520,7 @@ def load_config(path: Path) -> AppConfig:
     if not isinstance(notify_on_recovery, bool):
         raise ValueError("[notify.discord].notify_on_recovery must be boolean")
 
+    retry_backoff_base_sec = _optional_float_from_mapping(discord_raw, "retry_backoff_base_sec")
     discord_config = DiscordNotifyConfig(
         enabled=discord_enabled,
         webhook_url=discord_webhook,
@@ -524,6 +528,9 @@ def load_config(path: Path) -> AppConfig:
         timeout_sec=_require_int(discord_raw, "timeout_sec", 5),
         followup_delay_sec=_require_int(discord_raw, "followup_delay_sec", 300),
         retry_interval_sec=_require_int(discord_raw, "retry_interval_sec", 60),
+        retry_backoff_base_sec=(
+            retry_backoff_base_sec if retry_backoff_base_sec is not None else 0.5
+        ),
         heartbeat_interval_sec=_require_int(discord_raw, "heartbeat_interval_sec", 300),
         notify_on_recovery=notify_on_recovery,
     )
@@ -534,6 +541,8 @@ def load_config(path: Path) -> AppConfig:
         raise ValueError("[notify.discord].followup_delay_sec must be > 0")
     if discord_config.retry_interval_sec <= 0:
         raise ValueError("[notify.discord].retry_interval_sec must be > 0")
+    if discord_config.retry_backoff_base_sec < 0:
+        raise ValueError("[notify.discord].retry_backoff_base_sec must be >= 0")
     if discord_config.heartbeat_interval_sec < 0:
         raise ValueError("[notify.discord].heartbeat_interval_sec must be >= 0")
     if discord_config.enabled and not discord_config.webhook_url:

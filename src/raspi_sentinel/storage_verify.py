@@ -19,11 +19,11 @@ LOG = logging.getLogger(__name__)
 class StorageVerifyResult:
     ok: bool
     mount_path: Path
-    mount_fs_type: str | None
-    owner_uid: int | None
-    owner_gid: int | None
-    mode: int | None
-    free_bytes: int | None
+    mount_fs_type: str | None = None
+    owner_uid: int | None = None
+    owner_gid: int | None = None
+    mode: int | None = None
+    free_bytes: int | None = None
     reason: str | None = None
 
     def to_dict(self) -> dict[str, object]:
@@ -78,11 +78,6 @@ def verify_tmpfs_storage(
         return StorageVerifyResult(
             ok=True,
             mount_path=config.global_config.state_file.parent,
-            mount_fs_type=None,
-            owner_uid=None,
-            owner_gid=None,
-            mode=None,
-            free_bytes=None,
             reason="skipped: tmpfs storage tiering is not enabled",
         )
 
@@ -93,11 +88,6 @@ def verify_tmpfs_storage(
         return StorageVerifyResult(
             ok=False,
             mount_path=mount_path,
-            mount_fs_type=None,
-            owner_uid=None,
-            owner_gid=None,
-            mode=None,
-            free_bytes=None,
             reason=f"failed to prepare mount path directory: {mount_path}",
         )
 
@@ -105,11 +95,6 @@ def verify_tmpfs_storage(
         return StorageVerifyResult(
             ok=False,
             mount_path=mount_path,
-            mount_fs_type=None,
-            owner_uid=None,
-            owner_gid=None,
-            mode=None,
-            free_bytes=None,
             reason=f"mount path does not exist: {mount_path}",
         )
 
@@ -119,10 +104,6 @@ def verify_tmpfs_storage(
             ok=False,
             mount_path=mount_path,
             mount_fs_type=fs_type,
-            owner_uid=None,
-            owner_gid=None,
-            mode=None,
-            free_bytes=None,
             reason=f"path is not an independent mount point: {mount_path} (actual={actual_mount})",
         )
     if config.global_config.storage_require_tmpfs and fs_type != "tmpfs":
@@ -130,10 +111,6 @@ def verify_tmpfs_storage(
             ok=False,
             mount_path=mount_path,
             mount_fs_type=fs_type,
-            owner_uid=None,
-            owner_gid=None,
-            mode=None,
-            free_bytes=None,
             reason=f"mount fs type is not tmpfs: {fs_type}",
         )
 
@@ -144,10 +121,6 @@ def verify_tmpfs_storage(
             ok=False,
             mount_path=mount_path,
             mount_fs_type=fs_type,
-            owner_uid=None,
-            owner_gid=None,
-            mode=None,
-            free_bytes=None,
             reason=f"cannot stat mount path: {exc}",
         )
 

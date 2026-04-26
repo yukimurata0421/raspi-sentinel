@@ -44,6 +44,14 @@ Do not use yet if:
 
 Network-only failures (DNS/gateway path) are excluded from direct reboot reasons by default.
 
+## Output Model
+
+`raspi-sentinel` separates runtime outputs by role:
+
+- `state.json`: recovery-oriented engine state
+- `stats.json`: current operational snapshot for operators and integrations
+- `events.jsonl`: append-only transition/audit trail for postmortem
+
 ## What This Does Not Do
 
 - Hardware watchdog replacement
@@ -107,13 +115,19 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
 raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json
 ```
 
-### 6. Run one dry-run cycle
+### 6. Initialize demo heartbeat (healthy baseline)
+
+```bash
+python3 scripts/failure_inject.py fresh-file --path /tmp/raspi-sentinel-demo/heartbeat.txt
+```
+
+### 7. Run one dry-run cycle (expected healthy)
 
 ```bash
 raspi-sentinel -c /etc/raspi-sentinel/config.toml --dry-run run-once --json
 ```
 
-### 7. Inject sample failure
+### 8. Inject sample failure
 
 ```bash
 sudo install -d -m 0755 /tmp/raspi-sentinel-demo
@@ -126,7 +140,7 @@ Then run dry-run again:
 raspi-sentinel -c /etc/raspi-sentinel/config.toml --dry-run run-once --json
 ```
 
-### 8. Inspect and stop
+### 9. Inspect and stop
 
 ```bash
 tail -n 20 /var/lib/raspi-sentinel/events.jsonl
@@ -146,14 +160,17 @@ sudo systemctl stop raspi-sentinel.service
 Install units using helper (renders `ExecStart` with detected `raspi-sentinel` binary path):
 
 ```bash
-sudo python3 scripts/install_systemd.py --enable-timer
+BIN="$(command -v raspi-sentinel)"
+sudo python3 scripts/install_systemd.py --raspi-sentinel-bin "$BIN" --enable-timer
 ```
 
-Equivalent manual install:
+The helper is recommended because it renders `ExecStart` to your actual binary path.
+Manual installation is possible, but it is not equivalent unless you install all required units and edit `ExecStart` yourself:
 
 ```bash
 sudo install -m 0644 systemd/raspi-sentinel.service /etc/systemd/system/raspi-sentinel.service
 sudo install -m 0644 systemd/raspi-sentinel.timer /etc/systemd/system/raspi-sentinel.timer
+sudo install -m 0644 systemd/raspi-sentinel-tmpfs-verify.service /etc/systemd/system/raspi-sentinel-tmpfs-verify.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now raspi-sentinel.timer
 ```
@@ -161,11 +178,15 @@ sudo systemctl enable --now raspi-sentinel.timer
 If `[storage].require_tmpfs = true` or tmpfs tiering is configured, include mount unit install:
 
 ```bash
-sudo python3 scripts/install_systemd.py --include-tmpfs-mount --enable-timer
+BIN="$(command -v raspi-sentinel)"
+sudo python3 scripts/install_systemd.py --raspi-sentinel-bin "$BIN" --include-tmpfs-mount --enable-timer
 ```
 
 `--dry-run` disables restart/reboot and suppresses external notifications by default.
 Use `--send-notifications` only when you intentionally want notification path testing in dry-run.
+
+When running under the bundled systemd service, `ProtectHome=true` is enabled.
+Paths under `/home` can work in manual CLI dry-run but fail when timer execution starts.
 
 ## Feedback Wanted (v0.9.x Upcoming)
 

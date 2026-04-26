@@ -62,13 +62,19 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
 raspi-sentinel -c /etc/raspi-sentinel/config.toml doctor --json
 ```
 
-### 6. dry-run
+### 6. デモ heartbeat 初期化（正常系ベースライン）
+
+```bash
+python3 scripts/failure_inject.py fresh-file --path /tmp/raspi-sentinel-demo/heartbeat.txt
+```
+
+### 7. dry-run（最初は正常判定を確認）
 
 ```bash
 raspi-sentinel -c /etc/raspi-sentinel/config.toml --dry-run run-once --json
 ```
 
-### 7. サンプル障害注入
+### 8. サンプル障害注入
 
 ```bash
 sudo install -d -m 0755 /tmp/raspi-sentinel-demo
@@ -81,7 +87,7 @@ python3 scripts/failure_inject.py stale-file --path /tmp/raspi-sentinel-demo/hea
 raspi-sentinel -c /etc/raspi-sentinel/config.toml --dry-run run-once --json
 ```
 
-### 8. 確認と停止
+### 9. 確認と停止
 
 ```bash
 tail -n 20 /var/lib/raspi-sentinel/events.jsonl
@@ -101,16 +107,20 @@ sudo systemctl stop raspi-sentinel.service
 `install_systemd.py` は `raspi-sentinel` の実バイナリパスを検出して unit を描画します。
 
 ```bash
-sudo python3 scripts/install_systemd.py --enable-timer
+BIN="$(command -v raspi-sentinel)"
+sudo python3 scripts/install_systemd.py --raspi-sentinel-bin "$BIN" --enable-timer
 ```
 
 tmpfs tiering を使う場合:
 
 ```bash
-sudo python3 scripts/install_systemd.py --include-tmpfs-mount --enable-timer
+BIN="$(command -v raspi-sentinel)"
+sudo python3 scripts/install_systemd.py --raspi-sentinel-bin "$BIN" --include-tmpfs-mount --enable-timer
 ```
 
 `--dry-run` は restart/reboot を止め、通知送信もデフォルトで抑制します。通知経路を明示的に試すときだけ `--send-notifications` を付けてください。
+
+補足: 付属 systemd unit は `ProtectHome=true` です。`/home` 配下の監視パスは手動 dry-run で読めても timer 実行時に失敗する場合があります。
 
 ## フィードバックしてほしいこと
 

@@ -34,14 +34,37 @@ def _install_file(src: Path, dst: Path, *, mode: int, dry_run: bool) -> None:
 
 def _resolve_raspi_sentinel_bin(explicit_path: str | None) -> str:
     if explicit_path:
+        if not os.path.isabs(explicit_path):
+            raise ValueError("--raspi-sentinel-bin must be an absolute path")
         return explicit_path
     detected = shutil.which("raspi-sentinel")
     if detected:
+        if not os.path.isabs(detected):
+            raise ValueError("resolved raspi-sentinel executable path must be absolute")
         return detected
     raise FileNotFoundError(
         "could not resolve raspi-sentinel executable from PATH; "
         "install package first or pass --raspi-sentinel-bin"
     )
+
+
+def render_service_unit(
+    source_text: str,
+    *,
+    raspi_sentinel_bin: str,
+    config_path: Path,
+) -> str:
+    rendered = re.sub(
+        r"^(\s*)ExecStart=\S*raspi-sentinel\s+",
+        rf"\1ExecStart={raspi_sentinel_bin} ",
+        source_text,
+        flags=re.MULTILINE,
+    )
+    rendered = rendered.replace(
+        "-c /etc/raspi-sentinel/config.toml ",
+        f"-c {config_path} ",
+    )
+    return rendered
 
 
 def _render_service_unit(
@@ -53,16 +76,10 @@ def _render_service_unit(
     dry_run: bool,
 ) -> None:
     print(f"+ render {src} -> {dst} bin={raspi_sentinel_bin} config={config_path}")
-    text = src.read_text(encoding="utf-8")
-    text = re.sub(
-        r"^(\s*)ExecStart=\S*raspi-sentinel\s+",
-        rf"\1ExecStart={raspi_sentinel_bin} ",
-        text,
-        flags=re.MULTILINE,
-    )
-    text = text.replace(
-        "-c /etc/raspi-sentinel/config.toml ",
-        f"-c {config_path} ",
+    text = render_service_unit(
+        src.read_text(encoding="utf-8"),
+        raspi_sentinel_bin=raspi_sentinel_bin,
+        config_path=config_path,
     )
     if dry_run:
         return

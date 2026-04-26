@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import platform
+import shlex
 import stat
 import subprocess
 import sys
@@ -112,6 +113,27 @@ def _load_last_run_status(stats_path: Path) -> tuple[str, int | None]:
     return "unknown", stats_schema_version
 
 
+def _home_path_warnings(config: AppConfig) -> list[str]:
+    warnings: list[str] = []
+    for target in config.targets:
+        for field_name, field_path in (
+            ("heartbeat_file", target.heartbeat_file),
+            ("output_file", target.output_file),
+            ("stats_file", target.stats.stats_file),
+            ("external_status_file", target.external.external_status_file),
+        ):
+            if field_path is None:
+                continue
+            path_str = str(field_path)
+            if path_str.startswith("/home/"):
+                warnings.append(
+                    f"target '{target.name}' uses {field_name} under /home ({path_str}); "
+                    "the bundled systemd unit enables ProtectHome=true, "
+                    "so timer execution may fail"
+                )
+    return warnings
+
+
 def build_doctor_report(config_path: Path, config: AppConfig) -> dict[str, object]:
     config_perm_status, config_perm_detail = _config_permission_status(config_path)
     state_dir = config.global_config.state_file.parent
@@ -130,6 +152,7 @@ def build_doctor_report(config_path: Path, config: AppConfig) -> dict[str, objec
         config.global_config.monitor_stats_file
     )
     network_only_excluded = network_only_failures_excluded_from_reboot()
+    home_path_warnings = _home_path_warnings(config)
 
     return {
         "config_permissions": {
@@ -163,6 +186,7 @@ def build_doctor_report(config_path: Path, config: AppConfig) -> dict[str, objec
         "network_only_failures_excluded_from_reboot": network_only_excluded,
         # Backward compatibility field kept for v0.8.x.
         "network_only_failures_can_reboot": network_only_failures_can_reboot(),
+        "path_warnings": home_path_warnings,
         "last_run_result": last_run_result,
         "last_run_stats_schema_version": last_run_schema_version,
     }
@@ -224,10 +248,15 @@ def _read_os_release() -> dict[str, str]:
     data: dict[str, str] = {}
     for line in os_release.read_text(encoding="utf-8").splitlines():
         line = line.strip()
-        if not line or "=" not in line:
+        if not line or "=" not in line or line.startswith("#"):
             continue
-        key, value = line.split("=", 1)
-        data[key] = value.strip().strip('"')
+        key, raw_value = line.split("=", 1)
+        try:
+            parsed = shlex.split(raw_value, posix=True)
+        except ValueError:
+            parsed = [raw_value.strip().strip('"').strip("'")]
+        value = parsed[0] if parsed else ""
+        data[key] = value
     return data
 
 

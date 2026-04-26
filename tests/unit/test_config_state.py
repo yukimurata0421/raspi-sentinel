@@ -51,8 +51,10 @@ def test_load_config_defaults_include_monitor_stats(tmp_path: Path) -> None:
     assert cfg.global_config.events_file == Path("/var/lib/raspi-sentinel/events.jsonl")
     assert cfg.global_config.monitor_stats_file == Path("/var/lib/raspi-sentinel/stats.json")
     assert cfg.global_config.monitor_stats_interval_sec == 30
+    assert cfg.global_config.restart_service_timeout_sec == 30
     assert cfg.global_config.state_durable_file is None
     assert cfg.global_config.state_durable_fields == ()
+    assert cfg.notify_config.discord.retry_backoff_base_sec == 0.5
 
 
 def test_load_config_rejects_stats_rules_without_stats_file(tmp_path: Path) -> None:

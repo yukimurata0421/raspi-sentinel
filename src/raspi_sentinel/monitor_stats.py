@@ -6,6 +6,18 @@ from datetime import datetime
 from typing import Literal
 
 from .checks import CheckResult
+from .checks.models import (
+    EVIDENCE_BOOL_FIELDS,
+    EVIDENCE_FLOAT_FIELDS,
+    EVIDENCE_INT_FIELDS,
+    EVIDENCE_STRING_FIELDS,
+    EVIDENCE_THRESHOLD_FLAGS,
+    ObservationMap,
+    copy_bool_or_none,
+    copy_float_values,
+    copy_int_values,
+    copy_str_or_none,
+)
 from .config import AppConfig
 from .contracts import STATS_SCHEMA_VERSION
 from .state_helpers import safe_int, safe_optional_int, write_json_atomic
@@ -82,90 +94,28 @@ def build_monitor_stats_snapshot(
             if isinstance(ntp_sync_ok, bool):
                 payload["ntp_sync_ok"] = ntp_sync_ok
 
-            for field_name in (
-                "link_ok",
-                "iface_up",
-                "wifi_associated",
-                "ip_assigned",
-                "default_route_ok",
-                "gateway_ok",
-                "neighbor_resolved",
-                "arp_gateway_ok",
-                "internet_ip_ok",
-                "dns_server_reachable",
-                "dns_ok",
-                "wan_vs_target_ok",
-                "http_probe_ok",
-            ):
-                if field_name not in result.observations:
-                    continue
-                raw = result.observations.get(field_name)
-                if isinstance(raw, bool):
-                    payload[field_name] = raw
-                elif raw is None:
-                    payload[field_name] = None
-
-            for field_name in (
-                "network_interface",
-                "operstate_raw",
-                "ssid",
-                "bssid",
-                "default_route_iface",
-                "gateway_ip",
-                "route_table_snapshot",
-                "internet_ip_target",
-                "dns_server",
-                "dns_query_target",
-                "dns_error_kind",
-                "http_probe_target",
-                "http_error_kind",
-            ):
-                if field_name not in result.observations:
-                    continue
-                raw = result.observations.get(field_name)
-                if isinstance(raw, str):
-                    payload[field_name] = raw
-                elif raw is None:
-                    payload[field_name] = None
-
-            dns_latency_ms = result.observations.get("dns_latency_ms")
-            if isinstance(dns_latency_ms, (int, float)):
-                payload["dns_latency_ms"] = float(dns_latency_ms)
-
-            for field_name in (
-                "rssi_dbm",
-                "tx_bitrate_mbps",
-                "rx_bitrate_mbps",
-                "gateway_latency_ms",
-                "gateway_packet_loss_pct",
-                "internet_ip_latency_ms",
-                "internet_ip_packet_loss_pct",
-                "http_total_latency_ms",
-                "http_connect_latency_ms",
-                "http_tls_latency_ms",
-            ):
-                value = result.observations.get(field_name)
-                if isinstance(value, (int, float)):
-                    payload[field_name] = float(value)
-
-            http_status = result.observations.get("http_status_code")
-            if isinstance(http_status, int):
-                payload["http_status_code"] = http_status
-
-            external_internal_state = result.observations.get("external_internal_state")
-            if isinstance(external_internal_state, str):
-                payload["external_internal_state"] = external_internal_state
-            external_reason = result.observations.get("external_reason")
-            if isinstance(external_reason, str):
-                payload["external_reason"] = external_reason
-            for field_name in (
-                "external_status_updated_age_sec",
-                "external_last_progress_age_sec",
-                "external_last_success_age_sec",
-            ):
-                value = result.observations.get(field_name)
-                if isinstance(value, (int, float)):
-                    payload[field_name] = float(value)
+            obs_payload: ObservationMap = {}
+            copy_bool_or_none(
+                observations=result.observations,
+                payload=obs_payload,
+                fields=EVIDENCE_BOOL_FIELDS + EVIDENCE_THRESHOLD_FLAGS,
+            )
+            copy_str_or_none(
+                observations=result.observations,
+                payload=obs_payload,
+                fields=EVIDENCE_STRING_FIELDS,
+            )
+            copy_float_values(
+                observations=result.observations,
+                payload=obs_payload,
+                fields=EVIDENCE_FLOAT_FIELDS,
+            )
+            copy_int_values(
+                observations=result.observations,
+                payload=obs_payload,
+                fields=EVIDENCE_INT_FIELDS,
+            )
+            payload.update(obs_payload)
 
         targets_payload[target.name] = payload
 

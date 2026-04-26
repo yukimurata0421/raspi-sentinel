@@ -46,6 +46,7 @@ def test_monitor_stats_preserves_unknown_vs_false_for_network_layers() -> None:
                 timeout_sec=5,
                 followup_delay_sec=300,
                 retry_interval_sec=60,
+                retry_backoff_base_sec=0.5,
                 heartbeat_interval_sec=0,
                 notify_on_recovery=False,
             )
@@ -100,6 +101,7 @@ def test_monitor_stats_unknown_target_status_is_not_counted_as_health_bucket() -
                 timeout_sec=5,
                 followup_delay_sec=300,
                 retry_interval_sec=60,
+                retry_backoff_base_sec=0.5,
                 heartbeat_interval_sec=0,
                 notify_on_recovery=False,
             )

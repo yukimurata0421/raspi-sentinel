@@ -235,7 +235,9 @@ def test_run_cycle_sets_reason_on_state_persist_failure_after_reboot_intent(
     assert report["reason"] == "state_persist_failed_after_reboot_intent"
 
 
-def test_evaluate_targets_phase_stops_after_first_reboot_request(monkeypatch: Any) -> None:
+def test_evaluate_targets_phase_marks_remaining_targets_skipped_after_reboot_request(
+    monkeypatch: Any,
+) -> None:
     cfg = make_app_config(
         targets=[make_target(name="a"), make_target(name="b"), make_target(name="c")]
     )
@@ -278,7 +280,8 @@ def test_evaluate_targets_phase_stops_after_first_reboot_request(monkeypatch: An
     assert calls == ["a", "b"]
     assert artifacts.reboot_requested is True
     assert artifacts.reboot_reason == "failed"
-    assert "c" not in artifacts.target_reports
+    assert artifacts.target_reports["c"]["action"] == "skipped"
+    assert artifacts.target_reports["c"]["reason"] == "not_evaluated_due_to_reboot_request"
 
 
 def test_run_cycle_suppresses_notifications_in_dry_run_by_default(

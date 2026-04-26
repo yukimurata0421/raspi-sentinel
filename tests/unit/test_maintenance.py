@@ -53,6 +53,11 @@ class TestRunCommandSuccess:
     def test_empty_command_after_split(self) -> None:
         assert run_command_success("", timeout_sec=5, use_shell=False) is False
 
+    def test_empty_command_logs_warning(self, caplog: Any) -> None:
+        with caplog.at_level("WARNING", logger="raspi_sentinel.maintenance"):
+            assert run_command_success("   ", timeout_sec=5, use_shell=False) is False
+        assert "maintenance command is empty after parsing" in caplog.text
+
     def test_invalid_shlex_syntax(self) -> None:
         assert run_command_success("echo 'unterminated", timeout_sec=5, use_shell=False) is False
 

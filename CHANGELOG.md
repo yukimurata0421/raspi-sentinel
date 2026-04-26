@@ -33,14 +33,43 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
   - status event append flow now creates parent directory before optional rotation on first write.
   - added regression coverage for mixed default-route lines so matched interface evidence is not overwritten by fallback routes.
   - added review follow-up log for 2026-04-26 in `docs/history/review-followup-2026-04-26.md`.
+  - `test_systemd_units.py` now validates raw unit invariants plus install-helper render output,
+    instead of asserting historical fixed deploy paths.
+  - added `scripts/beta_smoke_check.sh` for beta readiness validation
+    (lint/type subset/tests + demo config + install helper dry-run).
 - recovery/config safety hardening:
   - `--dry-run` now suppresses external notifications by default; use `--send-notifications` to opt in.
   - global and per-target config validation now requires `reboot_threshold > restart_threshold`.
   - target names and service names are normalized (`strip`) during config load; duplicate names after trim and blank service entries are rejected.
   - cycle reports now include explicit persist-failure reason (`state_persist_failed` / `state_persist_failed_after_reboot_intent`).
   - reboot guard boundary semantics are documented as inclusive window + strict cooldown.
+  - recovery runtime now treats `reboot_threshold <= restart_threshold` as invariant violation
+    instead of silent threshold clamping.
+  - cycle target report now marks non-evaluated trailing targets as
+    `action=skipped` with `reason=not_evaluated_due_to_reboot_request`
+    when reboot intent is raised mid-cycle.
+  - `apply_recovery()` internals were split into focused helper stages for easier maintenance.
+  - restart command timeout is now configurable via `global.restart_service_timeout_sec` (default: `30`).
+  - maintenance command checks now emit an explicit warning when command text is empty after parsing.
+- observability/type consistency:
+  - moved process-check classification constants to `checks/models.py` so policy fallback and check naming share one source.
+  - `TargetReport.evidence` now uses `ObservationMap` typing.
+  - observation/evidence field sets are centralized in `checks/models.py` and reused by `status_events` and `monitor_stats`.
+- notification pipeline:
+  - `_send_with_tracking` now uses `NotificationContext` dataclass instead of long argument lists.
+  - Discord retry backoff base is now configurable via `notify.discord.retry_backoff_base_sec` (default: `0.5`).
+- storage/diagnostics/deploy robustness:
+  - `StorageVerifyResult` now uses dataclass defaults for optional fields, reducing repetitive construction.
+  - `_read_os_release` parsing now handles quoted/escaped values using `shlex`.
+  - `deploy_pi5_guard.py` rsync excludes now include `.coverage`, `coverage.xml`, `dist/`, `build/`, `*.egg-info/`.
 - security redaction hardening:
   - redaction now masks Discord webhook path tokens in command/output text.
+  - `validate-config` shell command summaries now use redacted command rendering.
+- beta demo/ops flow:
+  - failure injection helper now supports `fresh-file` for healthy-baseline setup before stale-file tests.
+  - README/README.ja beta demo now initializes heartbeat via `fresh-file` before first dry-run.
+  - systemd helper docs now recommend explicit absolute `--raspi-sentinel-bin` path to avoid `sudo` PATH drift.
+  - added `/home` path safety warnings in `validate-config` and `doctor` for `ProtectHome=true` systemd environments.
 - doctor UX:
   - `doctor --fix-permissions` now applies permission fixes before building final doctor snapshot, reducing before/after mismatch in output.
 - recovery cooldown hardening:

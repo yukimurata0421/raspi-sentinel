@@ -25,6 +25,7 @@ def run_command_success(command: str, timeout_sec: int, use_shell: bool) -> bool
         except ValueError:
             return False
         if not args:
+            LOG.warning("maintenance command is empty after parsing; treating as no-match")
             return False
     try:
         result = subprocess.run(

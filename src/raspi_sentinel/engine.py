@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Callable, NotRequired, Required, TypedDict
 
 from .checks import CheckResult, apply_records_progress_check, run_checks
+from .checks.models import ObservationMap
 from .config import AppConfig, TargetConfig
 from .cycle_notifications import (
     schedule_followup,
@@ -46,7 +47,7 @@ class TargetReport(TypedDict, total=False):
     subreason: str
     action: str
     healthy: bool
-    evidence: dict[str, object]
+    evidence: ObservationMap
     failures: list[FailureReport]
 
 
@@ -263,6 +264,16 @@ def _maintenance_suppressed_report() -> TargetReport:
     }
 
 
+def _skipped_due_to_reboot_report() -> TargetReport:
+    return {
+        "status": "degraded",
+        "reason": "not_evaluated_due_to_reboot_request",
+        "action": "skipped",
+        "healthy": False,
+        "evidence": {},
+    }
+
+
 def _result_report(
     policy: PolicySnapshot, outcome: RecoveryOutcome, result: CheckResult
 ) -> TargetReport:
@@ -386,7 +397,7 @@ def _evaluate_targets_phase(
     target_results: dict[str, CheckResult] = {}
     target_reports: dict[str, TargetReport] = {}
 
-    for target in config.targets:
+    for index, target in enumerate(config.targets):
         processed = _process_single_target(
             target=target,
             config=config,
@@ -413,8 +424,8 @@ def _evaluate_targets_phase(
             reboot_requested = True
             reboot_reason = processed.reboot_reason
             LOG.error("reboot requested after evaluating target '%s'", target.name)
-            # Stop evaluating remaining targets once reboot is requested.
-            # Recovery state now represents the reboot-intent cycle.
+            for remaining in config.targets[index + 1 :]:
+                target_reports[remaining.name] = _skipped_due_to_reboot_report()
             break
 
     return TargetEvaluationArtifacts(

@@ -13,6 +13,7 @@ reboot_window_sec = 21600
 max_reboots_in_window = 2
 min_uptime_for_reboot_sec = 900
 default_command_timeout_sec = 10
+restart_service_timeout_sec = 30
 loop_interval_sec = 60
 
 [notify.discord]
@@ -22,6 +23,7 @@ username = "raspi-sentinel"
 timeout_sec = 5
 followup_delay_sec = 300
 retry_interval_sec = 60
+retry_backoff_base_sec = 0.5
 heartbeat_interval_sec = 0
 notify_on_recovery = false
 

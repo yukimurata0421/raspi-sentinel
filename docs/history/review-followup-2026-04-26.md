@@ -68,32 +68,25 @@
 - B-4: `run_cycle_collect` の例外ハンドリング
   - 対応: `TimeoutError` と `OSError` を分離。
 
-## 2. 提案として受理・未実装（現時点）
+## 2. 追加実装（全項目対応）
 
-以下は不具合修正ではなく、構造リファクタ/将来拡張の提案として扱う。
+前回「提案として受理・未実装」に分離していた項目は、今回すべて実装済み。
 
-- B-2: `apply_recovery` の大分割（state-machine 化）
-- B-5: evidence field 定義のメタデータ集約
-- B-6: `_send_with_tracking` の引数束ね（dataclass 化）
-- B-7: `StorageVerifyResult` 初期化簡略化
-- B-8: `PROCESS_CHECK_NAMES` と check 名同期の型安全化
-- B-9: `TargetReport` の TypedDict 厳格化（`report["status"]` 前提）
-- C-1: restart timeout の config 化
-- C-2: maintenance 空コマンド時 warning 追加
-- C-3: notify backoff 係数の config 化
-- C-4: `diagnostics._read_os_release` の厳密 parser 化
-- C-5: `deploy_pi5_guard.py` の rsync exclude 拡張
-
-理由:
-
-- v0.9.x beta の導線/安全性に直結する項目を優先し、提案レベルの大規模整理は別スコープで段階実施するため。
+- B-2: `apply_recovery` を責務分割（失敗記録、clock-reboot、threshold判定）。
+- B-5: observation/evidence field 定義を `checks/models.py` に集約し、
+  `status_events.py` / `monitor_stats.py` で共有。
+- B-6: `_send_with_tracking` の共通引数を `NotificationContext` dataclass に集約。
+- B-7: `StorageVerifyResult` の optional field に default を設定し、戻り値初期化を簡略化。
+- B-8: `PROCESS_CHECK_NAMES` を `policy.py` ローカル定義から `checks/models.py` へ移動。
+- B-9: `TargetReport.evidence` 型を `ObservationMap` に変更。
+- C-1: restart timeout を config 化（`global.restart_service_timeout_sec`、default=30）。
+- C-2: maintenance 空コマンド時の warning 追加。
+- C-3: notify retry backoff を config 化（`notify.discord.retry_backoff_base_sec`、default=0.5）。
+- C-4: `diagnostics._read_os_release` を `shlex` ベースに強化。
+- C-5: `deploy_pi5_guard.py` の rsync exclude を拡張
+  (`.coverage`, `coverage.xml`, `dist/`, `build/`, `*.egg-info/`)。
 
 ## 3. 実行結果（今回確認）
 
 - `bash scripts/prepush_check.sh`: pass
-- 追加で影響範囲テスト:
-  - `tests/unit/test_checks_internal_network.py`
-  - `tests/scenario/test_engine_integration.py`
-  - `tests/scenario/test_recovery_internal_branches.py`
-  - `tests/scenario/test_status_classification.py`
-  - すべて pass
+- `PYTHONPATH=src pytest -q`: pass（全件）

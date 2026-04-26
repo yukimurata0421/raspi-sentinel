@@ -7,8 +7,20 @@ from pathlib import Path
 from typing import Any
 
 from .checks import CheckResult
+from .checks.models import (
+    EVIDENCE_BOOL_FIELDS,
+    EVIDENCE_FLOAT_FIELDS,
+    EVIDENCE_INT_FIELDS,
+    EVIDENCE_STRING_FIELDS,
+    EVIDENCE_THRESHOLD_FLAGS,
+    ObservationMap,
+    copy_bool_or_none,
+    copy_float_values,
+    copy_int_values,
+    copy_str_or_none,
+)
 from .policy import PolicySnapshot, classify_target_policy
-from .state_helpers import maybe_rotate_file, safe_bool, safe_float, safe_optional_int
+from .state_helpers import maybe_rotate_file, safe_optional_int
 from .state_models import TargetState
 
 LOG = logging.getLogger(__name__)
@@ -79,102 +91,26 @@ def append_event(
         LOG.error("failed to append event to %s: %s", events_file, exc)
 
 
-def build_event_evidence(result: CheckResult) -> dict[str, Any]:
+def build_event_evidence(result: CheckResult) -> ObservationMap:
     observations = result.observations
-    payload: dict[str, Any] = {}
-    for field_name in (
-        "delta_wall_sec",
-        "delta_monotonic_sec",
-        "clock_drift_sec",
-        "http_time_skew_sec",
-        "stats_age_sec",
-        "dns_latency_ms",
-        "external_status_updated_age_sec",
-        "external_last_progress_age_sec",
-        "external_last_success_age_sec",
-    ):
-        value = safe_float(observations.get(field_name))
-        if value is not None:
-            payload[field_name] = value
+    payload: ObservationMap = {}
+    copy_float_values(observations=observations, payload=payload, fields=EVIDENCE_FLOAT_FIELDS)
+    copy_bool_or_none(observations=observations, payload=payload, fields=EVIDENCE_BOOL_FIELDS)
+    copy_str_or_none(observations=observations, payload=payload, fields=EVIDENCE_STRING_FIELDS)
+    copy_bool_or_none(observations=observations, payload=payload, fields=EVIDENCE_THRESHOLD_FLAGS)
+    copy_int_values(observations=observations, payload=payload, fields=EVIDENCE_INT_FIELDS)
 
-    for field_name in (
-        "link_ok",
-        "iface_up",
-        "wifi_associated",
-        "ip_assigned",
-        "default_route_ok",
-        "gateway_ok",
-        "neighbor_resolved",
-        "arp_gateway_ok",
-        "internet_ip_ok",
-        "dns_server_reachable",
-        "dns_ok",
-        "wan_vs_target_ok",
-        "http_probe_ok",
-        "ntp_sync_ok",
-    ):
-        if field_name not in observations:
-            continue
-        raw = observations.get(field_name)
-        value = safe_bool(raw)
-        if value is not None:
-            payload[field_name] = value
-        elif raw is None:
-            payload[field_name] = None
-
-    freeze_count = safe_optional_int(observations.get("consecutive_clock_freeze_count"))
-    if freeze_count is not None:
-        payload["consecutive_clock_freeze_count"] = freeze_count
-
-    nullable_fields = (
-        "network_interface",
-        "operstate_raw",
-        "ssid",
-        "bssid",
-        "rssi_dbm",
-        "tx_bitrate_mbps",
-        "rx_bitrate_mbps",
-        "default_route_iface",
-        "gateway_ip",
-        "route_table_snapshot",
-        "gateway_latency_ms",
-        "gateway_packet_loss_pct",
-        "internet_ip_target",
-        "internet_ip_latency_ms",
-        "internet_ip_packet_loss_pct",
-        "dns_server",
-        "dns_query_target",
-        "dns_error_kind",
-        "route_error_kind",
-        "gateway_error_kind",
-        "wan_error_kind",
-        "http_probe_target",
-        "http_status_code",
-        "http_total_latency_ms",
-        "http_connect_latency_ms",
-        "http_tls_latency_ms",
-        "http_error_kind",
-        "gateway_latency_exceeded",
-        "internet_latency_exceeded",
-        "dns_latency_exceeded",
-        "http_latency_exceeded",
-        "gateway_loss_exceeded",
-        "internet_loss_exceeded",
+    for counter_name in (
         "link_fail_consecutive",
         "route_fail_consecutive",
         "gateway_fail_consecutive",
         "internet_fail_consecutive",
         "dns_fail_consecutive",
         "http_fail_consecutive",
-        "external_internal_state",
-        "external_reason",
-    )
-    for field_name in nullable_fields:
-        if field_name not in observations:
-            continue
-        raw_value = observations.get(field_name)
-        if raw_value is None or isinstance(raw_value, (bool, int, float, str)):
-            payload[field_name] = raw_value
+    ):
+        value = safe_optional_int(observations.get(counter_name))
+        if value is not None:
+            payload[counter_name] = value
 
     return payload
 

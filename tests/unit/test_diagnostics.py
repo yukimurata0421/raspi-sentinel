@@ -6,11 +6,13 @@ import os
 from pathlib import Path
 
 import pytest
-from conftest import make_app_config
+from conftest import make_app_config, make_target
 
 from raspi_sentinel.diagnostics import (
     _config_permission_status,
     _load_last_run_status,
+    _read_os_release,
+    build_doctor_report,
     build_support_bundle,
     fix_config_permissions,
 )
@@ -107,3 +109,47 @@ def test_build_support_bundle_redacts_sensitive_strings(tmp_path: Path) -> None:
     assert "user:pass" not in serialized
     assert "token=abcd" not in serialized
     assert "/home/yuki/" not in serialized
+
+
+def test_read_os_release_parses_quoted_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    content = "\n".join(
+        [
+            'NAME="Debian GNU/Linux"',
+            'PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"',
+            "ID=debian",
+            "EMPTY=",
+        ]
+    )
+    monkeypatch.setattr(
+        Path,
+        "read_text",
+        lambda self, encoding="utf-8": content if str(self) == "/etc/os-release" else "",
+        raising=False,
+    )
+    monkeypatch.setattr(Path, "exists", lambda self: str(self) == "/etc/os-release", raising=False)
+    payload = _read_os_release()
+    assert payload["NAME"] == "Debian GNU/Linux"
+    assert payload["PRETTY_NAME"] == "Debian GNU/Linux 12 (bookworm)"
+    assert payload["ID"] == "debian"
+
+
+def test_doctor_reports_home_path_warning(tmp_path: Path) -> None:
+    config = make_app_config(
+        global_overrides={
+            "state_file": tmp_path / "state.json",
+            "monitor_stats_file": tmp_path / "stats.json",
+        },
+        targets=[
+            make_target(
+                name="demo",
+                services=[],
+                service_active=False,
+                heartbeat_file=Path("/home/pi/heartbeat.txt"),
+                heartbeat_max_age_sec=60,
+            )
+        ],
+    )
+    report = build_doctor_report(config_path=tmp_path / "config.toml", config=config)
+    warnings = report.get("path_warnings", [])
+    assert isinstance(warnings, list)
+    assert any("ProtectHome=true" in warning for warning in warnings)

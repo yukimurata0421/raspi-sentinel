@@ -27,6 +27,16 @@ class NotificationSendResult:
 
 
 @dataclass(slots=True)
+class NotificationContext:
+    state: GlobalState | None
+    retry_interval_sec: int
+    events_file: Path | None
+    events_max_bytes: int
+    events_backup_generations: int
+    now_ts: float | None
+
+
+@dataclass(slots=True)
 class DeliveryBacklogManager:
     state: GlobalState
     retry_interval_sec: int
@@ -87,12 +97,7 @@ def _send_with_tracking(
     severity: str,
     lines: list[str],
     context: str,
-    state: GlobalState | None,
-    retry_interval_sec: int,
-    events_file: Path | None,
-    events_max_bytes: int,
-    events_backup_generations: int,
-    now_ts: float | None,
+    notification_context: NotificationContext,
 ) -> NotificationSendResult:
     sent = notifier.send_lines(
         title=title,
@@ -100,17 +105,28 @@ def _send_with_tracking(
         lines=lines,
     )
     network_failed = (not sent) and notifier.last_failure_kind == "network"
-    if not sent and events_file is not None and now_ts is not None:
+    if (
+        not sent
+        and notification_context.events_file is not None
+        and notification_context.now_ts is not None
+    ):
         record_notify_failure_event(
-            events_file,
-            events_max_bytes,
-            events_backup_generations,
+            notification_context.events_file,
+            notification_context.events_max_bytes,
+            notification_context.events_backup_generations,
             context,
-            now_ts,
+            notification_context.now_ts,
         )
-    if network_failed and state is not None and now_ts is not None:
-        manager = DeliveryBacklogManager(state=state, retry_interval_sec=retry_interval_sec)
-        manager.record_network_failure(context=context, now_ts=now_ts)
+    if (
+        network_failed
+        and notification_context.state is not None
+        and notification_context.now_ts is not None
+    ):
+        manager = DeliveryBacklogManager(
+            state=notification_context.state,
+            retry_interval_sec=notification_context.retry_interval_sec,
+        )
+        manager.record_network_failure(context=context, now_ts=notification_context.now_ts)
     return NotificationSendResult(sent=sent, network_failed=network_failed)
 
 
@@ -154,18 +170,21 @@ def send_issue_notification(
     events_backup_generations: int = 1,
     now_ts: float | None = None,
 ) -> NotificationSendResult:
-    severity = "ERROR" if action == "reboot" else "WARN"
-    return _send_with_tracking(
-        notifier=notifier,
-        title=f"Issue detected: {target_name}",
-        severity=severity,
-        context=f"issue_notification:{target_name}",
+    notification_context = NotificationContext(
         state=state,
         retry_interval_sec=notifier.config.retry_interval_sec,
         events_file=events_file,
         events_max_bytes=events_max_bytes,
         events_backup_generations=events_backup_generations,
         now_ts=now_ts,
+    )
+    severity = "ERROR" if action == "reboot" else "WARN"
+    return _send_with_tracking(
+        notifier=notifier,
+        title=f"Issue detected: {target_name}",
+        severity=severity,
+        context=f"issue_notification:{target_name}",
+        notification_context=notification_context,
         lines=[
             f"problem={format_failures(result)}",
             f"action_taken={action}",
@@ -187,17 +206,20 @@ def send_recovery_notification(
     events_backup_generations: int = 1,
     now_ts: float | None = None,
 ) -> NotificationSendResult:
-    return _send_with_tracking(
-        notifier=notifier,
-        title=f"Recovered: {target_name}",
-        severity="INFO",
-        context=f"recovery_notification:{target_name}",
+    notification_context = NotificationContext(
         state=state,
         retry_interval_sec=notifier.config.retry_interval_sec,
         events_file=events_file,
         events_max_bytes=events_max_bytes,
         events_backup_generations=events_backup_generations,
         now_ts=now_ts,
+    )
+    return _send_with_tracking(
+        notifier=notifier,
+        title=f"Recovered: {target_name}",
+        severity="INFO",
+        context=f"recovery_notification:{target_name}",
+        notification_context=notification_context,
         lines=[
             "status=healthy",
             f"previous_consecutive_failures={previous_failures}",
@@ -234,17 +256,20 @@ def send_due_followups(
             current_problem = format_failures(result)
 
         severity = "INFO" if healthy else "WARN"
-        send_result = _send_with_tracking(
-            notifier=notifier,
-            title=f"Follow-up after 5min: {target_name}",
-            severity=severity,
-            context=f"followup:{target_name}",
+        notification_context = NotificationContext(
             state=state,
             retry_interval_sec=notifier.config.retry_interval_sec,
             events_file=events_file,
             events_max_bytes=events_max_bytes,
             events_backup_generations=events_backup_generations,
             now_ts=now_ts,
+        )
+        send_result = _send_with_tracking(
+            notifier=notifier,
+            title=f"Follow-up after 5min: {target_name}",
+            severity=severity,
+            context=f"followup:{target_name}",
+            notification_context=notification_context,
             lines=[
                 f"initial_action={event.initial_action}",
                 f"initial_problem={event.initial_reason}",
@@ -279,18 +304,21 @@ def send_periodic_heartbeat(
     unhealthy_count = sum(1 for result in target_results.values() if not result.healthy)
     snapshot = collect_system_snapshot()
     pending_count = len(state.followups)
-
-    send_result = _send_with_tracking(
-        notifier=notifier,
-        title="Heartbeat: monitor running",
-        severity="INFO",
-        context="periodic_heartbeat",
+    notification_context = NotificationContext(
         state=state,
         retry_interval_sec=notifier.config.retry_interval_sec,
         events_file=events_file,
         events_max_bytes=events_max_bytes,
         events_backup_generations=events_backup_generations,
         now_ts=now_ts,
+    )
+
+    send_result = _send_with_tracking(
+        notifier=notifier,
+        title="Heartbeat: monitor running",
+        severity="INFO",
+        context="periodic_heartbeat",
+        notification_context=notification_context,
         lines=[
             f"targets_healthy={healthy_count}",
             f"targets_unhealthy={unhealthy_count}",

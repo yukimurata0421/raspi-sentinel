@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import AppConfig, TargetConfig
+from .redaction import redact_command
 
 
 def _config_mode(config_path: Path) -> int | None:
@@ -87,7 +88,7 @@ def _enabled_rules(target: TargetConfig) -> list[str]:
     return rules
 
 
-def _shell_commands(target: TargetConfig) -> dict[str, str]:
+def _shell_commands_raw(target: TargetConfig) -> dict[str, str]:
     commands: dict[str, str] = {}
     if target.command is not None:
         commands["command"] = target.command
@@ -108,6 +109,11 @@ def _shell_commands(target: TargetConfig) -> dict[str, str]:
     if target.maintenance.maintenance_mode_command is not None:
         commands["maintenance_mode_command"] = target.maintenance.maintenance_mode_command
     return commands
+
+
+def _shell_commands_redacted(target: TargetConfig) -> dict[str, str]:
+    raw = _shell_commands_raw(target)
+    return {key: redact_command(value) for key, value in raw.items()}
 
 
 def _shell_opt_in_checks(target: TargetConfig) -> list[str]:
@@ -204,6 +210,14 @@ def _target_warnings(
     for path_entry in path_entries:
         if not path_entry["exists"]:
             warnings.append(f"{path_entry['field']} path does not exist now: {path_entry['path']}")
+        path_value = str(path_entry["path"])
+        if path_value.startswith("/home/"):
+            warnings.append(
+                (
+                    f"{path_entry['field']} is under /home ({path_value}); "
+                    "the bundled systemd unit sets ProtectHome=true, so timer execution may fail"
+                )
+            )
 
     for unit in target.services:
         load_state = _check_service_unit_load_state(unit)
@@ -239,7 +253,7 @@ def _target_warnings(
             )
         )
 
-    for command_field, command in _shell_commands(target).items():
+    for command_field, command in _shell_commands_raw(target).items():
         if any(token in command for token in shell_tokens):
             if command_field in _shell_opt_in_checks(target):
                 continue
@@ -284,7 +298,7 @@ def _target_summary(
     config: AppConfig,
     config_permission_warning: str | None,
 ) -> dict[str, Any]:
-    shell_commands = _shell_commands(target)
+    shell_commands = _shell_commands_redacted(target)
     shell_opt_in_checks = _shell_opt_in_checks(target)
     path_entries = _target_paths(target)
     warnings = _target_warnings(target, path_entries, config_permission_warning)
@@ -395,6 +409,9 @@ def build_config_validation_report(config_path: Path, config: AppConfig) -> dict
             "loop_interval_sec": config.global_config.loop_interval_sec,
             "restart_threshold": config.global_config.restart_threshold,
             "reboot_threshold": config.global_config.reboot_threshold,
+            "restart_service_timeout_sec": config.global_config.restart_service_timeout_sec,
+            "default_command_timeout_sec": config.global_config.default_command_timeout_sec,
+            "notify_retry_backoff_base_sec": config.notify_config.discord.retry_backoff_base_sec,
         },
         "targets": target_summaries,
         "shell_command_targets": shell_command_targets,

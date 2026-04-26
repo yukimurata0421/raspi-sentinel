@@ -27,6 +27,7 @@ class GlobalConfig:
     reboot_window_sec: int
     max_reboots_in_window: int
     min_uptime_for_reboot_sec: int
+    restart_service_timeout_sec: int
     default_command_timeout_sec: int
     loop_interval_sec: int
     storage_require_tmpfs: bool
@@ -196,6 +197,7 @@ class DiscordNotifyConfig:
     timeout_sec: int
     followup_delay_sec: int
     retry_interval_sec: int
+    retry_backoff_base_sec: float
     heartbeat_interval_sec: int
     notify_on_recovery: bool
 
