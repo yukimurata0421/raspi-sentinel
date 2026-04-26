@@ -26,7 +26,12 @@ Release tags use the `v` prefix (example: `v0.8.0`), matching the `__version__` 
 
 ## Historical note
 
-A lightweight git tag **`v0.2.0`** may exist from an intermediate snapshot. There was **no formal GitHub Release / PyPI publication** tied to that tag. **0.8.0** is the current release line where packaging, changelog, and runtime strings are aligned for distribution; use **`v0.8.0`** (or current `__version__`) for the release tag.
+A lightweight git tag **`v0.2.0`** may exist from an intermediate snapshot. There was **no formal GitHub Release / PyPI publication** tied to that tag.
+
+Current state:
+
+- stable release line: **`v0.8.x`** (`__version__ = 0.8.0`)
+- next planned line: **`v0.9.x` open beta** (draft notes in `docs/release-notes/v0.9.0.md`)
 
 ## Release checklist
 
@@ -36,9 +41,10 @@ A lightweight git tag **`v0.2.0`** may exist from an intermediate snapshot. Ther
 4. Run tests (`pytest`) and Ruff (`ruff check src tests`, `ruff format --check src tests`).
 5. Tag: `git tag -a vX.Y.Z -m "Release vX.Y.Z"` (or `git tag -s` if you sign tags).
 6. Push the tag (`git push origin vX.Y.Z`). The workflow creates/updates the GitHub Release with the notes file.
-7. Publish PyPI package:
-   - `Publish PyPI` workflow runs on GitHub Release publish (or manual dispatch)
-   - requires PyPI Trusted Publisher / OIDC setup for this repository.
+7. Publish package index artifacts:
+   - `Publish PyPI` workflow runs on GitHub Release publish for production PyPI.
+   - `Publish PyPI` can also be manually dispatched for TestPyPI rehearsal.
+   - requires Trusted Publisher / OIDC setup for the selected environment.
 
 ## PyPI rollout recommendation for beta
 

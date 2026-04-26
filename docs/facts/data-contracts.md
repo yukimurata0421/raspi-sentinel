@@ -123,7 +123,7 @@ Includes:
 - threshold sanity
 - reboot-policy indicators:
   - `network_only_failures_excluded_from_reboot` (expected `true` in default policy)
-  - `network_only_failures_can_reboot` (compatibility field in `v0.8.x`)
+  - `network_only_failures_can_reboot` (compatibility field in `v0.8.x`; retained during `v0.9.x` beta prep and planned for removal at `v1.0.0`)
 - last run interpretation:
   - `last_run_result`
   - `last_run_stats_schema_version`

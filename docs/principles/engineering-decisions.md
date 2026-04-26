@@ -4,6 +4,14 @@ This document records why `raspi-sentinel` uses its current architecture and doc
 
 The format follows a pragmatic rule: **state the decision, point to implementation, explain rationale and tradeoff**.
 
+## Quick Index
+
+- Recovery safety order: `1-3`, `5-10`
+- Policy mapping and reboot guards: `4-*`, `5-*`
+- Storage tiering and tmpfs verification: `3-4`, `7-3`
+- Notification/backlog behavior: `6-*`
+- Release/documentation boundaries: `0-*`, `8-*`
+
 ---
 
 ## 0. Documentation Structure

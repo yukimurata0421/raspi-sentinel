@@ -96,6 +96,10 @@ jobs:
             echo "Missing release notes file: ${NOTES_FILE}"
             exit 1
           fi
+          if grep -Eiq '^Planned release:' "${NOTES_FILE}"; then
+            echo "Release notes still marked as planned: ${NOTES_FILE}"
+            exit 1
+          fi
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:

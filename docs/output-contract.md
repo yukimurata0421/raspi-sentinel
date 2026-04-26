@@ -64,3 +64,5 @@ For `external_status_file` producers:
 - `last_progress_ts` means business/control-plane progress, not timer heartbeat.
 - `last_success_ts` means successful completion of user-meaningful work.
 - Producers should document their own `progress`/`success` definitions.
+- During configured startup grace windows, `null`/empty values for progress/success timestamps may be tolerated by runtime checks.
+  Producers should still populate both fields as early as possible after startup settles.

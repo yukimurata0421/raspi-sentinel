@@ -1,6 +1,6 @@
 # アップグレード / マイグレーションガイド
 
-このガイドは `v0.7.x` から `v0.8.x` への更新を対象にしています。
+このガイドは `v0.7.x` から `v0.8.x` への更新と、`v0.9.x` open beta への準備を対象にしています。
 
 ## 事前チェック
 
@@ -20,6 +20,7 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
 3. 対象タグのリリースノート確認:
 
 - `docs/release-notes/v0.8.0.md`
+- `docs/release-notes/v0.9.0.md`（次期 beta のドラフト）
 
 ## v0.8.x の主な変更点
 
@@ -27,6 +28,12 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
 - `stats.json` / `state.json` に schema version 追加
 - reboot 判定が `policy_reason` allowlist ベースに変更
 - Discord 有効時に config が group/other readable なら warning
+
+## v0.8.x -> v0.9.x open beta 準備
+
+- `v0.9.x` はドラフト先行のため、導入時は `main` で検証してから適用
+- recovery action は dry-run の観測が安定するまで保守的に維持
+- config 権限 (`0600`) を維持し、設定変更後に `doctor --json` を再実行
 
 ## 更新後の推奨確認
 
@@ -40,6 +47,7 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml run-once --json
 任意:
 
 ```bash
+# Debian/Ubuntu の一般的な node_exporter textfile collector パス例:
 raspi-sentinel -c /etc/raspi-sentinel/config.toml export-prometheus --textfile-path /var/lib/node_exporter/textfile_collector/raspi_sentinel.prom
 ```
 

@@ -1,6 +1,6 @@
 # Upgrade and Migration Guide
 
-This guide focuses on upgrading from `v0.7.x` to `v0.8.x`.
+This guide focuses on upgrading from `v0.7.x` to `v0.8.x` and preparing for `v0.9.x` open beta.
 
 ## Pre-upgrade checklist
 
@@ -20,6 +20,7 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
 3. Confirm release notes for target tag:
 
 - `docs/release-notes/v0.8.0.md`
+- `docs/release-notes/v0.9.0.md` (draft for upcoming beta line)
 
 ## Runtime behavior changes in v0.8.x
 
@@ -27,6 +28,12 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml validate-config --strict
 - `stats.json` / `state.json` include explicit schema versions.
 - reboot gating now uses `policy_reason` allowlist.
 - config summary now warns for insecure readable config when Discord notify is enabled.
+
+## v0.8.x -> v0.9.x open beta preparation
+
+- `v0.9.x` notes are currently draft-first; validate against `main` before rollout.
+- keep recovery actions conservative until dry-run evidence is stable on your host.
+- preserve `0600` config ownership and rerun `doctor --json` after each config/profile change.
 
 ## Recommended post-upgrade checks
 
@@ -40,6 +47,7 @@ raspi-sentinel -c /etc/raspi-sentinel/config.toml run-once --json
 Optional:
 
 ```bash
+# Typical Debian/Ubuntu node_exporter textfile collector path:
 raspi-sentinel -c /etc/raspi-sentinel/config.toml export-prometheus --textfile-path /var/lib/node_exporter/textfile_collector/raspi_sentinel.prom
 ```
 

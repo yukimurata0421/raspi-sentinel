@@ -35,14 +35,18 @@ verify_cooldown_sec = 2
 On low-memory models, tune tmpfs size with `RuntimeDirectorySize=` (or mount `size=` option)
 to avoid pressure from volatile files.
 
-`verify-storage` runs tmpfs-tier checks only when storage tiering is explicitly enabled by config:
+`verify-storage` runs tmpfs-tier checks only when storage tiering is explicitly enabled by config.
+
+Verification trigger conditions:
 
 - `require_tmpfs = true`, or
 - `state_durable_path` is configured, or
 - `state_durable_fields` is non-empty.
 
-`require_tmpfs = true` alone enables preflight tmpfs verification, but does not split state by itself.
-State split requires `state_durable_path` to be configured.
+State split conditions:
+
+- `state_durable_path` must be configured for volatile/durable split to activate.
+- `require_tmpfs = true` alone enables preflight verification only.
 
 ## 2. Write frequency by file
 

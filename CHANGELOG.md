@@ -8,6 +8,20 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ### Changed
 
+- versioning/docs alignment:
+  - README/README.ja now describe `v0.9.x` as upcoming beta preview and keep current release on `v0.8.x`.
+  - UPGRADE / VERSIONING / docs index now explicitly separate current stable vs next beta draft lines.
+- release automation/docs consistency:
+  - PyPI workflow now supports explicit TestPyPI rehearsal via manual dispatch target selection.
+  - release workflow now fails if release notes still contain `Planned release:` marker.
+- contract/docs clarifications:
+  - output contract now documents startup-grace null tolerance for external status timestamps.
+  - doctor compatibility note now clarifies lifecycle of `network_only_failures_can_reboot`.
+- examples/tests/operator docs:
+  - example `dns_query_target` now uses `example.com`.
+  - fixed secret scan repository root resolution in `test_public_secret_scan.py`.
+  - `install_systemd.py` help now documents `--include-tmpfs-mount` requirement for tmpfs tiering.
+  - runbook deployment section now documents non-`pi5-guard` host usage via `--host`.
 - recovery cooldown hardening:
   - warning-only cycles no longer overwrite `last_action` / `last_action_ts`, so `restart_cooldown_sec`
     remains effective across repeated unhealthy cycles until cooldown expiry.
@@ -152,6 +166,8 @@ Release process and version policy: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 ### Changed
 
+- typed cycle report contract tightened:
+  - `CycleReport` marks core fields as required using `Required[...]`.
 - `verify-storage` tmpfs-tier enablement is now fully config-driven. Path-based auto-detection
   from `state_file.parent == /run/raspi-sentinel` was removed to keep behavior explicit.
 - Storage write probe now uses a unique temp file per run, avoiding fixed-filename collisions

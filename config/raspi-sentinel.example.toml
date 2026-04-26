@@ -142,7 +142,7 @@ network_probe_enabled = true
 network_interface = "wlan0"
 gateway_probe_timeout_sec = 2
 internet_ip_targets = ["1.1.1.1", "8.8.8.8"]
-dns_query_target = "blender.prod.fr24.io"
+dns_query_target = "example.com"
 http_probe_target = "https://www.google.com/generate_204"
 dependency_check_timeout_sec = 8
 # Optional: detect clock anomaly (no automatic clock correction).

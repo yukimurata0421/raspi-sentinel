@@ -163,7 +163,7 @@ If backlog never clears:
    `journalctl -u raspi-sentinel.service -n 200 --no-pager`.
 3. Confirm `notify.discord.webhook_url` validity and outbound firewall policy.
 
-## 7. Controlled Deployment to pi5-guard (Pi Zero)
+## 7. Controlled Deployment (Pi Zero / Remote Hosts)
 
 Use controlled staged deployment instead of direct overwrite when updating `/opt/raspi-sentinel`:
 
@@ -183,8 +183,10 @@ Flow (`--mode safe`):
 Useful options:
 
 - `--mode fast`: skips staged validation, keeps switch + post-deploy health gate
+- `--host <user@host>`: supports hosts other than `pi5-guard@pi5-guard`
 - `--dry-run`: prints commands without executing
 
+Note: script name is historical, but target host is parameterized via `--host`.
 This deployment helper is intended for operator-controlled host updates and does not create git tags.
 
 ## 8. Prometheus Textfile Export

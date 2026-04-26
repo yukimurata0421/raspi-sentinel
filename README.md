@@ -16,9 +16,10 @@ warn -> restart services -> guarded reboot
 
 Japanese guide: [README.ja.md](README.ja.md)
 
-## Open Beta: v0.9.x
+## Open Beta Preview: v0.9.x (Upcoming)
 
-`v0.9.x` is open beta before `v1.0.0`.
+`v0.9.x` is the next planned open beta line before `v1.0.0`.
+Current released line is `v0.8.0`.
 
 Who should try this:
 
@@ -68,15 +69,17 @@ Why this matters:
 - Recovery actions may restart services or request reboot
 - `shell=False` is default; shell execution is explicit opt-in
 
-## 15-Minute Beta Quickstart
+## 15-Minute Quickstart
 
-### 1. Clone beta tag
+### 1. Clone current release tag
 
 ```bash
 git clone https://github.com/yukimurata0421/raspi-sentinel.git
 cd raspi-sentinel
-git checkout v0.9.0
+git checkout v0.8.0
 ```
+
+If you intentionally test the upcoming beta draft work, use `main` instead.
 
 ### 2. Install
 
@@ -89,7 +92,7 @@ python3 -m pip install .
 ```bash
 sudo install -d -m 0755 /etc/raspi-sentinel
 sudo install -m 0600 -o root -g root config/raspi-sentinel.example.toml /etc/raspi-sentinel/config.toml
-sudo editor /etc/raspi-sentinel/config.toml
+sudo "${EDITOR:-vi}" /etc/raspi-sentinel/config.toml
 ```
 
 ### 4. Validate config
@@ -152,7 +155,13 @@ Optional helper:
 sudo python3 scripts/install_systemd.py --enable-timer
 ```
 
-## Feedback Wanted (v0.9.x)
+If `[storage].require_tmpfs = true` or tmpfs tiering is configured, include mount unit install:
+
+```bash
+sudo python3 scripts/install_systemd.py --include-tmpfs-mount --enable-timer
+```
+
+## Feedback Wanted (v0.9.x Draft)
 
 Please report:
 
@@ -204,7 +213,8 @@ Tests and CI details: [docs/facts/test-map.md](docs/facts/test-map.md)
 
 ## Versioning
 
-Current line: `v0.9.x` open beta.
+Current line: `v0.8.x` stable release.
+Next planned line: `v0.9.x` open beta.
 
 See:
 

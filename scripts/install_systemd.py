@@ -31,10 +31,20 @@ def _install_file(src: Path, dst: Path, *, mode: int, dry_run: bool) -> None:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Install raspi-sentinel systemd units.")
+    parser = argparse.ArgumentParser(
+        description="Install raspi-sentinel systemd units.",
+        epilog=(
+            "If storage tmpfs tiering is enabled in config, pass --include-tmpfs-mount "
+            "to install run-raspi\\x2dsentinel.mount as well."
+        ),
+    )
     parser.add_argument("--source-dir", type=Path, default=Path("systemd"))
     parser.add_argument("--dest-dir", type=Path, default=Path("/etc/systemd/system"))
-    parser.add_argument("--include-tmpfs-mount", action="store_true")
+    parser.add_argument(
+        "--include-tmpfs-mount",
+        action="store_true",
+        help="Install run-raspi\\x2dsentinel.mount for /run/raspi-sentinel tmpfs.",
+    )
     parser.add_argument("--enable-timer", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args(argv)

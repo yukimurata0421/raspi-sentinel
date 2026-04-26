@@ -4,8 +4,8 @@
 
 Security fixes are applied to:
 
-- `v0.9.x` open beta line
-- latest stable release line
+- latest stable release line (`v0.8.x`)
+- next open beta line (`v0.9.x`) once published
 
 Older tags may not receive backported fixes.
 
@@ -35,7 +35,7 @@ Public issues are acceptable for non-sensitive functional bugs.
 3. Publish patched release and release notes.
 4. Disclose details after fix is available.
 
-Response policy: best effort, no formal SLA.
+Response policy: best effort, no formal SLA. Initial triage response is usually attempted within 7 days.
 
 ## Operational Security Notes
 

@@ -6,7 +6,7 @@
 warn -> restart services -> guarded reboot
 ```
 
-現在の `v0.9.x` は open beta です。
+`v0.9.x` は次期 open beta（準備中）です。現行のリリースラインは `v0.8.0` です。
 
 詳細仕様は英語 README と `docs/` に分離しています。ここでは「安全に試して報告する入口」に絞ります。
 
@@ -26,13 +26,15 @@ warn -> restart services -> guarded reboot
 
 ## 15分クイックスタート
 
-### 1. beta tag を clone
+### 1. 現行 release tag を clone
 
 ```bash
 git clone https://github.com/yukimurata0421/raspi-sentinel.git
 cd raspi-sentinel
-git checkout v0.9.0
+git checkout v0.8.0
 ```
+
+次期 beta のドラフト動作を試す場合のみ `main` を使用してください。
 
 ### 2. install
 
@@ -45,7 +47,7 @@ python3 -m pip install .
 ```bash
 sudo install -d -m 0755 /etc/raspi-sentinel
 sudo install -m 0600 -o root -g root config/raspi-sentinel.example.toml /etc/raspi-sentinel/config.toml
-sudo editor /etc/raspi-sentinel/config.toml
+sudo "${EDITOR:-vi}" /etc/raspi-sentinel/config.toml
 ```
 
 ### 4. config 検証
