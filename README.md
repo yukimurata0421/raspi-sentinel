@@ -52,15 +52,15 @@ For `v0.8.0` usage details, follow the README included in that tag.
 
 ### Open beta line (`v0.9.x`)
 
-Before `v0.9.0` tag is published, use:
+Use the published beta tag for reproducibility:
 
 ```bash
 git clone https://github.com/yukimurata0421/raspi-sentinel.git
 cd raspi-sentinel
-git checkout main
+git checkout v0.9.0
 ```
 
-After `v0.9.0` is tagged, always use `git checkout v0.9.0` for reproducibility.
+Use `main` only when validating unreleased changes.
 
 ## What This Does
 
@@ -111,10 +111,10 @@ Why this matters:
 ```bash
 git clone https://github.com/yukimurata0421/raspi-sentinel.git
 cd raspi-sentinel
-git checkout main
+git checkout v0.9.0
 ```
 
-This beta demo relies on `v0.9.x` line files. Before the `v0.9.0` tag is published, use `main`.
+This beta demo is documented against the `v0.9.0` beta tag.
 
 ### 2. Install
 
@@ -125,7 +125,7 @@ python3 -m pip install .
 Optional (`pipx`) install path for CLI trial:
 
 ```bash
-pipx install "git+https://github.com/yukimurata0421/raspi-sentinel.git@main"
+pipx install "git+https://github.com/yukimurata0421/raspi-sentinel.git@v0.9.0"
 ```
 
 ### 3. Prepare demo workspace and config (no restart/reboot, no notifications)

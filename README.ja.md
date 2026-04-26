@@ -41,15 +41,15 @@ git checkout v0.8.0
 
 ### open beta ライン（`v0.9.x`）
 
-`v0.9.0` タグ公開前は `main` を利用してください:
+再現性のため、公開済み beta タグを利用してください:
 
 ```bash
 git clone https://github.com/yukimurata0421/raspi-sentinel.git
 cd raspi-sentinel
-git checkout main
+git checkout v0.9.0
 ```
 
-`v0.9.0` タグ公開後は、再現性のため必ず `git checkout v0.9.0` を使用してください。
+未公開の変更を検証する場合のみ `main` を使ってください。
 
 ## 15分ベータデモ
 
@@ -58,10 +58,10 @@ git checkout main
 ```bash
 git clone https://github.com/yukimurata0421/raspi-sentinel.git
 cd raspi-sentinel
-git checkout main
+git checkout v0.9.0
 ```
 
-このベータデモは `v0.9.x` ライン前提です。`v0.9.0` タグ公開前は `main` を使います。
+このベータデモは `v0.9.0` beta タグを前提にしています。
 
 ### 2. install
 

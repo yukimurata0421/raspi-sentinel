@@ -46,7 +46,7 @@ Current state:
 6. Push the tag (`git push origin vX.Y.Z`). The workflow creates/updates the GitHub Release with the notes file.
 7. Publish package index artifacts:
    - `Publish PyPI` workflow runs on GitHub Release publish for production PyPI.
-   - `Publish PyPI` can also be manually dispatched for TestPyPI rehearsal.
+   - `Publish PyPI` can be manually dispatched for TestPyPI rehearsal.
    - requires Trusted Publisher / OIDC setup for the selected environment.
 
 ## Trusted Publisher one-time setup
@@ -76,7 +76,7 @@ For open beta releases, use this order:
 Workflow behavior:
 
 - publishing a GitHub Release triggers production PyPI workflow (`pypi.yml`, `release: published`).
-- manual `workflow_dispatch` supports explicit TestPyPI/PyPI runs for rehearsal or recovery.
+- manual `workflow_dispatch` is for TestPyPI rehearsal only.
 
 Why:
 

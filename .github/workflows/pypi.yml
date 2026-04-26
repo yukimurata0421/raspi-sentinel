@@ -5,16 +5,8 @@ on:
     types: [published]
   workflow_dispatch:
     inputs:
-      repository:
-        description: "Target package index"
-        required: true
-        default: "testpypi"
-        type: choice
-        options:
-          - testpypi
-          - pypi
       target_ref:
-        description: "Git ref to package (for example: v0.9.0)"
+        description: "Git ref to package for TestPyPI rehearsal (for example: v0.9.0)"
         required: false
         default: "main"
         type: string
@@ -25,7 +17,7 @@ permissions:
 
 jobs:
   publish-testpypi:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.repository == 'testpypi'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -51,12 +43,12 @@ jobs:
           repository-url: https://test.pypi.org/legacy/
 
   publish-pypi:
-    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.repository == 'pypi')
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.event_name == 'release' && github.ref_name || github.event.inputs.target_ref }}
+          ref: ${{ github.ref_name }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
@@ -73,3 +65,5 @@ jobs:
           twine check dist/*
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
