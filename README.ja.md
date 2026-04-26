@@ -127,10 +127,10 @@ Issue テンプレート:
 
 ## 詳細ドキュメント
 
-- [English README](README.md)
-- [Documentation Index](docs/README.md)
-- [Upgrade Guide](docs/UPGRADE.ja.md)
-- [Security Policy](docs/SECURITY.ja.md)
-- [Output Contract](docs/output-contract.md)
-- [Storage Tiers](docs/storage-tiers.md)
-- [Watchdog Integration](docs/watchdog.md)
+- [English README (EN)](README.md)
+- [Documentation Index (EN)](docs/README.md)
+- [Upgrade Guide (JA)](docs/UPGRADE.ja.md)
+- [Security Policy (JA)](docs/SECURITY.ja.md)
+- [Output Contract (EN)](docs/output-contract.md)
+- [Storage Tiers (EN)](docs/storage-tiers.md)
+- [Watchdog Integration (EN)](docs/watchdog.md)
