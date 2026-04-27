@@ -51,6 +51,20 @@ git checkout v0.9.0
 
 未公開の変更を検証する場合のみ `main` を使ってください。
 
+### PyPI インストール（`0.9.0`）
+
+CLI/パッケージを入れるだけなら PyPI から導入できます:
+
+```bash
+pip install raspi-sentinel==0.9.0
+```
+
+または:
+
+```bash
+pipx install raspi-sentinel==0.9.0
+```
+
 ## 15分ベータデモ
 
 ### 1. beta ラインを clone
@@ -64,6 +78,14 @@ git checkout v0.9.0
 このベータデモは `v0.9.0` beta タグを前提にしています。
 
 ### 2. install
+
+リポジトリ資材が不要な場合は PyPI 導入を推奨:
+
+```bash
+pip install raspi-sentinel==0.9.0
+```
+
+このリポジトリベースの beta demo では、checkout 済みソースから install します:
 
 ```bash
 python3 -m pip install .

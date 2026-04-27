@@ -62,6 +62,20 @@ git checkout v0.9.0
 
 Use `main` only when validating unreleased changes.
 
+### PyPI install (`0.9.0`)
+
+If you only need the CLI/package install, use PyPI:
+
+```bash
+pip install raspi-sentinel==0.9.0
+```
+
+or:
+
+```bash
+pipx install raspi-sentinel==0.9.0
+```
+
 ## What This Does
 
 - Monitors local service health while OS is alive
@@ -118,14 +132,16 @@ This beta demo is documented against the `v0.9.0` beta tag.
 
 ### 2. Install
 
+PyPI install (recommended when you do not need repository files):
+
 ```bash
-python3 -m pip install .
+pip install raspi-sentinel==0.9.0
 ```
 
-Optional (`pipx`) install path for CLI trial:
+For this repository-based beta demo, install from the checked-out source:
 
 ```bash
-pipx install "git+https://github.com/yukimurata0421/raspi-sentinel.git@v0.9.0"
+python3 -m pip install .
 ```
 
 ### 3. Prepare demo workspace and config (no restart/reboot, no notifications)
